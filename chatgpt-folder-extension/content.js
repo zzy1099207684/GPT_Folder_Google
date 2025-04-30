@@ -330,12 +330,12 @@
             const ed = qs('.ProseMirror');
             if (!ed) return;
             qsa('p', ed).forEach((p, i, arr) => {
-                if (p.innerText === '(Strictly prohibit sectioning and any form of content segmentation.)' && p !== arr[arr.length - 1]) p.remove();
+                if (p.innerText === '(Strictly prohibit any form of content segmentation; use natural line breaks only)' && p !== arr[arr.length - 1]) p.remove();
             });
             const last = ed.lastElementChild;
-            if (!(last && last.innerText === '(Strictly prohibit sectioning and any form of content segmentation.)')) {
+            if (!(last && last.innerText === '(Strictly prohibit any form of content segmentation; use natural line breaks only)')) {
                 const p = document.createElement('p');
-                p.textContent = '(Strictly prohibit sectioning and any form of content segmentation.)';
+                p.textContent = '(Strictly prohibit any form of content segmentation; use natural line breaks only)';
                 ed.appendChild(p);
                 ed.dispatchEvent(new Event('input', {bubbles: true}));
             }
