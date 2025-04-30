@@ -18,4 +18,4 @@ Once loaded, the script will automatically run and be attached to the chat page.
 - **Tooltip**: Displays friendly tooltips when users interact with certain elements.
 - **Drag-and-Drop**: Supports dragging chat sessions from the history and dropping them into folders.
 - **History Cleanup**: Automatically removes corresponding chat records from folders when a session is deleted.
-- **Restore Output Style**: Automatically adds a "Restore original output style" message at the bottom of the input box.
+- **Restore Output Style**: Automatically adds a prompt message at the bottom of the input box to keep answer form.
