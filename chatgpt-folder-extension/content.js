@@ -12,7 +12,8 @@
             if (!chrome?.runtime?.id) return; // 上下文无效，直接忽略
             try {
                 chrome.storage.sync.set(obj);
-            } catch (e) {/* 静默忽略 */}
+            } catch (e) {/* 静默忽略 */
+            }
         },
         async get(key) {
             try {
@@ -83,8 +84,8 @@
             const n = prompt('group name');
             if (!n || !n.trim()) return;
             const id = 'f_' + Date.now();
-            folders[id] = { name: n.trim(), chats: [], collapsed: false };
-            await storage.set({ folders });
+            folders[id] = {name: n.trim(), chats: [], collapsed: false};
+            await storage.set({folders});
             render();
         });
         bar.appendChild(addBtn);
@@ -98,13 +99,19 @@
 
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();                                // 路径 => [{ fid, el }]
-        const debounce = (fn, wait = 120) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), wait); }; };
+        const debounce = (fn, wait = 120) => {
+            let t;
+            return (...a) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn(...a), wait);
+            };
+        };
         const syncTitles = debounce(() => {
             let updated = false;
             liveSyncMap.forEach((arr, path) => {
                 const a = qs(`div#history a[href*="${path}"]`);
                 if (!a) {  // 会话已被删除
-                    arr.forEach(({ fid, el }) => {
+                    arr.forEach(({fid, el}) => {
                         const folder = folders[fid];
                         if (!folder) return;
                         const before = folder.chats.length;
@@ -114,7 +121,7 @@
                     return;
                 }
                 const t = (a.textContent || '新对话').trim();
-                arr.forEach(({ fid, el }) => {
+                arr.forEach(({fid, el}) => {
                     if (el.textContent !== t) el.textContent = t;
                     const folder = folders[fid];
                     if (!folder) return;
@@ -125,10 +132,10 @@
                     }
                 });
             });
-            if (updated) storage.set({ folders });
+            if (updated) storage.set({folders});
         }, 200);
 
-        new MutationObserver(syncTitles).observe(document.body, { childList: true, subtree: true, characterData: true });
+        new MutationObserver(syncTitles).observe(document.body, {childList: true, subtree: true, characterData: true});
 
         /* —— 检测 history 会话被删除后同步移除收藏夹中对应条目 —— */
         const historyCleanupObs = new MutationObserver(() => {
@@ -156,9 +163,9 @@
                     folderZone.replaceChild(newBox, oldBox);
                 }
             }
-            if (changed) storage.set({ folders });
+            if (changed) storage.set({folders});
         });
-        historyCleanupObs.observe(qs('div#history'), { childList: true, subtree: true });
+        historyCleanupObs.observe(qs('div#history'), {childList: true, subtree: true});
 
         /* ---------- 渲染 ---------- */
         function render() {
@@ -185,9 +192,11 @@
             const newBtn = document.createElement('a');
             newBtn.href = 'javascript:void 0';
             newBtn.style.cssText = 'flex h-8 w-8 items-center justify-center rounded-lg';
-            newBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.673 3.913a3 3 0 0 1 4.414 4.414l-5.938 5.938a3 3 0 0 1-1.457.79l-2.18.311a.5.5 0 0 1-.565-.565l.311-2.18a3 3 0 0 1 .79-1.457l5.938-5.938Z"/><path d="M18.673 5.327a1.5 1.5 0 0 0-2.121 0l-5.938 5.938a1.5 1.5 0 0 0-.43.729l-.123.86.86-.123a1.5 1.5 0 0 0 .729-.43l5.938-5.938a1.5 1.5 0 0 0 0-2.121Z"/></svg>';
+            newBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' +
+                '<path d="M15.673 3.913a3 3 0 0 1 4.414 4.414l-5.938 5.938a3 3 0 0 1-1.457.79l-2.18.311a.5.5 0 0 1-.565-.565l.311-2.18a3 3 0 0 1 .79-1.457l5.938-5.938Z"/>' +
+                '<path d="M18.673 5.327a1.5 1.5 0 0 0-2.121 0l-5.938 5.938a1.5 1.5 0 0 0-.43.729l-.123.86.86-.123a1.5 1.5 0 0 0 .729-.43l5.938-5.938a1.5 1.5 0 0 0 0-2.121Z"/></svg>';
             let hideTip;
-            newBtn.onmouseenter = () => hideTip = tip(newBtn, '新聊天');
+            newBtn.onmouseenter = () => hideTip = tip(newBtn, 'New chat');
             newBtn.onmouseleave = () => hideTip && hideTip();
 
             const del = Object.assign(document.createElement('span'), {
@@ -215,7 +224,7 @@
 
             // -------- newBtn.onclick 重新实现 --------
             /* ---------- newBtn.onclick 修订版 ---------- */
-            newBtn.onclick = e => {                          // 点击“新聊天”按钮时触发
+            newBtn.onclick = e => {                          // 点击“New chat”按钮时触发
                 e.stopPropagation();                         // 阻止点击事件冒泡，避免折叠文件夹
                 const prevPaths = new Set(                   // 记录当前侧栏里已有的所有会话 pathname
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
@@ -234,14 +243,13 @@
 
                     folders[fid].chats.push({               // 写入真正的新会话条目
                         url: location.href,                 // 完整会话 URL
-                        title: anchor.textContent.trim() || '加载中…' // 使用侧栏展示的实时标题
+                        title: anchor.textContent.trim() || 'loading…' // 使用侧栏展示的实时标题
                     });
-                    await storage.set({ folders });          // 同步到 chrome.storage
+                    await storage.set({folders});          // 同步到 chrome.storage
                     render();                                // 重新渲染收藏夹区域
                     clearInterval(iv);                       // 成功后停止轮询
                 }, 300);                                     // 每 300 ms 检查一次
             };
-
 
 
             header.ondragover = e => {
@@ -280,10 +288,13 @@
                 window.dispatchEvent(new Event('popstate'));
             };
 
-            const del = Object.assign(document.createElement('span'), { textContent: '✖', style: 'cursor:pointer;color:while' });
+            const del = Object.assign(document.createElement('span'), {
+                textContent: '✖',
+                style: 'cursor:pointer;color:while'
+            });
             del.onclick = async () => {
                 folders[fid].chats = folders[fid].chats.filter(c => !samePath(c.url, chat.url));
-                await storage.set({ folders });
+                await storage.set({folders});
                 render();
             };
 
@@ -295,7 +306,7 @@
                 const path = new URL(chat.url).pathname;
                 if (!liveSyncMap.has(path)) liveSyncMap.set(path, []);
                 const arr = liveSyncMap.get(path);
-                if (!arr.some(item => item.el === link)) arr.push({ fid, el: link });
+                if (!arr.some(item => item.el === link)) arr.push({fid, el: link});
             }
         }
 
@@ -319,12 +330,12 @@
             const ed = qs('.ProseMirror');
             if (!ed) return;
             qsa('p', ed).forEach((p, i, arr) => {
-                if (p.innerText === '恢复最初输出风格' && p !== arr[arr.length - 1]) p.remove();
+                if (p.innerText === '(Strictly prohibit sectioning and any form of content segmentation.)' && p !== arr[arr.length - 1]) p.remove();
             });
             const last = ed.lastElementChild;
-            if (!(last && last.innerText === '恢复最初输出风格')) {
+            if (!(last && last.innerText === '(Strictly prohibit sectioning and any form of content segmentation.)')) {
                 const p = document.createElement('p');
-                p.textContent = '恢复最初输出风格';
+                p.textContent = '(Strictly prohibit sectioning and any form of content segmentation.)';
                 ed.appendChild(p);
                 ed.dispatchEvent(new Event('input', {bubbles: true}));
             }
