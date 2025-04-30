@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT 收藏夹",
+  "version": "1.0",
+  "description": "为 ChatGPT 左侧添加可折叠收藏夹功能",
+  "icons": {
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
+      "js": ["content.js"],
+      "css": ["style.css"]
+    }
+  ]
+}

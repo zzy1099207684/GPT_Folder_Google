@@ -1,0 +1,30 @@
+#cgpt-bookmarks {                                   /* 整个收藏夹区域 */
+  margin-top: 12px;                                 /* 上侧留白 */
+  font-size: 14px;                                  /* 基准字号 */
+}
+.cgpt-bm-title {                                    /* “收藏夹”标题行 */
+  display: flex; justify-content: space-between;    /* 两端对齐 */
+  align-items: center; padding: 6px 8px;            /* 内边距 */
+  color: #e8dfc8; cursor: default; user-select: none;/* 米黄字体 */
+}
+.cgpt-bm-add { font-weight: bold; cursor: pointer; }/* “+”按钮 */
+.cgpt-bm-folder { margin: 4px 0; }                  /* 单个文件夹外壳 */
+.cgpt-bm-header {                                   /* 文件夹头部 */
+  display: flex; align-items: center; gap: 4px;     /* 横向布局 */
+  padding: 4px 8px; border-radius: 4px;             /* 圆角背景 */
+  background: rgba(255,255,255,0.05); cursor: pointer;
+}
+.cgpt-bm-arrow { width: 12px; text-align: center; } /* 小三角 */
+.cgpt-bm-label {                                    /* 文件夹文字 */
+  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cgpt-bm-ul {                                      /* 会话列表容器 */
+  list-style: none; margin: 2px 0 0 24px; padding: 0;
+}
+.cgpt-bm-item { margin: 2px 0; }                   /* 单个会话项 */
+.cgpt-bm-item a {                                  /* 会话链接 */
+  color: #e8dfc8; text-decoration: none; font-size: 13px;
+}
+.cgpt-bm-header.dragover {                         /* 拖入高亮 */
+  background: rgba(0,128,255,0.3);
+}
