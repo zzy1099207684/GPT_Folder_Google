@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT 收藏夹",
+  "name": "ChatGPT Folder",
   "version": "1.0",
-  "description": "为 ChatGPT 左侧添加可折叠收藏夹功能",
+  "description": "Add collapsible favorites to ChatGPT's left side",
   "icons": {
     "128": "icon128.png"
   },
