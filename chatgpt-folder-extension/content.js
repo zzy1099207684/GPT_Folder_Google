@@ -151,6 +151,7 @@
 
         new MutationObserver(syncTitles).observe(historyNode, {childList: true, subtree: true, characterData: true});
 
+        let prevHistoryPaths = new Set(qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname));
         /* —— 检测 history 会话被删除后同步移除收藏夹中对应条目 —— */
         const historyCleanupObs = new MutationObserver(() => {
             const anchors = qsa('div#history a[href*="/c/"]');
