@@ -552,9 +552,18 @@
                     activeFid = entry ? entry.fid : arr[arr.length - 1].fid;
                     lastClickedChatEl = null;
                 } else {
-                    activeFid = arr[arr.length - 1].fid;
+                    // 尝试从 folders 中反向查找当前 pathname 属于哪个 folder
+                    for (const [fid, folder] of Object.entries(folders)) {
+                        if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
+                            activeFid = fid;
+                            break;
+                        }
+                    }
+                    // 若没找到则保底回退为最后一个匹配项
+                    if (!activeFid && arr.length) activeFid = arr[arr.length - 1].fid;
                 }
             }
+
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
