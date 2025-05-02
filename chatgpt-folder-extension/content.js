@@ -346,37 +346,43 @@
 
 
             // 新建聊天按钮点击事件处理器
-            newBtn.onclick = e => {
-                e.stopPropagation(); // 阻止事件冒泡，避免折叠文件夹
-                activeFid = fid; // 设置当前激活文件夹 ID，确保后续只为该文件夹添加会话
-                const prevPaths = new Set( // 记录点击前已有的会话路径
-                    qsa('div#history a[href*="/c/"]')
-                        .map(a => new URL(a.href).pathname)
+            // 【修改后】用 MutationObserver 监听 history 区域新增节点，替换 setInterval 轮询
+            newBtn.onclick = e => {                                                         // 点击“新建会话”按钮时执行
+                e.stopPropagation();                                                         // 阻止事件冒泡，避免折叠文件夹
+                activeFid = fid;                                                             // 标记本次操作所属的文件夹
+                const prevPaths = new Set(                                                   // 保存当前已有的会话路径
+                    qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
-                history.pushState({}, '', '/'); // 跳转到根路径，触发新会话
-                window.dispatchEvent(new Event('popstate')); // 手动触发路由更新
-                const iv = setInterval(async () => { // 定时轮询检测新会话生成
-                    if (activeFid !== fid) { // 如果当前活跃文件夹已变更
-                        clearInterval(iv); // 停止此轮询
-                        return; // 不继续处理
+                history.pushState({}, '', '/');                                              // 切换到根路径，触发新会话
+                window.dispatchEvent(new Event('popstate'));                                 // 通知路由更新
+                const observer = new MutationObserver(async (mutations, obs) => {            // 创建 MutationObserver
+                    for (const mutation of mutations) {                                      // 遍历所有变动记录
+                        for (const node of mutation.addedNodes) {                            // 检查新增节点
+                            if (!(node instanceof HTMLElement)) continue;                    // 非元素节点跳过
+                            const anchors = node.matches('a[href*="/c/"]')                   // 如果节点本身是会话链接
+                                ? [node]                                                     //   直接作为候选
+                                : Array.from(node.querySelectorAll('a[href*="/c/"]'));        // 否则查询子孙链接
+                            for (const a of anchors) {                                       // 遍历所有候选链接
+                                const path = new URL(a.href, location.origin).pathname;       // 解析路径
+                                if (!path.startsWith('/c/') || prevPaths.has(path)) continue; // 跳过非新会话或已记录路径
+                                if (folders[fid]?.chats.some(c =>                            // 跳过已添加到该组的会话
+                                    samePath(c.url, location.origin + path)
+                                )) continue;
+                                const title = a.textContent.trim() || 'loading…';             // 获取标题
+                                const chatUrl = location.origin + path;                      // 构造完整 URL
+                                folders[fid].chats.unshift({ url: chatUrl, title });          // 插入分组数据
+                                await storage.set({ folders });                              // 持久化存储
+                                render();                                                    // 重新渲染侧栏
+                                highlightActive();                                           // 更新高亮
+                                obs.disconnect();                                           // 完成后断开观察
+                                return;                                                     // 退出回调
+                            }
+                        }
                     }
-                    if (!location.pathname.startsWith('/c/')) return; // 尚未进入新会话则跳过
-                    const path = location.pathname; // 获取当前会话路径
-                    if (prevPaths.has(path)) return; // 如果路径在记录中，说明不是新会话
-                    if (folders[fid]?.chats.some(c => samePath(c.url, location.origin + path))) return; // 已存在该会话则跳过
-                    const anchors = qsa('div#history a[href*="/c/"]');
-                    const anchor = anchors.find(a => new URL(a.href).pathname === path);
-                    if (!anchor) return;
-                    const title = anchor.textContent.trim() || 'loading…';
-                    const chatUrl = location.origin + path; // 构造与检测一致的完整 URL
-                    folders[fid].chats.unshift({ url: chatUrl, title });
-
-                    await storage.set({ folders }); // 同步存储
-                    render(); // 重新渲染侧栏
-                    highlightActive(); // 高亮当前会话
-                    clearInterval(iv); // 完成后停止轮询
-                }, 300); // 每 300ms 检查一次
+                });
+                observer.observe(qs('div#history'), { childList: true, subtree: true });      // 监听 history 区域子树节点变化
             };
+
 
             // —— 修改后代码片段 ——
             box.ondragover = e => {
