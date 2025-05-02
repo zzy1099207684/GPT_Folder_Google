@@ -9,13 +9,7 @@
     let timer = null;
     /* ===== 高效封装 storage ===== */
     const storage = {
-        safeSet(obj) {
-            if (!chrome?.runtime?.id) return; // 上下文无效，直接忽略
-            try {
-                chrome.storage.sync.set(obj);
-            } catch (e) {/* 静默忽略 */
-            }
-        }, async get(key) {
+        async get(key) {
             try {
                 return (await chrome.storage.sync.get(key))[key];
             } catch (e) {
@@ -27,8 +21,27 @@
             Object.assign(pending, obj);                                         // 合并多次调用
             if (timer) return;                                                   // 已排队则返回
             timer = setTimeout(async () => {                                     // 400 ms 去抖统一写
-                try { await chrome.storage.sync.set(pending); }                  // 真正写入
-                catch (e) { console.warn('[Bookmark] storage.set error', e); }   // 捕获异常
+                try {
+                    if (chrome?.runtime?.id) {                                   // 确保扩展上下文仍有效
+                        try {
+                            await chrome.storage.sync.set(pending); // 尝试写入
+                        } catch (e) {
+                            if (e?.message?.includes('Extension context invalidated')) {
+                                console.warn('[Bookmark] storage.set skipped (context lost)', e); // 丢失上下文时忽略
+                            } else {
+                                console.warn('[Bookmark] storage.set error', e); // 其他错误正常提示
+                            }
+                        }
+                    } else {
+                        console.warn('[Bookmark] storage.set skipped: invalid context'); // 跳过存储操作
+                    }
+                } catch (e) {
+                    if (e?.message?.includes('Extension context invalidated')) { // 已失效错误忽略
+                        console.warn('[Bookmark] storage.set skipped (context lost)', e);
+                    } else {
+                        console.warn('[Bookmark] storage.set error', e);         // 其他错误继续报出
+                    }
+                }
                 pending = {};                                                    // 清空缓冲
                 timer = null;                                                    // 复位
             }, 400);
@@ -87,7 +100,7 @@
             let name = n.trim();                                                     // 去除首尾空格
             if (name.length > MAX_LEN) name = name.slice(0, MAX_LEN) + '…';          // 超长则截断并加省略号
             const id = 'f_' + Date.now();                                            // 生成唯一 id
-            folders[id] = {name, chats: [], collapsed: false};                       // 保存至数据结构
+            folders[id] = {name, chats: [], collapsed: false, prompt: ''};                     // 保存至数据结构
             await storage.set({folders});
             render();
         });
@@ -98,11 +111,21 @@
         historyNode.parentElement.insertBefore(wrap, historyNode);                            // 插入侧栏顶部
 
         /* ---------- 数据读取 ---------- */
-        folders = (await storage.get('folders')) || {};                                       // 异步读取
+        folders = (await storage.get('folders')) || {};
+        let _migrated = false;
+        Object.values(folders).forEach(f => {
+            if (!('prompt' in f)) {
+                f.prompt = '';
+                _migrated = true;
+            }
+        });
+        if (_migrated) await storage.set({folders});
 
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
         let activePath = null;
+        let activeFid = null;
+        let lastClickedChatEl = null;
         const debounce = (fn, wait = 120) => {
             let t;
             return (...a) => {
@@ -115,7 +138,7 @@
             liveSyncMap.forEach((arr, path) => {
                 const a = qs(`a[href*="${path}"]`, historyNode)
                 if (!a) {  // 会话已被删除
-                    arr.forEach(({fid, el}) => {
+                    arr.forEach(({fid}) => {
                         const folder = folders[fid];
                         if (!folder) return;
                         const before = folder.chats.length;
@@ -179,15 +202,21 @@
         function renderFolder(fid, f) {
             const box = document.createElement('div');
             box.style.marginTop = '4px';
-
             const header = document.createElement('div');
-            header.style.cssText = `cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:4px 6px;background:${COLOR.bgLight};border-radius:4px`; // 左侧起始对齐
+            header.style.cssText = `position:relative;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:4px 6px;background:${COLOR.bgLight};border-radius:4px`;
+            const corner = document.createElement('div');
+            corner.className = 'cgpt-folder-corner';
+            corner.dataset.fid = fid;
+            corner.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;border-top:12px solid transparent;border-right:12px solid transparent';
+            header.append(corner);
+
             const arrow = document.createElement('span');
             arrow.textContent = f.collapsed ? '▶' : '▼';
             const lbl = document.createElement('span');
             lbl.textContent = f.name;
+            lbl.style.cssText = 'flex:1;white-space:normal;word-break:break-all;line-height:1.25';
             const left = document.createElement('div');
-            left.style.cssText = 'display:flex;gap:6px;flex:1';
+            left.style.cssText = 'display:flex;gap:6px;flex:1;align-items:flex-start';
             left.append(arrow, lbl);
 
             const newBtn = Object.assign(document.createElement('a'), {              // 创建新建会话按钮
@@ -226,7 +255,9 @@
                 const rect = menuBtn.getBoundingClientRect();                        // 获取按钮绝对位置
                 const menu = Object.assign(document.createElement('div'), {id: 'cgpt-folder-menu'}); // 新建菜单容器
                 menu.style.cssText = 'position:fixed;z-index:2147483647;min-width:140px;padding:8px 0;border-radius:10px;background:#2b2521;box-shadow:0 4px 10px rgba(0,0,0,.2);font-size:14px;color:#e7d8c5'; // 菜单样式
-                menu.innerHTML =                                                     // 插入两项
+                menu.innerHTML =
+                    '<div id="f_prompt" style="display:flex;align-items:center;padding:6px 16px;cursor:pointer">' +
+                    '<span style="flex:1">Prompt</span></div>' +
                     '<div id="f_rename" style="display:flex;align-items:center;padding:6px 16px;cursor:pointer">' +
                     '<span style="flex:1">Rename</span></div>' +
                     '<div id="f_delete" style="display:flex;align-items:center;padding:6px 16px;cursor:pointer;color:#e66">' +
@@ -237,7 +268,7 @@
                 menu.style.top = rect.bottom + 6 + 'px';                             // 位于按钮下方
 
                 const closeMenu = () => menu.remove();                               // 关闭菜单函数
-                setTimeout(() => document.addEventListener('click', closeMenu, {once:true}), 0); // 点击其他地方关闭
+                setTimeout(() => document.addEventListener('click', closeMenu, {once: true}), 0); // 点击其他地方关闭
 
                 menu.querySelector('#f_rename').onclick = async () => {              // Rename 逻辑
                     const n = prompt('rename group', folders[fid].name);                                // 弹窗输入
@@ -251,6 +282,43 @@
                     closeMenu();                                                     // 关闭菜单
                 };
 
+                // 修改后
+                menu.querySelector('#f_prompt').onclick = () => {
+                    const defaultPrompt = folders[fid]?.prompt || '';
+                    const modal = document.createElement('div');
+                    modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
+                    const box = document.createElement('div');
+                    box.style.cssText = 'background:#2b2521;padding:16px;border-radius:8px;max-width:400px;width:80%;box-shadow:0 4px 10px rgba(0,0,0,0.2)';
+                    const ta = document.createElement('textarea');
+                    ta.value = defaultPrompt;
+                    ta.style.cssText = 'width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical;font-size:14px;line-height:1.4';
+                    const btnWrap = document.createElement('div');
+                    btnWrap.style.cssText = 'text-align:right;margin-top:10px';
+                    const okBtn = document.createElement('button');
+                    okBtn.textContent = '确定';
+                    okBtn.style.cssText = 'margin-right:8px;cursor:pointer';
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.textContent = '取消';
+                    cancelBtn.style.cssText = 'cursor:pointer';
+                    btnWrap.appendChild(okBtn);
+                    btnWrap.appendChild(cancelBtn);
+                    box.appendChild(ta);
+                    box.appendChild(btnWrap);
+                    modal.appendChild(box);
+                    document.body.appendChild(modal);
+                    okBtn.onclick = async () => {
+                        folders[fid].prompt = ta.value.trim();
+                        await storage.set({folders});
+                        render();
+                        closeMenu();
+                        document.body.removeChild(modal);
+                    };
+                    cancelBtn.onclick = () => {
+                        document.body.removeChild(modal);
+                    };
+                };
+
+
                 menu.querySelector('#f_delete').onclick = async () => {              // Delete 逻辑
                     delete folders[fid];                                             // 删除该文件夹
                     await storage.set({folders});                                    // 同步存储
@@ -258,7 +326,6 @@
                     closeMenu();                                                     // 关闭菜单
                 };
             };
-
 
 
             const ul = document.createElement('ul');
@@ -272,39 +339,48 @@
             };
 
 
-            newBtn.onclick = e => {                          // 点击“New chat”按钮时触发
-                e.stopPropagation();                         // 阻止点击事件冒泡，避免折叠文件夹
-                const prevPaths = new Set(                   // 记录当前侧栏里已有的所有会话 pathname
-                    qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname));
-                history.pushState({}, '', '/');              // 跳到根路径，真正开启一个新会话
-                window.dispatchEvent(new Event('popstate')); // 手动触发路由更新事件
-
-                const iv = setInterval(async () => {         // 轮询检测是否生成了全新会话
-                    if (!location.pathname.startsWith('/c/')) return; // 还没进入 /c/xxx 直接返回
-                    const path = location.pathname;          // 当前会话的 pathname，例如 /c/abcd1234
-                    if (prevPaths.has(path)) return;         // 若 pathname 已存在，说明用户切回旧会话
-                    if (folders[fid]?.chats.some(c => samePath(c.url, location.origin + path))) return; // 已收录则返回
-
-                    const anchor = qs(`div#history a[href$="${path}"]`); // 查找侧栏中新会话链接
-                    if (!anchor) return;                    // 链接尚未出现说明首条消息还未真正保存
-
-                    folders[fid].chats.unshift({               // 插入到数组开头而不是末尾
-                        url: location.href,                 // 完整会话 URL
-                        title: anchor.textContent.trim() || 'loading…' // 使用侧栏展示的实时标题
-                    });
-                    await storage.set({folders});          // 同步到 chrome.storage
-                    render();                                // 重新渲染收藏夹区域
-                    clearInterval(iv);                       // 成功后停止轮询
-                }, 300);                                     // 每 300 ms 检查一次
+            // 新建聊天按钮点击事件处理器
+            newBtn.onclick = e => {
+                e.stopPropagation(); // 阻止事件冒泡，避免折叠文件夹
+                activeFid = fid; // 设置当前激活文件夹 ID，确保后续只为该文件夹添加会话
+                const prevPaths = new Set( // 记录点击前已有的会话路径
+                    qsa('div#history a[href*="/c/"]')
+                        .map(a => new URL(a.href).pathname)
+                );
+                history.pushState({}, '', '/'); // 跳转到根路径，触发新会话
+                window.dispatchEvent(new Event('popstate')); // 手动触发路由更新
+                const iv = setInterval(async () => { // 定时轮询检测新会话生成
+                    if (activeFid !== fid) { // 如果当前活跃文件夹已变更
+                        clearInterval(iv); // 停止此轮询
+                        return; // 不继续处理
+                    }
+                    if (!location.pathname.startsWith('/c/')) return; // 尚未进入新会话则跳过
+                    const path = location.pathname; // 获取当前会话路径
+                    if (prevPaths.has(path)) return; // 如果路径在记录中，说明不是新会话
+                    if (folders[fid]?.chats.some(c => samePath(c.url, location.origin + path))) return; // 已存在该会话则跳过
+                    const anchor = qs(`div#history a[href$="${path}"]`); // 查找侧栏中的新会话链接
+                    if (!anchor) return; // 链接尚未出现，继续轮询
+                    const title = anchor.textContent.trim() || 'loading…'; // 获取会话标题
+                    folders[fid].chats.unshift({ url: location.href, title }); // 插入到当前文件夹开头
+                    await storage.set({ folders }); // 同步存储
+                    render(); // 重新渲染侧栏
+                    highlightActive(); // 高亮当前会话
+                    clearInterval(iv); // 完成后停止轮询
+                }, 300); // 每 300ms 检查一次
             };
 
 
-            header.ondragover = e => {
+
+            // —— 修改后代码片段 ——
+            box.ondragover = e => {
                 e.preventDefault();
                 header.style.background = COLOR.bgHover;
             };
-            header.ondragleave = () => header.style.background = COLOR.bgLight;
-            header.ondrop = async e => {
+            box.ondragleave = e => {
+                e.preventDefault();
+                header.style.background = COLOR.bgLight;
+            };
+            box.ondrop = async e => {
                 e.preventDefault();
                 header.style.background = COLOR.bgLight;
                 const url = e.dataTransfer.getData('text/plain');
@@ -312,7 +388,12 @@
                 const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || '会话';
                 f.chats.push({url, title: t});
                 await storage.set({folders});
-                render();
+                const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
+                const fidList = Object.keys(folders);
+                const idx = fidList.indexOf(fid);
+                const oldBox = folderZone.children[idx];
+                const newBox = renderFolder(fid, folders[fid]);
+                folderZone.replaceChild(newBox, oldBox);
             };
 
             box.append(header, ul);
@@ -335,8 +416,9 @@
                 link.style.color = '#fff';                                          // 文字改为白色
             }
             link.onclick = e => {
-                if (!chat.url) return;                                   // 待定条目禁用点击
+                if (!chat.url) return;
                 e.preventDefault();
+                lastClickedChatEl = link;
                 history.pushState({}, '', chat.url);
                 window.dispatchEvent(new Event('popstate'));
             };
@@ -354,11 +436,19 @@
             parentUl.appendChild(li);
 
             /* —— 建立多对一同步映射 —— */
-            if (chat.url) {                                              // URL 非空才加入同步映射
-                const path = new URL(chat.url).pathname;
-                if (!liveSyncMap.has(path)) liveSyncMap.set(path, []);
-                const arr = liveSyncMap.get(path);
-                if (!arr.some(item => item.el === link)) arr.push({fid, el: link});
+            if (chat.url) {                                              // URL 字符串存在才继续
+                let path;                                                // 用于保存解析后的 pathname
+                try {                                                    // 兼容相对路径或含空格等情况
+                    path = new URL(chat.url, location.origin).pathname;  // 提供 base，确保相对路径可解析
+                } catch {                                                // 解析失败说明为非法 URL
+                    path = null;                                         // 置空，后面直接跳过建立映射
+                }
+                if (path) {                                              // 仅当成功解析时才同步到 liveSyncMap
+                    if (!liveSyncMap.has(path)) liveSyncMap.set(path, []); // 若无键则初始化
+                    const arr = liveSyncMap.get(path);                   // 取出映射数组
+                    if (!arr.some(item => item.el === link))             // 去重
+                        arr.push({fid, el: link});                       // 建立 fid-DOM 映射
+                }
             }
         }
 
@@ -381,17 +471,30 @@
         function appendSuffix() {
             const ed = qs('.ProseMirror');
             if (!ed) return;
-            const SUFFIX = '(Strictly prohibit any form of content segmentation; use natural line breaks only)'; // 定义尾缀常量
-            qsa('p', ed).forEach((p, i, arr) => {                                    // 遍历段落
-                if (p.innerText.trim() === SUFFIX && p !== arr[arr.length - 1]) p.remove(); // 若为多余尾缀则移除
+            const SUFFIX = ''; // 定义尾缀常量
+            const path = location.pathname;                                         // 当前会话路径
+            const mapArr = liveSyncMap.get(path) || [];                             // 映射数组（可能为空）
+            mapArr.filter(({el}) => document.contains(el));
+// 过滤掉已删除的旧节点
+// 取最后一个仍在 DOM 中的 fid
+            const groupPrompt = activeFid ? (folders[activeFid].prompt || '').trim() : '';     // 对应 prompt
+            qsa('p', ed).forEach((p, i, arr) => {
+                const txt = p.innerText.trim();
+                if ((txt === SUFFIX || (groupPrompt && txt === groupPrompt)) && i !== arr.length - 1) p.remove();
             });
-            const last = ed.lastElementChild;                                        // 取最后一段
-            if (!(last && last.innerText.trim() === SUFFIX)) {                       // 若末尾不存在尾缀才追加
-                const p = document.createElement('p');                               // 新建段落
-                p.textContent = SUFFIX;                                              // 填入尾缀
-                ed.appendChild(p);                                                   // 追加到编辑器
-                ed.dispatchEvent(new Event('input', {bubbles: true}));               // 触发输入事件
+            let last = ed.lastElementChild;
+            if (groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {  // 追加 prompt
+                const gp = document.createElement('p');
+                gp.textContent = groupPrompt;
+                ed.appendChild(gp);
+                last = gp;                                                          // 更新 last 指针
             }
+            if (!(last && last.innerText.trim() === SUFFIX)) {                      // 追加全局尾缀
+                const p = document.createElement('p');
+                p.textContent = SUFFIX;
+                ed.appendChild(p);
+            }                                                   // 追加到编辑器
+            ed.dispatchEvent(new Event('input', {bubbles: true}));               // 触发输入事件
         }
 
         function bindSend() {
@@ -403,7 +506,7 @@
             const bumpActiveChat = () => {                                             // 把当前会话提至所在文件夹首位
                 if (!location.pathname.startsWith('/c/')) return;                      // 非会话页面直接忽略
                 const cur = location.href;                                             // 记录当前完整 URL
-                for (const [fid, folder] of Object.entries(folders)) {                 // 遍历所有收藏夹
+                for (const [, folder] of Object.entries(folders)) {                 // 遍历所有收藏夹
                     const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));// 查找当前会话索引
                     if (i > 0) {                                                       // 若存在且不在首位
                         const [chat] = folder.chats.splice(i, 1);                      // 从原位置取出
@@ -415,15 +518,23 @@
                 }
             };
 
-            send.addEventListener('click', () => {                                     // 点击发送按钮时
-                appendSuffix();                                                        // 先追加尾缀
-                bumpActiveChat();                                                      // 再更新会话排序
+            // —— 修改后，排除“停止生成”状态 ——
+            send.addEventListener('click', e => {
+                // 如果当前按钮已变为“停止生成”，则不插入提示
+                const label = send.getAttribute('aria-label') || send.innerText;
+                if (label.toLowerCase().includes('stop')) return;
+                appendSuffix();
+                bumpActiveChat();
             }, {capture: true});
 
-            ed.addEventListener('keydown', e => {                                      // 键盘监听
-                if (e.key === 'Enter' && !e.shiftKey) {                                // 判断为发送而非换行
-                    appendSuffix();                                                    // 追加尾缀
-                    bumpActiveChat();                                                  // 更新排序
+            // —— 修改后，回车同样排除“停止生成” ——
+            ed.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    const btn = qs('#composer-submit-button');
+                    const label = btn.getAttribute('aria-label') || btn.innerText;
+                    if (label.toLowerCase().includes('stop')) return;
+                    appendSuffix();
+                    bumpActiveChat();
                 }
             }, {capture: true});
         }
@@ -447,6 +558,20 @@
                 el.style.color = '#fff';
             });
             activePath = path;
+            /* ----------【修改后 ②】---------- */
+            if (arr && arr.length) {
+                if (lastClickedChatEl) {
+                    const entry = arr.find(item => item.el === lastClickedChatEl);
+                    activeFid = entry ? entry.fid : arr[arr.length - 1].fid;
+                    lastClickedChatEl = null;
+                } else {
+                    activeFid = arr[arr.length - 1].fid;
+                }
+            }
+            document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
+                el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
+            });
+
         };
         highlightActive();                                                      // 初始渲染立即同步
         window.addEventListener('popstate', highlightActive);
