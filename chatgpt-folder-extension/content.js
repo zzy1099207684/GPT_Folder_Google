@@ -86,8 +86,8 @@
             let name = n.trim();                                                     // 去除首尾空格
             if (name.length > MAX_LEN) name = name.slice(0, MAX_LEN) + '…';          // 超长则截断并加省略号
             const id = 'f_' + Date.now();                                            // 生成唯一 id
-            folders[id] = {name, chats: [], collapsed: false, prompt: ''};                     // 保存至数据结构
-            await storage.set({folders});
+            folders[id] = {name, chats: [], collapsed: false, prompt: ''};
+            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
             render();
         });
         bar.appendChild(addBtn);
@@ -105,7 +105,7 @@
                 _migrated = true;
             }
         });
-        if (_migrated) await storage.set({folders});
+        if (_migrated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
 
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
@@ -119,11 +119,11 @@
                 t = setTimeout(() => fn(...a), wait);
             };
         };
-        const syncTitles = debounce(() => {
+        const syncTitles = () => {
             let updated = false;
             liveSyncMap.forEach((arr, path) => {
-                const a = qs(`a[href*="${path}"]`, historyNode)
-                if (!a) {  // 会话已被删除
+                const a = qs(`a[href*="${path}"]`, historyNode);
+                if (!a) {
                     arr.forEach(({fid}) => {
                         const folder = folders[fid];
                         if (!folder) return;
@@ -145,8 +145,9 @@
                     }
                 });
             });
-            if (updated) storage.set({folders});
-        }, 200);
+            if (updated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+        };
+
 
         new MutationObserver(syncTitles).observe(historyNode, {childList: true, subtree: true, characterData: true});
 
@@ -174,7 +175,7 @@
                     folderZone.replaceChild(newBox, oldBox);
                 }
             }
-            if (changed) storage.set({folders});
+            if (changed) chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
         });
         historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
 
@@ -263,7 +264,7 @@
                     let name = n.trim();                                             // 去首尾空格
                     if (name.length > MAX_LEN) name = name.slice(0, MAX_LEN) + '…';  // 超长截断
                     folders[fid].name = name;                                        // 更新数据
-                    await storage.set({folders});                                    // 同步存储
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});;                                    // 同步存储
                     render();                                                        // 重新渲染
                     closeMenu();                                                     // 关闭菜单
                 };
@@ -294,7 +295,7 @@
                     document.body.appendChild(modal);
                     okBtn.onclick = async () => {
                         folders[fid].prompt = ta.value.trim();
-                        await storage.set({folders});
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
                         render();
                         closeMenu();
                         document.body.removeChild(modal);
@@ -307,7 +308,7 @@
 
                 menu.querySelector('#f_delete').onclick = async () => {              // Delete 逻辑
                     delete folders[fid];                                             // 删除该文件夹
-                    await storage.set({folders});                                    // 同步存储
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});;                                    // 同步存储
                     render();                                                        // 重新渲染
                     closeMenu();                                                     // 关闭菜单
                 };
@@ -320,7 +321,7 @@
 
             header.onclick = async () => {
                 f.collapsed = !f.collapsed;
-                await storage.set({folders});
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
                 render();
             };
 
@@ -373,7 +374,7 @@
                 if (!url || f.chats.some(c => samePath(c.url, url))) return;
                 const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || '会话';
                 f.chats.push({url, title: t});
-                await storage.set({folders});
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
                 const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
                 const fidList = Object.keys(folders);
                 const idx = fidList.indexOf(fid);
@@ -414,7 +415,7 @@
             });
             del.onclick = async () => {
                 folders[fid].chats = folders[fid].chats.filter(c => !samePath(c.url, chat.url));
-                await storage.set({folders});
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
                 render();
             };
 
@@ -497,7 +498,7 @@
                     if (i > 0) {                                                       // 若存在且不在首位
                         const [chat] = folder.chats.splice(i, 1);                      // 从原位置取出
                         folder.chats.unshift(chat);                                    // 插入数组开头
-                        storage.set({folders});                                        // 同步到 chrome.storage
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});;                                        // 同步到 chrome.storage
                         render();                                                      // 立即重渲染侧栏
                         break;                                                         // 处理完即可退出循环
                     }
