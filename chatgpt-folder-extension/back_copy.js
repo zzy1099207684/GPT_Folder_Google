@@ -5,8 +5,6 @@
     const samePath = (a, b) => new URL(a, location.origin).pathname === new URL(b, location.origin).pathname; // 比较路径
     const qs = (sel, root = document) => root.querySelector(sel);                        // 简写 querySelector
     const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));        // 简写 querySelectorAll
-    // let pending = {};                                                        // 聚合待写入数据
-    // let timer = null;
     /* ===== 高效封装 storage ===== */
     const storage = {
         async get(key) {
@@ -97,7 +95,8 @@
         historyNode.parentElement.insertBefore(wrap, historyNode);                            // 插入侧栏顶部
 
         /* ---------- 数据读取 ---------- */
-        folders = (await storage.get('folders')) || {};
+        folders = (await storage.get('folders')) || {};                   // 从 storage 读取已保存的文件夹数据，若无则用空对象
+        let lastActiveMap = (await storage.get('lastActiveMap')) || {};    // 从 storage 读取上次各路径对应的活跃文件夹映射
         let _migrated = false;
         Object.values(folders).forEach(f => {
             if (!('prompt' in f)) {
@@ -105,7 +104,7 @@
                 _migrated = true;
             }
         });
-        if (_migrated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+        if (_migrated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
 
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
@@ -145,7 +144,11 @@
                     }
                 });
             });
-            if (updated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+            if (updated) {                                               // 如果有标题或删除变更
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders}); // 同步存储最新数据
+                render();                                                // 重新渲染所有分组及其会话列表
+                highlightActive();                                       // 保持当前会话高亮状态不变
+            }
         };
 
 
@@ -156,27 +159,11 @@
         const historyCleanupObs = new MutationObserver(() => {
             const anchors = qsa('div#history a[href*="/c/"]');
             const currentPaths = new Set(anchors.map(a => new URL(a.href).pathname));
-            // 检测新增的会话，把它自动加入到当前激活分组
-            if (activeFid) {
-                const added = [...currentPaths].filter(p => !prevHistoryPaths.has(p));
-                if (added.length) {
-                    const folder = folders[activeFid];
-                    added.forEach(path => {
-                        const url = location.origin + path;
-                        if (!folder.chats.some(c => samePath(c.url, url))) {
-                            const a = anchors.find(a => new URL(a.href).pathname === path);
-                            const title = a?.textContent.trim() || '新对话';
-                            folder.chats.unshift({url, title});
-                        }
-                    });
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                    render();
-                    highlightActive();
-                }
-            }
             // 原有删除同步逻辑
             const activePaths = currentPaths;
             let changed = false;
+            const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
+            const fidList = Object.keys(folders);
             for (const [fid, folder] of Object.entries(folders)) {
                 const oldChats = folder.chats;
                 const newChats = oldChats.filter(c => {
@@ -190,8 +177,7 @@
                 if (newChats.length !== oldChats.length) {
                     folder.chats = newChats;
                     changed = true;
-                    const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
-                    const oldBox = folderZone.children[Object.keys(folders).indexOf(fid)];
+                    const oldBox = folderZone.children[fidList.indexOf(fid)];
                     const newBox = renderFolder(fid, folder);
                     folderZone.replaceChild(newBox, oldBox);
                 }
@@ -199,6 +185,7 @@
             if (changed) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
             prevHistoryPaths = currentPaths;
         });
+
 
         historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
 
@@ -287,7 +274,7 @@
                     let name = n.trim();                                             // 去首尾空格
                     if (name.length > MAX_LEN) name = name.slice(0, MAX_LEN) + '…';  // 超长截断
                     folders[fid].name = name;                                        // 更新数据
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});;                                    // 同步存储
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                    // 同步存储
                     render();                                                        // 重新渲染
                     closeMenu();                                                     // 关闭菜单
                 };
@@ -318,7 +305,7 @@
                     document.body.appendChild(modal);
                     okBtn.onclick = async () => {
                         folders[fid].prompt = ta.value.trim();
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                         render();
                         closeMenu();
                         document.body.removeChild(modal);
@@ -331,7 +318,7 @@
 
                 menu.querySelector('#f_delete').onclick = async () => {              // Delete 逻辑
                     delete folders[fid];                                             // 删除该文件夹
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});;                                    // 同步存储
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                    // 同步存储
                     render();                                                        // 重新渲染
                     closeMenu();                                                     // 关闭菜单
                 };
@@ -344,7 +331,7 @@
 
             header.onclick = async () => {
                 f.collapsed = !f.collapsed;
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();
             };
 
@@ -372,7 +359,8 @@
                     const anchor = anchors.find(a => new URL(a.href).pathname === path);
                     if (!anchor) return;
                     const title = anchor.textContent.trim() || 'loading…';
-                    folders[fid].chats.unshift({ url: location.origin + path, title });
+                    const chatUrl = location.origin + path; // 构造与检测一致的完整 URL
+                    folders[fid].chats.unshift({ url: chatUrl, title });
 
                     await storage.set({ folders }); // 同步存储
                     render(); // 重新渲染侧栏
@@ -397,13 +385,14 @@
                 if (!url || f.chats.some(c => samePath(c.url, url))) return;
                 const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || '会话';
                 f.chats.unshift({url, title: t}); // 插入到数组开头
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
                 const fidList = Object.keys(folders);
                 const idx = fidList.indexOf(fid);
                 const oldBox = folderZone.children[idx];
                 const newBox = renderFolder(fid, folders[fid]);
                 folderZone.replaceChild(newBox, oldBox);
+                highlightActive()
             };
 
             box.append(header, ul);
@@ -426,19 +415,22 @@
                 link.style.color = '#fff';                                          // 文字改为白色
             }
             link.onclick = e => {
-                if (!chat.url) return;
-                e.preventDefault();
-                lastClickedChatEl = link;
-                history.pushState({}, '', chat.url);
-                window.dispatchEvent(new Event('popstate'));
+                if (!chat.url) return;                                                          // URL 不存在则跳过
+                e.preventDefault();                                                             // 阻止默认跳转
+                lastClickedChatEl = link;                                                       // 记录最后一次点击的 DOM 元素
+                const path = new URL(chat.url, location.origin).pathname;                       // 解析当前会话的 pathname
+                lastActiveMap[path] = fid;                                                      // 缓存此 path 对应的文件夹 ID
+                storage.set({ lastActiveMap });                                                 // 持久化映射到 chrome.storage
+                history.pushState({}, '', chat.url);                                            // 更新浏览器历史
+                window.dispatchEvent(new Event('popstate'));                                    // 触发路由更新
             };
 
             const del = Object.assign(document.createElement('span'), {
-                textContent: '✖', style: 'cursor:pointer;color:while'
+                textContent: '✖', style: 'cursor:pointer;color:white'
             });
             del.onclick = async () => {
                 folders[fid].chats = folders[fid].chats.filter(c => !samePath(c.url, chat.url));
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();
             };
 
@@ -525,7 +517,7 @@
                     if (i > 0) {                                                       // 若存在且不在首位
                         const [chat] = folder.chats.splice(i, 1);                      // 从原位置取出
                         folder.chats.unshift(chat);                                    // 插入数组开头
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});;                                        // 同步到 chrome.storage
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                        // 同步到 chrome.storage
                         render();                                                      // 立即重渲染侧栏
                         break;                                                         // 处理完即可退出循环
                     }
@@ -579,15 +571,18 @@
                     activeFid = entry ? entry.fid : arr[arr.length - 1].fid;
                     lastClickedChatEl = null;
                 } else {
-                    // 尝试从 folders 中反向查找当前 pathname 属于哪个 folder
-                    for (const [fid, folder] of Object.entries(folders)) {
-                        if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
-                            activeFid = fid;
-                            break;
+                    let storedFid = lastActiveMap[path];                                           // 取出此 path 的缓存文件夹 ID
+                    if (storedFid && arr.some(item => item.fid === storedFid)) {                    // 如果缓存存在且当前条目中有对应项
+                        activeFid = storedFid;                                                      // 直接使用缓存的文件夹 ID
+                    } else {
+                        for (const [fid, folder] of Object.entries(folders)) {                      // 否则按原逻辑遍历所有文件夹
+                            if (folder.chats.some(c => samePath(c.url, location.origin + path))) {  // 找到包含当前路径的聊天
+                                activeFid = fid;                                                     // 设置第一次匹配的文件夹 ID
+                                break;                                                               // 跳出循环
+                            }
                         }
+                        if (!activeFid && arr.length) activeFid = arr[arr.length - 1].fid;           // 若仍未找到则使用最后一个
                     }
-                    // 若没找到则保底回退为最后一个匹配项
-                    if (!activeFid && arr.length) activeFid = arr[arr.length - 1].fid;
                 }
             }
 

@@ -90,6 +90,15 @@
         });
         bar.appendChild(addBtn);
         const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
+        folderZone.addEventListener('click', e => {
+            const btn = e.target.closest('span[data-url][data-fid]');
+            if (!btn) return;
+            const {url, fid} = btn.dataset;
+            folders[fid].chats = folders[fid].chats.filter(c => c.url !== url);
+            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+            render();
+        });
+
         inner.append(bar, folderZone);
         wrap.appendChild(inner);
         historyNode.parentElement.insertBefore(wrap, historyNode);                            // 插入侧栏顶部
@@ -425,16 +434,13 @@
                 window.dispatchEvent(new Event('popstate'));                                    // 触发路由更新
             };
 
-            const del = Object.assign(document.createElement('span'), {
-                textContent: '✖', style: 'cursor:pointer;color:white'
-            });
-            del.onclick = async () => {
-                folders[fid].chats = folders[fid].chats.filter(c => !samePath(c.url, chat.url));
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                render();
-            };
-
+            const del = document.createElement('span');
+            del.textContent = '✖';
+            del.style.cssText = 'cursor:pointer;color:white';
+            del.dataset.url = chat.url;
+            del.dataset.fid = fid;
             li.append(link, del);
+
             parentUl.appendChild(li);
 
             /* —— 建立多对一同步映射 —— */
