@@ -470,11 +470,15 @@
                 if ((txt === SUFFIX || (groupPrompt && txt === groupPrompt)) && i !== arr.length - 1) p.remove();
             });
             let last = ed.lastElementChild;
-            if (groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {  // 追加 prompt
-                const gp = document.createElement('p');
-                gp.textContent = groupPrompt;
-                ed.appendChild(gp);
-                last = gp;                                                          // 更新 last 指针
+            if (groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {
+                const blank = document.createElement('p');       // 创建空段落
+                blank.innerHTML = '<br>';                        // 使用换行填充
+                ed.appendChild(blank);                           // 插入空行
+
+                const gp = document.createElement('p');          // 创建提示词段落
+                gp.textContent = groupPrompt;                    // 设置内容
+                ed.appendChild(gp);                              // 插入提示词
+                last = gp;
             }
             if (!(last && last.innerText.trim() === SUFFIX)) {                      // 追加全局尾缀
                 const p = document.createElement('p');
