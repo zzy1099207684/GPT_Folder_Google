@@ -108,10 +108,6 @@
         folders = (await storage.get('folders')) || {}; // 从 storage 读取所有分组数据，如果没有则初始化为空对象
         let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
         let _migrated = false; // 标记旧版本数据迁移逻辑
-        if (!folders._order || !Array.isArray(folders._order)) {
-            folders._order = Object.keys(folders).filter(k => k !== '_order');
-            _migrated = true;
-        }
         Object.values(folders).forEach(f => {
             if (!('prompt' in f)) {
                 f.prompt = '';
@@ -125,13 +121,6 @@
         let activePath = null;
         let activeFid = null;
         let lastClickedChatEl = null;
-        const debounce = (fn, wait = 120) => {
-            let t;
-            return (...a) => {
-                clearTimeout(t);
-                t = setTimeout(() => fn(...a), wait);
-            };
-        };
         const syncTitles = () => {
             let updated = false;
             liveSyncMap.forEach((arr, path) => {
@@ -206,68 +195,13 @@
         /* ---------- 渲染 ---------- */
         function render() {
             folderZone.replaceChildren();
-            // 使用 _order 数组确定渲染顺序
-            if (folders._order && Array.isArray(folders._order)) {
-                folders._order.forEach(id => {
-                    if (folders[id]) {
-                        folderZone.appendChild(renderFolder(id, folders[id]));
-                    }
-                });
-            } else {
-                // 如果没有 _order 数组，则按照传统方式渲染
-                Object.entries(folders).filter(([k]) => k !== '_order').forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
-            }
+            Object.entries(folders).forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
         }
 
         /* ---------- 文件夹渲染 ---------- */
         function renderFolder(fid, f) {
             const box = document.createElement('div');
-            box.draggable = true;                         // 允许拖拽
-            box.dataset.fid = fid;                        // 保存文件夹 ID
             box.style.marginTop = '4px';
-
-            box.addEventListener('dragstart', e => {
-                e.dataTransfer.setData('text/plain', fid);   // 传递源文件夹 ID
-                e.dataTransfer.effectAllowed = 'move';
-            });
-            box.addEventListener('dragover', e => {
-                e.preventDefault();                           // 允许在此放置
-                box.style.background = COLOR.bgHover;         // 高亮提示
-            });
-            box.addEventListener('dragleave', e => {
-                e.preventDefault();
-                box.style.background = COLOR.bgLight;         // 恢复背景
-            });
-            box.addEventListener('drop', e => {
-                e.preventDefault();
-                box.style.background = COLOR.bgLight;
-                const sourceFid = e.dataTransfer.getData('text/plain');
-                if (!sourceFid || sourceFid === fid) return;  // 自己不跟自己换
-                // 原有的交换逻辑
-                const entries = Object.entries(folders);
-                const srcIndex = entries.findIndex(([k]) => k === sourceFid);
-                const tgtIndex = entries.findIndex(([k]) => k === fid);
-                if (srcIndex < 0 || tgtIndex < 0) return;
-                [entries[srcIndex], entries[tgtIndex]] = [entries[tgtIndex], entries[srcIndex]]; // 交换顺序
-                folders = Object.fromEntries(entries);        // 重建有序对象
-
-                // 更新 _order 数组以持久化顺序
-                if (!folders._order || !Array.isArray(folders._order)) {
-                    folders._order = Object.keys(folders).filter(k => k !== '_order');
-                } else {
-                    const orderSrcIndex = folders._order.indexOf(sourceFid);
-                    const orderTgtIndex = folders._order.indexOf(fid);
-                    if (orderSrcIndex >= 0 && orderTgtIndex >= 0) {
-                        const newOrder = [...folders._order];
-                        [newOrder[orderSrcIndex], newOrder[orderTgtIndex]] = [newOrder[orderTgtIndex], newOrder[orderSrcIndex]];
-                        folders._order = newOrder;
-                    }
-                }
-
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                render();                                     // 重新渲染所有分组
-                highlightActive();                            // 保持高亮
-            });
             const header = document.createElement('div');
             header.style.cssText = `position:relative;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:4px 6px;background:${COLOR.bgLight};border-radius:4px`;
             const corner = document.createElement('div');
@@ -408,9 +342,10 @@
 
             // 新建聊天按钮点击事件处理器
             // 【修改后】用 MutationObserver 监听 history 区域新增节点，替换 setInterval 轮询
-            newBtn.onclick = e => {                                                         // 点击“新建会话”按钮时执行
-                e.stopPropagation();                                                         // 阻止事件冒泡，避免折叠文件夹
-                activeFid = fid;                                                             // 标记本次操作所属的文件夹
+            newBtn.onclick = e => {
+                clearActiveOnHistoryClick = false;  // ← 点击组内新建会话时清除“history 点击”标志
+                e.stopPropagation();
+                activeFid = fid;                                                            // 标记本次操作所属的文件夹
                 const prevPaths = new Set(                                                   // 保存当前已有的会话路径
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
@@ -496,14 +431,15 @@
                 link.style.color = '#fff';                                          // 文字改为白色
             }
             link.onclick = e => {
-                if (!chat.url) return;                                                          // URL 不存在则跳过
-                e.preventDefault();                                                             // 阻止默认跳转
-                lastClickedChatEl = link;                                                       // 记录最后一次点击的 DOM 元素
-                const path = new URL(chat.url, location.origin).pathname;                       // 解析当前会话的 pathname
-                lastActiveMap[path] = fid;                                                      // 缓存此 path 对应的文件夹 ID
-                storage.set({ lastActiveMap });                                                 // 持久化映射到 chrome.storage
-                history.pushState({}, '', chat.url);                                            // 更新浏览器历史
-                window.dispatchEvent(new Event('popstate'));                                    // 触发路由更新
+                clearActiveOnHistoryClick = false;
+                if (!chat.url) return;
+                e.preventDefault();
+                lastClickedChatEl = link;
+                const path = new URL(chat.url, location.origin).pathname;
+                lastActiveMap[path] = fid;            // 保留
+                storage.set({ lastActiveMap });       // 保留
+                history.pushState({}, '', chat.url);
+                window.dispatchEvent(new Event('popstate'));
             };
 
             const del = document.createElement('span');
@@ -587,28 +523,20 @@
             if (!ed || !send || send.dataset.hooked) return;
             send.dataset.hooked = 1;                                                   // 标记已挂钩避免重复
 
-            const bumpActiveChat = () => {
-                if (!location.pathname.startsWith('/c/')) return;
-                const cur = location.href;
-                for (const [fid, folder] of Object.entries(folders)) {
-                    const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));
-                    if (i > 0) {
-                        const [chat] = folder.chats.splice(i, 1);      // 从原位置取出
-                        folder.chats.unshift(chat);                    // 插入到数组开头
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                        // 仅局部刷新当前文件夹节点，不影响其它分组
-                        const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
-                        const fidList = Object.keys(folders);
-                        const idx = fidList.indexOf(fid);
-                        const oldBox = folderZone.children[idx];
-                        const newBox = renderFolder(fid, folder);
-                        folderZone.replaceChild(newBox, oldBox);
-                        highlightActive();                              // 保持当前高亮状态
-                        break;
+            const bumpActiveChat = () => {                                             // 把当前会话提至所在文件夹首位
+                if (!location.pathname.startsWith('/c/')) return;                      // 非会话页面直接忽略
+                const cur = location.href;                                             // 记录当前完整 URL
+                for (const [, folder] of Object.entries(folders)) {                 // 遍历所有收藏夹
+                    const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));// 查找当前会话索引
+                    if (i > 0) {                                                       // 若存在且不在首位
+                        const [chat] = folder.chats.splice(i, 1);                      // 从原位置取出
+                        folder.chats.unshift(chat);                                    // 插入数组开头
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                        // 同步到 chrome.storage
+                        render();                                                      // 立即重渲染侧栏
+                        break;                                                         // 处理完即可退出循环
                     }
                 }
             };
-
 
             // —— 修改后，排除“停止生成”状态 ——
             send.addEventListener('click', e => {
@@ -635,39 +563,56 @@
         bindSend();
 
         render();
-        const highlightActive = () => {                                         // 仅更新必要元素
-            const path = location.pathname;                                     // 当前路径
-            if (activePath) {                                             // 若已有旧路径
-                const oldArr = liveSyncMap.get(activePath);               // 取出旧路径所有克隆
-                if (oldArr) oldArr.forEach(({el}) => {                    // 逐个清除高亮
+        // 【新增】在 initBookmarks 顶部定义
+        let clearActiveOnHistoryClick = false;
+
+// 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
+        historyNode.addEventListener('click', e => {
+            const a = e.target.closest('a[href*="/c/"]');
+            if (!a) return;
+            clearActiveOnHistoryClick = true;
+            lastClickedChatEl = null;
+            const path = new URL(a.href, location.origin).pathname;      // 新增
+            lastActiveMap[path] = '__history__';                         // 新增
+            storage.set({ lastActiveMap });                              // 新增
+            highlightActive();
+        });
+
+        const highlightActive = () => {
+            const path = location.pathname;
+            if (activePath) {
+                const oldArr = liveSyncMap.get(activePath);
+                if (oldArr) oldArr.forEach(({el}) => {
                     el.style.background = '';
                     el.style.color = '#b2b2b2';
                 });
             }
-            const arr = liveSyncMap.get(path);                            // 获取当前路径克隆
-            if (arr && arr.length) arr.forEach(({el}) => {                // 为全部克隆加高亮
-                el.style.background = 'rgba(255,255,255,.07)';
-                el.style.color = '#fff';
-            });
-            activePath = path;
-            /* ----------【修改后 ②】---------- */
+            const arr = liveSyncMap.get(path);
             if (arr && arr.length) {
-                if (lastClickedChatEl) {
-                    const entry = arr.find(item => item.el === lastClickedChatEl);
-                    activeFid = entry ? entry.fid : arr[arr.length - 1].fid;
-                    lastClickedChatEl = null;
-                } else {
-                    let storedFid = lastActiveMap[path];                                           // 取出此 path 的缓存文件夹 ID
-                    if (storedFid && arr.some(item => item.fid === storedFid)) {                    // 如果缓存存在且当前条目中有对应项
-                        activeFid = storedFid;                                                      // 直接使用缓存的文件夹 ID
-                    } else {
-                        for (const [fid, folder] of Object.entries(folders)) {                      // 否则按原逻辑遍历所有文件夹
-                            if (folder.chats.some(c => samePath(c.url, location.origin + path))) {  // 找到包含当前路径的聊天
-                                activeFid = fid;                                                     // 设置第一次匹配的文件夹 ID
-                                break;                                                               // 跳出循环
-                            }
-                        }
-                        if (!activeFid && arr.length) activeFid = arr[arr.length - 1].fid;           // 若仍未找到则使用最后一个
+                const isHistoryView = lastActiveMap[path] === '__history__';   // ← 本次来源于 history 面板
+                arr.forEach(({el}) => {
+                    const inHistory = !!el.closest('#history');                // 判断链接属于 history 还是分组
+                    if (isHistoryView && !inHistory) {                         // 来自 history 且是组内链接 → 不高亮
+                        el.style.background = '';
+                        el.style.color = '#b2b2b2';
+                    } else {                                                   // 其余情况正常高亮
+                        el.style.background = 'rgba(255,255,255,.07)';
+                        el.style.color = '#fff';
+                    }
+                });
+            }
+            activePath = path;
+
+            let storedFid = lastActiveMap[path];
+            if (storedFid === '__history__') {        // 新增：来自 history，保持未选中
+                activeFid = null;
+            } else if (storedFid && arr?.some(i => i.fid === storedFid)) {
+                activeFid = storedFid;
+            } else if (arr && arr.length && !clearActiveOnHistoryClick) { // 原有回退逻辑
+                for (const [fid, folder] of Object.entries(folders)) {
+                    if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
+                        activeFid = fid;
+                        break;
                     }
                 }
             }
@@ -675,8 +620,9 @@
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
-
         };
+
+
         highlightActive();                                                      // 初始渲染立即同步
         window.addEventListener('popstate', highlightActive);
     }
