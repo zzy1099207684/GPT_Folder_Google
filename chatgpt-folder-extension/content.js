@@ -58,6 +58,7 @@
         if (hist && !hist.dataset.ready) {
             hist.dataset.ready = 1;
             initBookmarks(hist);
+            readyObs.disconnect();
         }
     });
     readyObs.observe(document.body, {childList: true, subtree: true});                        // 监听
@@ -104,9 +105,9 @@
         historyNode.parentElement.insertBefore(wrap, historyNode);                            // 插入侧栏顶部
 
         /* ---------- 数据读取 ---------- */
-        folders = (await storage.get('folders')) || {};                   // 从 storage 读取已保存的文件夹数据，若无则用空对象
-        let lastActiveMap = (await storage.get('lastActiveMap')) || {};    // 从 storage 读取上次各路径对应的活跃文件夹映射
-        let _migrated = false;
+        folders = (await storage.get('folders')) || {}; // 从 storage 读取所有分组数据，如果没有则初始化为空对象
+        let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
+        let _migrated = false; // 标记旧版本数据迁移逻辑
         Object.values(folders).forEach(f => {
             if (!('prompt' in f)) {
                 f.prompt = '';
@@ -342,6 +343,7 @@
                 f.collapsed = !f.collapsed;
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();
+                highlightActive();
             };
 
 
@@ -353,8 +355,13 @@
                 const prevPaths = new Set(                                                   // 保存当前已有的会话路径
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
-                history.pushState({}, '', '/');                                              // 切换到根路径，触发新会话
-                window.dispatchEvent(new Event('popstate'));                                 // 通知路由更新
+                const globalNewBtn = qs('button[aria-label="New chat"]');   // 获取全局“New chat”按钮
+                if (globalNewBtn) {                                         // 如果按钮存在
+                    globalNewBtn.click();                                   // 模拟点击，走原生新建聊天流程
+                } else {                                                    // 否则
+                    history.pushState({}, '', '/');                         // 回退到根路径，兼容旧逻辑
+                    window.dispatchEvent(new Event('popstate'));            // 触发路由更新
+                }                                 // 通知路由更新
                 const observer = new MutationObserver(async (mutations, obs) => {            // 创建 MutationObserver
                     for (const mutation of mutations) {                                      // 遍历所有变动记录
                         for (const node of mutation.addedNodes) {                            // 检查新增节点
