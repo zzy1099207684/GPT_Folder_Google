@@ -5,8 +5,8 @@
     const samePath = (a, b) => new URL(a, location.origin).pathname === new URL(b, location.origin).pathname; // 比较路径
     const qs = (sel, root = document) => root.querySelector(sel);                        // 简写 querySelector
     const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));        // 简写 querySelectorAll
-    let pending = {};                                                        // 聚合待写入数据
-    let timer = null;
+    // let pending = {};                                                        // 聚合待写入数据
+    // let timer = null;
     /* ===== 高效封装 storage ===== */
     const storage = {
         async get(key) {
@@ -17,34 +17,20 @@
                 return null;
             }
         },
-        async set(obj) {                                                         // 同步写入接口
-            Object.assign(pending, obj);                                         // 合并多次调用
-            if (timer) return;                                                   // 已排队则返回
-            timer = setTimeout(async () => {                                     // 400 ms 去抖统一写
-                try {
-                    if (chrome?.runtime?.id) {                                   // 确保扩展上下文仍有效
-                        try {
-                            await chrome.storage.sync.set(pending); // 尝试写入
-                        } catch (e) {
-                            if (e?.message?.includes('Extension context invalidated')) {
-                                console.warn('[Bookmark] storage.set skipped (context lost)', e); // 丢失上下文时忽略
-                            } else {
-                                console.warn('[Bookmark] storage.set error', e); // 其他错误正常提示
-                            }
-                        }
-                    } else {
-                        console.warn('[Bookmark] storage.set skipped: invalid context'); // 跳过存储操作
-                    }
-                } catch (e) {
-                    if (e?.message?.includes('Extension context invalidated')) { // 已失效错误忽略
-                        console.warn('[Bookmark] storage.set skipped (context lost)', e);
-                    } else {
-                        console.warn('[Bookmark] storage.set error', e);         // 其他错误继续报出
-                    }
+        async set(obj) {                                                             // 同步写入接口
+            try {                                                                    // 捕获全部异常
+                if (chrome?.runtime?.id) {                                           // 确认扩展上下文有效
+                    await chrome.storage.sync.set(obj);                              // 立即写入, 取消延迟
+                } else {                                                             // 无效上下文
+                    console.warn('[Bookmark] storage.set skipped: invalid context'); // 记录并跳过
                 }
-                pending = {};                                                    // 清空缓冲
-                timer = null;                                                    // 复位
-            }, 400);
+            } catch (e) {                                                            // 写入过程中异常
+                if (e?.message?.includes('Extension context invalidated')) {         // 上下文丢失
+                    console.warn('[Bookmark] storage.set skipped (context lost)', e);
+                } else {                                                             // 其他错误
+                    console.warn('[Bookmark] storage.set error', e);
+                }
+            }
         },
     };
 
