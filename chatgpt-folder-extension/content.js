@@ -108,10 +108,6 @@
         folders = (await storage.get('folders')) || {}; // 从 storage 读取所有分组数据，如果没有则初始化为空对象
         let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
         let _migrated = false; // 标记旧版本数据迁移逻辑
-        if (!folders._order || !Array.isArray(folders._order)) {
-            folders._order = Object.keys(folders).filter(k => k !== '_order');
-            _migrated = true;
-        }
         Object.values(folders).forEach(f => {
             if (!('prompt' in f)) {
                 f.prompt = '';
@@ -179,7 +175,6 @@
             const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
             const fidList = Object.keys(folders);
             for (const [fid, folder] of Object.entries(folders)) {
-                if (fid === "_order" || !folder || !folder.chats) continue; // 跳过_order和无效文件夹
                 const oldChats = folder.chats;
                 const newChats = oldChats.filter(c => {
                     if (!c.url) return true;
@@ -207,68 +202,13 @@
         /* ---------- 渲染 ---------- */
         function render() {
             folderZone.replaceChildren();
-            // 使用 _order 数组确定渲染顺序
-            if (folders._order && Array.isArray(folders._order)) {
-                folders._order.forEach(id => {
-                    if (folders[id]) {
-                        folderZone.appendChild(renderFolder(id, folders[id]));
-                    }
-                });
-            } else {
-                // 如果没有 _order 数组，则按照传统方式渲染
-                Object.entries(folders).filter(([k]) => k !== '_order').forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
-            }
+            Object.entries(folders).forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
         }
 
         /* ---------- 文件夹渲染 ---------- */
         function renderFolder(fid, f) {
             const box = document.createElement('div');
-            box.draggable = true;                         // 允许拖拽
-            box.dataset.fid = fid;                        // 保存文件夹 ID
             box.style.marginTop = '4px';
-
-            box.addEventListener('dragstart', e => {
-                e.dataTransfer.setData('text/plain', fid);   // 传递源文件夹 ID
-                e.dataTransfer.effectAllowed = 'move';
-            });
-            box.addEventListener('dragover', e => {
-                e.preventDefault();                           // 允许在此放置
-                box.style.background = COLOR.bgHover;         // 高亮提示
-            });
-            box.addEventListener('dragleave', e => {
-                e.preventDefault();
-                box.style.background = COLOR.bgLight;         // 恢复背景
-            });
-            box.addEventListener('drop', e => {
-                e.preventDefault();
-                box.style.background = COLOR.bgLight;
-                const sourceFid = e.dataTransfer.getData('text/plain');
-                if (!sourceFid || sourceFid === fid) return;  // 自己不跟自己换
-                // 原有的交换逻辑
-                const entries = Object.entries(folders);
-                const srcIndex = entries.findIndex(([k]) => k === sourceFid);
-                const tgtIndex = entries.findIndex(([k]) => k === fid);
-                if (srcIndex < 0 || tgtIndex < 0) return;
-                [entries[srcIndex], entries[tgtIndex]] = [entries[tgtIndex], entries[srcIndex]]; // 交换顺序
-                folders = Object.fromEntries(entries);        // 重建有序对象
-
-                // 更新 _order 数组以持久化顺序
-                if (!folders._order || !Array.isArray(folders._order)) {
-                    folders._order = Object.keys(folders).filter(k => k !== '_order');
-                } else {
-                    const orderSrcIndex = folders._order.indexOf(sourceFid);
-                    const orderTgtIndex = folders._order.indexOf(fid);
-                    if (orderSrcIndex >= 0 && orderTgtIndex >= 0) {
-                        const newOrder = [...folders._order];
-                        [newOrder[orderSrcIndex], newOrder[orderTgtIndex]] = [newOrder[orderTgtIndex], newOrder[orderSrcIndex]];
-                        folders._order = newOrder;
-                    }
-                }
-
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                render();                                     // 重新渲染所有分组
-                highlightActive();                            // 保持高亮
-            });
             const header = document.createElement('div');
             header.style.cssText = `position:relative;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:4px 6px;background:${COLOR.bgLight};border-radius:4px`;
             const corner = document.createElement('div');
@@ -469,14 +409,11 @@
                 f.chats.unshift({url, title: t}); // 插入到数组开头
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
-                const fidList = Object.keys(folders).filter(key => key !== '_order');
+                const fidList = Object.keys(folders);
                 const idx = fidList.indexOf(fid);
-// 确保 idx 有效且对应的 DOM 元素存在
-                if (idx >= 0 && idx < folderZone.children.length) {
-                    const oldBox = folderZone.children[idx];
-                    const newBox = renderFolder(fid, folders[fid]);
-                    folderZone.replaceChild(newBox, oldBox);
-                }
+                const oldBox = folderZone.children[idx];
+                const newBox = renderFolder(fid, folders[fid]);
+                folderZone.replaceChild(newBox, oldBox);
                 highlightActive()
             };
 
@@ -591,28 +528,20 @@
             if (!ed || !send || send.dataset.hooked) return;
             send.dataset.hooked = 1;                                                   // 标记已挂钩避免重复
 
-            const bumpActiveChat = () => {
-                if (!location.pathname.startsWith('/c/')) return;
-                const cur = location.href;
-                for (const [fid, folder] of Object.entries(folders)) {
-                    const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));
-                    if (i > 0) {
-                        const [chat] = folder.chats.splice(i, 1);      // 从原位置取出
-                        folder.chats.unshift(chat);                    // 插入到数组开头
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                        // 仅局部刷新当前文件夹节点，不影响其它分组
-                        const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
-                        const fidList = Object.keys(folders);
-                        const idx = fidList.indexOf(fid);
-                        const oldBox = folderZone.children[idx];
-                        const newBox = renderFolder(fid, folder);
-                        folderZone.replaceChild(newBox, oldBox);
-                        highlightActive();                              // 保持当前高亮状态
-                        break;
+            const bumpActiveChat = () => {                                             // 把当前会话提至所在文件夹首位
+                if (!location.pathname.startsWith('/c/')) return;                      // 非会话页面直接忽略
+                const cur = location.href;                                             // 记录当前完整 URL
+                for (const [, folder] of Object.entries(folders)) {                 // 遍历所有收藏夹
+                    const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));// 查找当前会话索引
+                    if (i > 0) {                                                       // 若存在且不在首位
+                        const [chat] = folder.chats.splice(i, 1);                      // 从原位置取出
+                        folder.chats.unshift(chat);                                    // 插入数组开头
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                        // 同步到 chrome.storage
+                        render();                                                      // 立即重渲染侧栏
+                        break;                                                         // 处理完即可退出循环
                     }
                 }
             };
-
 
             // —— 修改后，排除“停止生成”状态 ——
             send.addEventListener('click', e => {
