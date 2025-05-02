@@ -153,16 +153,36 @@
 
         /* —— 检测 history 会话被删除后同步移除收藏夹中对应条目 —— */
         const historyCleanupObs = new MutationObserver(() => {
-            const activePaths = new Set(qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname));
+            const anchors = qsa('div#history a[href*="/c/"]');
+            const currentPaths = new Set(anchors.map(a => new URL(a.href).pathname));
+            // 检测新增的会话，把它自动加入到当前激活分组
+            if (activeFid) {
+                const added = [...currentPaths].filter(p => !prevHistoryPaths.has(p));
+                if (added.length) {
+                    const folder = folders[activeFid];
+                    added.forEach(path => {
+                        const url = location.origin + path;
+                        if (!folder.chats.some(c => samePath(c.url, url))) {
+                            const a = anchors.find(a => new URL(a.href).pathname === path);
+                            const title = a?.textContent.trim() || '新对话';
+                            folder.chats.unshift({url, title});
+                        }
+                    });
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    render();
+                    highlightActive();
+                }
+            }
+            // 原有删除同步逻辑
+            const activePaths = currentPaths;
             let changed = false;
-
             for (const [fid, folder] of Object.entries(folders)) {
                 const oldChats = folder.chats;
                 const newChats = oldChats.filter(c => {
-                    if (!c.url) return true;             // 没有 URL 的条目（待定占位）直接保留
+                    if (!c.url) return true;
                     try {
                         return activePaths.has(new URL(c.url).pathname);
-                    } catch {                            // URL 非法时也保留，防止误删
+                    } catch {
                         return true;
                     }
                 });
@@ -175,8 +195,10 @@
                     folderZone.replaceChild(newBox, oldBox);
                 }
             }
-            if (changed) chrome.runtime.sendMessage({type: 'save-folders', data: folders});;
+            if (changed) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+            prevHistoryPaths = currentPaths;
         });
+
         historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
 
         /* ---------- 渲染 ---------- */
@@ -345,18 +367,18 @@
                     const path = location.pathname; // 获取当前会话路径
                     if (prevPaths.has(path)) return; // 如果路径在记录中，说明不是新会话
                     if (folders[fid]?.chats.some(c => samePath(c.url, location.origin + path))) return; // 已存在该会话则跳过
-                    const anchor = qs(`div#history a[href$="${path}"]`); // 查找侧栏中的新会话链接
-                    if (!anchor) return; // 链接尚未出现，继续轮询
-                    const title = anchor.textContent.trim() || 'loading…'; // 获取会话标题
-                    folders[fid].chats.unshift({ url: location.href, title }); // 插入到当前文件夹开头
+                    const anchors = qsa('div#history a[href*="/c/"]');
+                    const anchor = anchors.find(a => new URL(a.href).pathname === path);
+                    if (!anchor) return;
+                    const title = anchor.textContent.trim() || 'loading…';
+                    folders[fid].chats.unshift({ url: location.origin + path, title });
+
                     await storage.set({ folders }); // 同步存储
                     render(); // 重新渲染侧栏
                     highlightActive(); // 高亮当前会话
                     clearInterval(iv); // 完成后停止轮询
                 }, 300); // 每 300ms 检查一次
             };
-
-
 
             // —— 修改后代码片段 ——
             box.ondragover = e => {
