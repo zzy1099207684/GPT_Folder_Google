@@ -58,6 +58,7 @@
         if (hist && !hist.dataset.ready) {
             hist.dataset.ready = 1;
             initBookmarks(hist);
+            readyObs.disconnect();
         }
     });
     readyObs.observe(document.body, {childList: true, subtree: true});                        // 监听
@@ -90,14 +91,27 @@
         });
         bar.appendChild(addBtn);
         const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
+        folderZone.addEventListener('click', e => {
+            const btn = e.target.closest('span[data-url][data-fid]');
+            if (!btn) return;
+            const {url, fid} = btn.dataset;
+            folders[fid].chats = folders[fid].chats.filter(c => c.url !== url);
+            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+            render();
+        });
+
         inner.append(bar, folderZone);
         wrap.appendChild(inner);
         historyNode.parentElement.insertBefore(wrap, historyNode);                            // 插入侧栏顶部
 
         /* ---------- 数据读取 ---------- */
-        folders = (await storage.get('folders')) || {};                   // 从 storage 读取已保存的文件夹数据，若无则用空对象
-        let lastActiveMap = (await storage.get('lastActiveMap')) || {};    // 从 storage 读取上次各路径对应的活跃文件夹映射
-        let _migrated = false;
+        folders = (await storage.get('folders')) || {}; // 从 storage 读取所有分组数据，如果没有则初始化为空对象
+        let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
+        let _migrated = false; // 标记旧版本数据迁移逻辑
+        if (!folders._order || !Array.isArray(folders._order)) {
+            folders._order = Object.keys(folders).filter(k => k !== '_order');
+            _migrated = true;
+        }
         Object.values(folders).forEach(f => {
             if (!('prompt' in f)) {
                 f.prompt = '';
@@ -192,13 +206,68 @@
         /* ---------- 渲染 ---------- */
         function render() {
             folderZone.replaceChildren();
-            Object.entries(folders).forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
+            // 使用 _order 数组确定渲染顺序
+            if (folders._order && Array.isArray(folders._order)) {
+                folders._order.forEach(id => {
+                    if (folders[id]) {
+                        folderZone.appendChild(renderFolder(id, folders[id]));
+                    }
+                });
+            } else {
+                // 如果没有 _order 数组，则按照传统方式渲染
+                Object.entries(folders).filter(([k]) => k !== '_order').forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
+            }
         }
 
         /* ---------- 文件夹渲染 ---------- */
         function renderFolder(fid, f) {
             const box = document.createElement('div');
+            box.draggable = true;                         // 允许拖拽
+            box.dataset.fid = fid;                        // 保存文件夹 ID
             box.style.marginTop = '4px';
+
+            box.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/plain', fid);   // 传递源文件夹 ID
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            box.addEventListener('dragover', e => {
+                e.preventDefault();                           // 允许在此放置
+                box.style.background = COLOR.bgHover;         // 高亮提示
+            });
+            box.addEventListener('dragleave', e => {
+                e.preventDefault();
+                box.style.background = COLOR.bgLight;         // 恢复背景
+            });
+            box.addEventListener('drop', e => {
+                e.preventDefault();
+                box.style.background = COLOR.bgLight;
+                const sourceFid = e.dataTransfer.getData('text/plain');
+                if (!sourceFid || sourceFid === fid) return;  // 自己不跟自己换
+                // 原有的交换逻辑
+                const entries = Object.entries(folders);
+                const srcIndex = entries.findIndex(([k]) => k === sourceFid);
+                const tgtIndex = entries.findIndex(([k]) => k === fid);
+                if (srcIndex < 0 || tgtIndex < 0) return;
+                [entries[srcIndex], entries[tgtIndex]] = [entries[tgtIndex], entries[srcIndex]]; // 交换顺序
+                folders = Object.fromEntries(entries);        // 重建有序对象
+
+                // 更新 _order 数组以持久化顺序
+                if (!folders._order || !Array.isArray(folders._order)) {
+                    folders._order = Object.keys(folders).filter(k => k !== '_order');
+                } else {
+                    const orderSrcIndex = folders._order.indexOf(sourceFid);
+                    const orderTgtIndex = folders._order.indexOf(fid);
+                    if (orderSrcIndex >= 0 && orderTgtIndex >= 0) {
+                        const newOrder = [...folders._order];
+                        [newOrder[orderSrcIndex], newOrder[orderTgtIndex]] = [newOrder[orderTgtIndex], newOrder[orderSrcIndex]];
+                        folders._order = newOrder;
+                    }
+                }
+
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                render();                                     // 重新渲染所有分组
+                highlightActive();                            // 保持高亮
+            });
             const header = document.createElement('div');
             header.style.cssText = `position:relative;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:4px 6px;background:${COLOR.bgLight};border-radius:4px`;
             const corner = document.createElement('div');
@@ -333,41 +402,53 @@
                 f.collapsed = !f.collapsed;
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();
+                highlightActive();
             };
 
 
             // 新建聊天按钮点击事件处理器
-            newBtn.onclick = e => {
-                e.stopPropagation(); // 阻止事件冒泡，避免折叠文件夹
-                activeFid = fid; // 设置当前激活文件夹 ID，确保后续只为该文件夹添加会话
-                const prevPaths = new Set( // 记录点击前已有的会话路径
-                    qsa('div#history a[href*="/c/"]')
-                        .map(a => new URL(a.href).pathname)
+            // 【修改后】用 MutationObserver 监听 history 区域新增节点，替换 setInterval 轮询
+            newBtn.onclick = e => {                                                         // 点击“新建会话”按钮时执行
+                e.stopPropagation();                                                         // 阻止事件冒泡，避免折叠文件夹
+                activeFid = fid;                                                             // 标记本次操作所属的文件夹
+                const prevPaths = new Set(                                                   // 保存当前已有的会话路径
+                    qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
-                history.pushState({}, '', '/'); // 跳转到根路径，触发新会话
-                window.dispatchEvent(new Event('popstate')); // 手动触发路由更新
-                const iv = setInterval(async () => { // 定时轮询检测新会话生成
-                    if (activeFid !== fid) { // 如果当前活跃文件夹已变更
-                        clearInterval(iv); // 停止此轮询
-                        return; // 不继续处理
+                const globalNewBtn = qs('button[aria-label="New chat"]');   // 获取全局“New chat”按钮
+                if (globalNewBtn) {                                         // 如果按钮存在
+                    globalNewBtn.click();                                   // 模拟点击，走原生新建聊天流程
+                } else {                                                    // 否则
+                    history.pushState({}, '', '/');                         // 回退到根路径，兼容旧逻辑
+                    window.dispatchEvent(new Event('popstate'));            // 触发路由更新
+                }                                 // 通知路由更新
+                const observer = new MutationObserver(async (mutations, obs) => {            // 创建 MutationObserver
+                    for (const mutation of mutations) {                                      // 遍历所有变动记录
+                        for (const node of mutation.addedNodes) {                            // 检查新增节点
+                            if (!(node instanceof HTMLElement)) continue;                    // 非元素节点跳过
+                            const anchors = node.matches('a[href*="/c/"]')                   // 如果节点本身是会话链接
+                                ? [node]                                                     //   直接作为候选
+                                : Array.from(node.querySelectorAll('a[href*="/c/"]'));        // 否则查询子孙链接
+                            for (const a of anchors) {                                       // 遍历所有候选链接
+                                const path = new URL(a.href, location.origin).pathname;       // 解析路径
+                                if (!path.startsWith('/c/') || prevPaths.has(path)) continue; // 跳过非新会话或已记录路径
+                                if (folders[fid]?.chats.some(c =>                            // 跳过已添加到该组的会话
+                                    samePath(c.url, location.origin + path)
+                                )) continue;
+                                const title = a.textContent.trim() || 'loading…';             // 获取标题
+                                const chatUrl = location.origin + path;                      // 构造完整 URL
+                                folders[fid].chats.unshift({ url: chatUrl, title });          // 插入分组数据
+                                await storage.set({ folders });                              // 持久化存储
+                                render();                                                    // 重新渲染侧栏
+                                highlightActive();                                           // 更新高亮
+                                obs.disconnect();                                           // 完成后断开观察
+                                return;                                                     // 退出回调
+                            }
+                        }
                     }
-                    if (!location.pathname.startsWith('/c/')) return; // 尚未进入新会话则跳过
-                    const path = location.pathname; // 获取当前会话路径
-                    if (prevPaths.has(path)) return; // 如果路径在记录中，说明不是新会话
-                    if (folders[fid]?.chats.some(c => samePath(c.url, location.origin + path))) return; // 已存在该会话则跳过
-                    const anchors = qsa('div#history a[href*="/c/"]');
-                    const anchor = anchors.find(a => new URL(a.href).pathname === path);
-                    if (!anchor) return;
-                    const title = anchor.textContent.trim() || 'loading…';
-                    const chatUrl = location.origin + path; // 构造与检测一致的完整 URL
-                    folders[fid].chats.unshift({ url: chatUrl, title });
-
-                    await storage.set({ folders }); // 同步存储
-                    render(); // 重新渲染侧栏
-                    highlightActive(); // 高亮当前会话
-                    clearInterval(iv); // 完成后停止轮询
-                }, 300); // 每 300ms 检查一次
+                });
+                observer.observe(qs('div#history'), { childList: true, subtree: true });      // 监听 history 区域子树节点变化
             };
+
 
             // —— 修改后代码片段 ——
             box.ondragover = e => {
@@ -425,16 +506,13 @@
                 window.dispatchEvent(new Event('popstate'));                                    // 触发路由更新
             };
 
-            const del = Object.assign(document.createElement('span'), {
-                textContent: '✖', style: 'cursor:pointer;color:white'
-            });
-            del.onclick = async () => {
-                folders[fid].chats = folders[fid].chats.filter(c => !samePath(c.url, chat.url));
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                render();
-            };
-
+            const del = document.createElement('span');
+            del.textContent = '✖';
+            del.style.cssText = 'cursor:pointer;color:white';
+            del.dataset.url = chat.url;
+            del.dataset.fid = fid;
             li.append(link, del);
+
             parentUl.appendChild(li);
 
             /* —— 建立多对一同步映射 —— */
@@ -509,20 +587,28 @@
             if (!ed || !send || send.dataset.hooked) return;
             send.dataset.hooked = 1;                                                   // 标记已挂钩避免重复
 
-            const bumpActiveChat = () => {                                             // 把当前会话提至所在文件夹首位
-                if (!location.pathname.startsWith('/c/')) return;                      // 非会话页面直接忽略
-                const cur = location.href;                                             // 记录当前完整 URL
-                for (const [, folder] of Object.entries(folders)) {                 // 遍历所有收藏夹
-                    const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));// 查找当前会话索引
-                    if (i > 0) {                                                       // 若存在且不在首位
-                        const [chat] = folder.chats.splice(i, 1);                      // 从原位置取出
-                        folder.chats.unshift(chat);                                    // 插入数组开头
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                        // 同步到 chrome.storage
-                        render();                                                      // 立即重渲染侧栏
-                        break;                                                         // 处理完即可退出循环
+            const bumpActiveChat = () => {
+                if (!location.pathname.startsWith('/c/')) return;
+                const cur = location.href;
+                for (const [fid, folder] of Object.entries(folders)) {
+                    const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));
+                    if (i > 0) {
+                        const [chat] = folder.chats.splice(i, 1);      // 从原位置取出
+                        folder.chats.unshift(chat);                    // 插入到数组开头
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                        // 仅局部刷新当前文件夹节点，不影响其它分组
+                        const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
+                        const fidList = Object.keys(folders);
+                        const idx = fidList.indexOf(fid);
+                        const oldBox = folderZone.children[idx];
+                        const newBox = renderFolder(fid, folder);
+                        folderZone.replaceChild(newBox, oldBox);
+                        highlightActive();                              // 保持当前高亮状态
+                        break;
                     }
                 }
             };
+
 
             // —— 修改后，排除“停止生成”状态 ——
             send.addEventListener('click', e => {

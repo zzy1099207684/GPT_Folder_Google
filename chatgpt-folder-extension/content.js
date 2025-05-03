@@ -108,6 +108,10 @@
         folders = (await storage.get('folders')) || {}; // 从 storage 读取所有分组数据，如果没有则初始化为空对象
         let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
         let _migrated = false; // 标记旧版本数据迁移逻辑
+        if (!folders._order || !Array.isArray(folders._order)) {
+            folders._order = Object.keys(folders).filter(k => k !== '_order');
+            _migrated = true;
+        }
         Object.values(folders).forEach(f => {
             if (!('prompt' in f)) {
                 f.prompt = '';
@@ -175,6 +179,7 @@
             const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
             const fidList = Object.keys(folders);
             for (const [fid, folder] of Object.entries(folders)) {
+                if (fid === "_order" || !folder || !folder.chats) continue; // 跳过_order和无效文件夹
                 const oldChats = folder.chats;
                 const newChats = oldChats.filter(c => {
                     if (!c.url) return true;
@@ -202,7 +207,17 @@
         /* ---------- 渲染 ---------- */
         function render() {
             folderZone.replaceChildren();
-            Object.entries(folders).forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
+            // 使用 _order 数组确定渲染顺序
+            if (folders._order && Array.isArray(folders._order)) {
+                folders._order.forEach(id => {
+                    if (folders[id]) {
+                        folderZone.appendChild(renderFolder(id, folders[id]));
+                    }
+                });
+            } else {
+                // 如果没有 _order 数组，则按照传统方式渲染
+                Object.entries(folders).filter(([k]) => k !== '_order').forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
+            }
         }
 
         /* ---------- 文件夹渲染 ---------- */
@@ -229,12 +244,27 @@
                 box.style.background = COLOR.bgLight;
                 const sourceFid = e.dataTransfer.getData('text/plain');
                 if (!sourceFid || sourceFid === fid) return;  // 自己不跟自己换
+                // 原有的交换逻辑
                 const entries = Object.entries(folders);
                 const srcIndex = entries.findIndex(([k]) => k === sourceFid);
                 const tgtIndex = entries.findIndex(([k]) => k === fid);
                 if (srcIndex < 0 || tgtIndex < 0) return;
                 [entries[srcIndex], entries[tgtIndex]] = [entries[tgtIndex], entries[srcIndex]]; // 交换顺序
                 folders = Object.fromEntries(entries);        // 重建有序对象
+
+                // 更新 _order 数组以持久化顺序
+                if (!folders._order || !Array.isArray(folders._order)) {
+                    folders._order = Object.keys(folders).filter(k => k !== '_order');
+                } else {
+                    const orderSrcIndex = folders._order.indexOf(sourceFid);
+                    const orderTgtIndex = folders._order.indexOf(fid);
+                    if (orderSrcIndex >= 0 && orderTgtIndex >= 0) {
+                        const newOrder = [...folders._order];
+                        [newOrder[orderSrcIndex], newOrder[orderTgtIndex]] = [newOrder[orderTgtIndex], newOrder[orderSrcIndex]];
+                        folders._order = newOrder;
+                    }
+                }
+
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();                                     // 重新渲染所有分组
                 highlightActive();                            // 保持高亮
@@ -439,11 +469,14 @@
                 f.chats.unshift({url, title: t}); // 插入到数组开头
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
-                const fidList = Object.keys(folders);
+                const fidList = Object.keys(folders).filter(key => key !== '_order');
                 const idx = fidList.indexOf(fid);
-                const oldBox = folderZone.children[idx];
-                const newBox = renderFolder(fid, folders[fid]);
-                folderZone.replaceChild(newBox, oldBox);
+// 确保 idx 有效且对应的 DOM 元素存在
+                if (idx >= 0 && idx < folderZone.children.length) {
+                    const oldBox = folderZone.children[idx];
+                    const newBox = renderFolder(fid, folders[fid]);
+                    folderZone.replaceChild(newBox, oldBox);
+                }
                 highlightActive()
             };
 
