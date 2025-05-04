@@ -55,13 +55,12 @@
     /* ===== 等待侧栏就绪 ===== */
     const readyObs = new MutationObserver(() => {
         const hist = qs('div#history');
-        if (hist && !hist.dataset.ready) {
-            hist.dataset.ready = 1;
-            initBookmarks(hist);
-            readyObs.disconnect();
+        const wrapper = qs('#cgpt-bookmarks-wrapper');
+        if (hist && !wrapper) {
+            initBookmarks(hist);      // #history 又出现并且 wrapper 不在时重新插入
         }
     });
-    readyObs.observe(document.body, {childList: true, subtree: true});                        // 监听
+    readyObs.observe(document.body, {childList: true, subtree: true});
 
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {

@@ -571,10 +571,13 @@
             if (!a) return;
             clearActiveOnHistoryClick = true;
             lastClickedChatEl = null;
-            const path = new URL(a.href, location.origin).pathname;      // 新增
-            lastActiveMap[path] = '__history__';                         // 新增
-            storage.set({ lastActiveMap });                              // 新增
-            highlightActive();
+            const path = new URL(a.href, location.origin).pathname;
+            lastActiveMap[path] = '__history__';
+            storage.set({ lastActiveMap });
+            // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
+            setTimeout(() => {
+                highlightActive();
+            }, 0);
         });
 
         const highlightActive = () => {
