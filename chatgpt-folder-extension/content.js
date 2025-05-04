@@ -56,13 +56,16 @@
     const readyObs = new MutationObserver(() => {
         const hist = qs('div#history');
         const wrapper = qs('#cgpt-bookmarks-wrapper');
-        if (hist && !wrapper) {
-            initBookmarks(hist);      // #history 又出现并且 wrapper 不在时重新插入
+        if (hist) {
+            if (!wrapper) initBookmarks(hist);                    // 首次
+            else if (wrapper.nextSibling !== hist)                // #history 被替换
+                hist.parentElement.insertBefore(wrapper, hist);   // 重新就位
         }
     });
     readyObs.observe(document.body, {childList: true, subtree: true});
 
     /* ===== 初始化收藏夹 ===== */
+    const missCount = {};
     async function initBookmarks(historyNode) {
         if (qs('#cgpt-bookmarks-wrapper')) return;                                            // 防重复
 
@@ -169,12 +172,10 @@
             for (const [fid, folder] of Object.entries(folders)) {
                 const oldChats = folder.chats;
                 const newChats = oldChats.filter(c => {
-                    if (!c.url) return true;
-                    try {
-                        return activePaths.has(new URL(c.url).pathname);
-                    } catch {
-                        return true;
-                    }
+                    const p = new URL(c.url).pathname;
+                    if (activePaths.has(p)) { missCount[p] = 0; return true; }
+                    missCount[p] = (missCount[p] || 0) + 1;
+                    return missCount[p] < 3;             // 连续 3 次都找不到才真正删除
                 });
                 if (newChats.length !== oldChats.length) {
                     folder.chats = newChats;
