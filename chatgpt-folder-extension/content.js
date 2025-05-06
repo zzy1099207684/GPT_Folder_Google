@@ -1164,8 +1164,10 @@
         // Improve memory checker safety - replace existing function
         function checkMemoryUsage() {
             try {
+
                 // 检测已知的内存泄漏指标
-                const mapSize = liveSyncMap.size;
+                const preCleaned = cleanupLiveSyncMap();
+                const mapSize       = liveSyncMap.size;
                 const observerCount = observers.list.length;
 
                 // 检查DOM是否存在异常
@@ -1195,11 +1197,14 @@
                 }
 
                 const invalidRatio = totalRefs > 0 ? invalidRefs / totalRefs : 0;
+                const significantLeak = invalidRefs >= 50;
 
                 console.log(`[Bookmark] Memory check: mapSize=${mapSize}, observers=${observerCount}, invalidRefs=${invalidRefs}/${totalRefs} (${(invalidRatio*100).toFixed(1)}%)`);
 
                 // 如果有明显异常 (地图过大或DOM不一致或太多无效引用)
-                if (mapSize > 1000 || invalidRatio > 0.3 || (wrapperExists && !historyExists) || (!wrapperExists && historyExists)) {
+                if (mapSize > 1000 || (significantLeak && invalidRatio > 0.3) ||
+                    (wrapperExists && !historyExists) ||
+                    (!wrapperExists && historyExists)) {
                     console.warn(`[Bookmark] Memory check failed: mapSize=${mapSize}, observers=${observerCount}, invalidRatio=${invalidRatio.toFixed(2)}`);
 
                     // 尝试清理
