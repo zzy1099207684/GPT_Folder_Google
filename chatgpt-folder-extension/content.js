@@ -476,7 +476,8 @@
         }
 
 // 每3分钟做一次深度清理
-        const deepCleanerId = setInterval(deepCleanMemory, 180000);
+        if (window.__deepCleanerId) clearInterval(window.__deepCleanerId);
+        window.__deepCleanerId = setInterval(deepCleanMemory, 180000);
         let activePath = null;
         let activeFid = null;
         let lastClickedChatEl = null;
@@ -714,6 +715,39 @@
                         const ta=document.createElement('textarea');
                         ta.value=folders[fid].prompt||'';
                         ta.style.cssText='width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical';
+
+                        // ① 预设提示词
+                        const hints=[
+                            {label:'NORMAL', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
+                                    '```Please answer in natural language, and try to imitate Claude\'s style and thinking.Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
+                            {label:'NO_GUESS', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
+                                    '```Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. Use natural and coherent language. Please answer in natural language, and try to imitate Claude\'s style and thinking.. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
+                            {label:'change_code', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
+                                    '```Strictly adhere to the following requirements:\n' +
+                                    'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
+                                    'After the modification, you must first test it yourself and ensure the following two points are met:\n' +
+                                    '1. The requirement is fulfilled, and the front-end and back-end functions run smoothly.\n' +
+                                    '2. No other functional code has been mistakenly modified.\n' +
+                                    '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
+                                    'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
+                                    'Please answer in natural language, and try to imitate Claude\'s style and thinking.. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
+                        ];         // 自行增删
+                        const hintBar=document.createElement('div');
+                        hintBar.style.cssText='margin-top:6px;display:flex;gap:6px;flex-wrap:wrap';
+                        hints.forEach(h=>{
+                            const btn=document.createElement('span');
+                            btn.textContent=h.label;
+                            btn.style.cssText='cursor:pointer;padding:2px 6px;border:1px solid #555;border-radius:4px;font-size:12px';
+                            btn.onclick=()=>{
+                                ta.focus();
+                                const {selectionStart:s,selectionEnd:e}=ta;
+                                ta.setRangeText(h.text,s,e,'end');
+                                ta.dispatchEvent(new Event('input',{bubbles:true}));
+                            };
+                            hintBar.appendChild(btn);
+                        });
+                        box.append(ta,hintBar);            // ② 把快捷栏放在 textarea 下
+
                         const ok=document.createElement('button');
                         ok.textContent='确定'; ok.style.cssText='margin-right:8px';
                         const cancel=document.createElement('button');
@@ -818,10 +852,13 @@
 
             header.onclick = async () => {
                 f.collapsed = !f.collapsed;
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                if (chrome?.runtime?.id) {
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                }
                 render();
                 highlightActive();
             };
+
 
 
             newBtn.onclick = e => {
@@ -1274,7 +1311,8 @@
         }
 
 // 每2分钟检查一次内存状态
-        const memoryCheckerId = setInterval(checkMemoryUsage, 120000);
+        if (window.__memoryCheckerId) clearInterval(window.__memoryCheckerId);
+        window.__memoryCheckerId = setInterval(checkMemoryUsage, 120000);
         // 正确创建cleanup函数
         // Enhanced cleanup function - replace existing cleanup function
         const cleanup = () => {
@@ -1288,8 +1326,8 @@
             // 清理定时器
             try {
                 if (typeof liveSyncCleanerId !== 'undefined') clearInterval(liveSyncCleanerId);
-                if (typeof memoryCheckerId !== 'undefined') clearInterval(memoryCheckerId);
-                if (typeof deepCleanerId !== 'undefined') clearInterval(deepCleanerId);
+                if (window.__memoryCheckerId) { clearInterval(window.__memoryCheckerId); window.__memoryCheckerId = null; }
+                if (window.__deepCleanerId)   { clearInterval(window.__deepCleanerId);   window.__deepCleanerId = null; }
             } catch (e) {
                 console.warn('[Bookmark] Error clearing intervals:', e);
             }
