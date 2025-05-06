@@ -623,7 +623,77 @@
                 textContent: '⋯',                                                    // 使用省略号
                 style: 'color:white;cursor:pointer;margin-left:6px;font-size:18px;line-height:1' // 样式
             });
-            header.append(left, newBtn, menuBtn);                                    // 插入标题栏
+            header.append(left, newBtn, menuBtn);
+            menuBtn.addEventListener('click', e => {
+                e.stopPropagation();                              // 不触发折叠
+                document.getElementById('cgpt-folder-menu')?.remove();   // 单实例
+                const rect = menuBtn.getBoundingClientRect();
+
+                const menu = Object.assign(document.createElement('div'), {
+                    id:'cgpt-folder-menu'
+                });
+                menu.style.cssText = `
+        position:fixed;z-index:2147483647;
+        min-width:140px;padding:8px 0;border-radius:10px;
+        background:#2b2521;color:#e7d8c5;
+        box-shadow:0 4px 10px rgba(0,0,0,.2);font-size:14px
+    `;
+                menu.innerHTML = `
+        <div class="f-item" data-act="prompt" style="padding:6px 16px;cursor:pointer">Prompt</div>
+        <div class="f-item" data-act="rename" style="padding:6px 16px;cursor:pointer">Rename</div>
+        <div class="f-item" data-act="delete" style="padding:6px 16px;cursor:pointer;color:#e66">Delete</div>
+    `;
+                document.body.appendChild(menu);
+                menu.style.left = rect.right - menu.offsetWidth + 'px';
+                menu.style.top  = rect.bottom + 6 + 'px';
+
+                const close = ()=>menu.remove();
+                setTimeout(()=>document.addEventListener('click',close,{once:true}),0);
+
+                menu.addEventListener('click', async ev=>{
+                    ev.stopPropagation();
+                    const act = ev.target.dataset.act;
+                    if(!act) return;
+
+                    if(act==='rename'){                       // 重命名
+                        const n = prompt('rename group',folders[fid].name);
+                        if(n&&n.trim()){
+                            const t=n.trim().slice(0,20)+(n.trim().length>20?'…':'');
+                            folders[fid].name=t; chrome.runtime.sendMessage({type:'save-folders',data:folders}); render();
+                        }
+                        close();
+                    }
+
+                    if(act==='delete'){                       // 删除
+                        if(confirm('确认删除此分组？')){
+                            delete folders[fid];
+                            chrome.runtime.sendMessage({type:'save-folders',data:folders}); render();
+                        }
+                        close();
+                    }
+
+                    if(act==='prompt'){                       // 设置 prompt
+                        const modal=document.createElement('div');
+                        modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
+                        const box=document.createElement('div');
+                        box.style.cssText='background:#2b2521;padding:16px;border-radius:8px;max-width:400px;width:80%';
+                        const ta=document.createElement('textarea');
+                        ta.value=folders[fid].prompt||'';
+                        ta.style.cssText='width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical';
+                        const ok=document.createElement('button');
+                        ok.textContent='确定'; ok.style.cssText='margin-right:8px';
+                        const cancel=document.createElement('button');
+                        cancel.textContent='取消';
+                        const wrap=document.createElement('div');
+                        wrap.style.cssText='text-align:right;margin-top:10px';
+                        wrap.append(ok,cancel); box.append(ta,wrap); modal.appendChild(box); document.body.appendChild(modal);
+
+                        ok.onclick=()=>{folders[fid].prompt=ta.value.trim();chrome.runtime.sendMessage({type:'save-folders',data:folders});render();document.body.removeChild(modal);};
+                        cancel.onclick=()=>document.body.removeChild(modal);
+                        close();
+                    }
+                });
+            });
 
             newBtn.onclick = e => {
                 e.stopPropagation();
