@@ -254,6 +254,9 @@
 
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {
+        /* ---------- 辅助函数 ---------- */
+        const liveSyncMap = new Map();
+
         // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
         const historyClickHandler = e => {
             const a = e.target.closest('a[href*="/c/"]');
@@ -329,8 +332,7 @@
         });
         if (_migrated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
 
-        /* ---------- 辅助函数 ---------- */
-        const liveSyncMap = new Map();
+
 
         // ========= 新增：当链接节点被移除时同步清理 =========
         function detachLink(el) {
@@ -591,14 +593,22 @@
         /* ---------- 渲染 ---------- */
         // Add after renderChat function, in the render() function
         function render() {
+            // —— 新增：对所有路径剔除已断开节点 ——
+            for (const [path, arr] of liveSyncMap) {
+                const live = arr.filter(item => item.el.isConnected);
+                live.length ? liveSyncMap.set(path, live) : liveSyncMap.delete(path);
+            }
+
             folderZone.replaceChildren();
-            Object.entries(folders).forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
+            Object.entries(folders)
+                .forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
 
             // 添加定期清理，避免引用堆积
-            if (Math.random() < 0.2) { // 20% chance on each render
+            if (Math.random() < 0.2) {
                 setTimeout(cleanupLiveSyncMap, 0);
             }
         }
+
 
         /* ---------- 文件夹渲染 ---------- */
         function renderFolder(fid, f) {
