@@ -262,7 +262,13 @@
             lastClickedChatEl = null;
             const path = new URL(a.href, location.origin).pathname;
             lastActiveMap[path] = '__history__';
-            storage.set({lastActiveMap});
+            try {
+                if (chrome?.runtime?.id) {
+                    storage.set({lastActiveMap});
+                }
+            } catch (err) {
+                console.warn('[Bookmark] Error saving lastActiveMap:', err);
+            }
             // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
             setTimeout(() => {
                 highlightActive();
@@ -619,141 +625,86 @@
             });
             header.append(left, newBtn, menuBtn);                                    // 插入标题栏
 
-            menuBtn.onclick = e => {                                                 // 点击三点按钮触发
-                e.stopPropagation();                                                 // 阻止冒泡避免折叠文件夹
-                const old = document.getElementById('cgpt-folder-menu');             // 若已存在菜单先移除
-                old && old.remove();                                                 // 保证单实例
+            newBtn.onclick = e => {
+                e.stopPropagation();
+                const clickedFid = fid; // 保存当前点击时的文件夹ID
+                activeFid = clickedFid;
+                const prevPaths = new Set(
+                    qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
+                );
+                const globalNewBtn = qs('button[aria-label="New chat"]');
+                if (globalNewBtn) {
+                    globalNewBtn.click();
+                } else {
+                    history.pushState({}, '', '/');
+                    window.dispatchEvent(new Event('popstate'));
+                }
 
-                const rect = menuBtn.getBoundingClientRect();                        // 获取按钮绝对位置
-                const menu = Object.assign(document.createElement('div'), {id: 'cgpt-folder-menu'}); // 新建菜单容器
-                menu.style.cssText = 'position:fixed;z-index:2147483647;min-width:140px;padding:8px 0;border-radius:10px;background:#2b2521;box-shadow:0 4px 10px rgba(0,0,0,.2);font-size:14px;color:#e7d8c5'; // 菜单样式
-                menu.innerHTML =
-                    '<div id="f_prompt" style="display:flex;align-items:center;padding:6px 16px;cursor:pointer">' +
-                    '<span style="flex:1">Prompt</span></div>' +
-                    '<div id="f_rename" style="display:flex;align-items:center;padding:6px 16px;cursor:pointer">' +
-                    '<span style="flex:1">Rename</span></div>' +
-                    '<div id="f_delete" style="display:flex;align-items:center;padding:6px 16px;cursor:pointer;color:#e66">' +
-                    '<span style="flex:1">Delete</span></div>';
+                // 添加超时保护和重试机制
+                let timeoutId;
 
-                document.body.appendChild(menu);                                     // 添加到页面
-                menu.style.left = rect.right - menu.offsetWidth + 'px';              // 右对齐按钮
-                menu.style.top = rect.bottom + 6 + 'px';                             // 位于按钮下方
-
-                const closeMenu = () => menu.remove();                               // 关闭菜单函数
-                setTimeout(() => document.addEventListener('click', closeMenu, {once: true}), 0); // 点击其他地方关闭
-
-                menu.querySelector('#f_rename').onclick = async () => {              // Rename 逻辑
-                    const n = prompt('rename group', folders[fid].name);                                // 弹窗输入
-                    if (!n || !n.trim()) return;                                     // 空输入忽略
-                    const MAX_LEN = 20;                                              // 最大字符数
-                    let name = n.trim();                                             // 去首尾空格
-                    if (name.length > MAX_LEN) name = name.slice(0, MAX_LEN) + '…';  // 超长截断
-                    folders[fid].name = name;                                        // 更新数据
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                    // 同步存储
-                    render();                                                        // 重新渲染
-                    closeMenu();                                                     // 关闭菜单
-                };
-
-                // 修改后
-                // 修改后的提示词编辑器
-                menu.querySelector('#f_prompt').onclick = () => {
-                    const defaultPrompt = folders[fid]?.prompt || '';
-
-                    // 创建模态框，优化事件处理
-                    const modal = document.createElement('div');
-                    modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
-
-                    const box = document.createElement('div');
-                    box.style.cssText = 'background:#2b2521;padding:16px;border-radius:8px;max-width:400px;width:80%;box-shadow:0 4px 10px rgba(0,0,0,0.2)';
-
-                    const ta = document.createElement('textarea');
-                    ta.value = defaultPrompt;
-                    ta.style.cssText = 'width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical;font-size:14px;line-height:1.4';
-
-                    // 避免事件冒泡
-                    ta.onclick = e => e.stopPropagation();
-
-                    const btnWrap = document.createElement('div');
-                    btnWrap.style.cssText = 'text-align:right;margin-top:10px';
-
-                    const okBtn = document.createElement('button');
-                    okBtn.textContent = '确定';
-                    okBtn.style.cssText = 'margin-right:8px;cursor:pointer;padding:4px 10px;background:#3a2f28;border:none;border-radius:4px;color:#e7d8c5';
-
-                    const cancelBtn = document.createElement('button');
-                    cancelBtn.textContent = '取消';
-                    cancelBtn.style.cssText = 'cursor:pointer;padding:4px 10px;background:#2b2521;border:1px solid #3a2f28;border-radius:4px;color:#e7d8c5';
-
-                    // 清除弹窗的通用函数
-                    const removeModal = () => {
-                        try {
-                            document.body.removeChild(modal);
-                        } catch (e) {
-                            console.warn('[Bookmark] Error removing modal:', e);
-                        }
-                    };
-
-                    // 添加键盘事件处理
-                    modal.addEventListener('keydown', e => {
-                        if (e.key === 'Escape') {
-                            e.preventDefault();
-                            removeModal();
-                        } else if (e.key === 'Enter' && e.ctrlKey) {
-                            e.preventDefault();
-                            // 保存并关闭
+                // 定义observer - 监视history区域变化以检测新聊天
+                const observer = new MutationObserver(() => {
+                    // 获取当前所有聊天路径
+                    const currentPaths = new Set(
+                        qsa('div#history a[href*="/c/"]').map(a => {
                             try {
-                                folders[fid].prompt = ta.value.trim();
-                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                                render();
-                                closeMenu();
-                                removeModal();
-                            } catch (err) {
-                                console.warn('[Bookmark] Error saving prompt:', err);
+                                return new URL(a.href).pathname;
+                            } catch (e) {
+                                return '';
                             }
-                        }
-                    });
+                        }).filter(Boolean)
+                    );
 
-                    // 单击模态框背景关闭
-                    modal.onclick = e => {
-                        if (e.target === modal) removeModal();
-                    };
+                    // 查找新出现的路径（之前不存在的）
+                    const newPaths = [...currentPaths].filter(path => !prevPaths.has(path));
 
-                    okBtn.onclick = async (e) => {
-                        e.stopPropagation();
+                    if (newPaths.length > 0) {
+                        // 找到了新创建的聊天
+                        observer.disconnect();
+                        clearTimeout(timeoutId);
+
+                        // 添加聊天到活动文件夹
+                        const newChatUrl = location.origin + newPaths[0];
+                        const title = qsa('div#history a[href*="/c/"]')
+                            .find(a => samePath(a.href, newChatUrl))?.textContent.trim() || '新对话';
+
                         try {
-                            folders[fid].prompt = ta.value.trim();
-                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            // 使用保存的clickedFid而非可能会变化的activeFid
+                            if (folders[clickedFid] && Array.isArray(folders[clickedFid].chats)) {
+                                folders[clickedFid].chats.unshift({ url: newChatUrl, title });
+                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            } else {
+                                console.warn(`[Bookmark] Cannot add chat to folder: clickedFid=${clickedFid}, folderExists=${!!folders[clickedFid]}`);
+                            }
+
+                            // 更新lastActiveMap也使用clickedFid
+                            const path = new URL(newChatUrl).pathname;
+                            lastActiveMap[path] = clickedFid;
+                            storage.set({ lastActiveMap });
+
+                            // 重新渲染并高亮
                             render();
-                            closeMenu();
-                            removeModal();
+                            highlightActive();
                         } catch (err) {
-                            console.warn('[Bookmark] Error saving prompt:', err);
+                            console.warn('[Bookmark] Error adding new chat:', err);
                         }
-                    };
+                    }
+                });
 
-                    cancelBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        removeModal();
-                    };
+                observer.observe(qs('div#history'), {childList: true, subtree: true});
 
-                    btnWrap.appendChild(okBtn);
-                    btnWrap.appendChild(cancelBtn);
-                    box.appendChild(ta);
-                    box.appendChild(btnWrap);
-                    modal.appendChild(box);
-                    document.body.appendChild(modal);
-
-                    // 自动聚焦文本区域
-                    setTimeout(() => ta.focus(), 50);
-                };
-
-
-                menu.querySelector('#f_delete').onclick = async () => {              // Delete 逻辑
-                    delete folders[fid];                                             // 删除该文件夹
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                    // 同步存储
-                    render();                                                        // 重新渲染
-                    closeMenu();                                                     // 关闭菜单
-                };
+                // 添加超时保护，5秒后如果没有成功则断开观察
+                timeoutId = setTimeout(() => {
+                    try {
+                        observer.disconnect();
+                        // 使用debug级别日志而不是警告，此为正常超时情况
+                        console.debug('[Bookmark] New chat detection completed (no new chat found)');
+                    } catch (e) {
+                        // 静默处理可能的"Extension context invalidated"错误
+                        console.debug('[Bookmark] Observer cleanup error (context may be invalid)');
+                    }
+                }, 10000); // 延长到10秒
             };
 
 
@@ -769,9 +720,6 @@
             };
 
 
-            // 新建聊天按钮点击事件处理器
-            // 【修改后】用 MutationObserver 监听 history 区域新增节点，替换 setInterval 轮询
-            // 修改后的代码
             newBtn.onclick = e => {
                 e.stopPropagation();
                 activeFid = fid;
@@ -788,54 +736,60 @@
 
                 // 添加超时保护和重试机制
                 let timeoutId;
-                // Modified observers cleanup mechanism - add to the observers object
-                const observers = {
-                    list: [],
-                    add(observer) {
-                        this.list.push(observer);
-                        // Schedule periodic cleanup for large observer lists
-                        if (this.list.length > 10 && !this._cleanupInterval) {
-                            this._cleanupInterval = setInterval(() => this.cleanup(), 60000);
-                        }
-                        return observer;
-                    },
-                    disconnectAll() {
-                        this.list.forEach(obs => {
+
+                // 定义observer - 监视history区域变化以检测新聊天
+                const observer = new MutationObserver(() => {
+                    // 获取当前所有聊天路径
+                    const currentPaths = new Set(
+                        qsa('div#history a[href*="/c/"]').map(a => {
                             try {
-                                obs.disconnect();
+                                return new URL(a.href).pathname;
                             } catch (e) {
-                                console.warn('[Bookmark] Error disconnecting observer:', e);
+                                return '';
                             }
-                        });
-                        this.list = [];
-                        if (this._cleanupInterval) {
-                            clearInterval(this._cleanupInterval);
-                            this._cleanupInterval = null;
+                        }).filter(Boolean)
+                    );
+
+                    // 查找新出现的路径（之前不存在的）
+                    const newPaths = [...currentPaths].filter(path => !prevPaths.has(path));
+
+                    if (newPaths.length > 0) {
+                        // 找到了新创建的聊天
+                        observer.disconnect();
+                        clearTimeout(timeoutId);
+
+                        // 添加聊天到活动文件夹
+                        const newChatUrl = location.origin + newPaths[0];
+                        const title = qsa('div#history a[href*="/c/"]')
+                            .find(a => samePath(a.href, newChatUrl))?.textContent.trim() || '新对话';
+
+                        // 添加到活动文件夹的聊天列表
+                        if (folders[activeFid] && Array.isArray(folders[activeFid].chats)) {
+                            folders[activeFid].chats.unshift({ url: newChatUrl, title });
+                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                        } else {
+                            console.warn('[Bookmark] Cannot add chat to folder: activeFid invalid or folder structure incorrect');
                         }
-                    },
-                    cleanup() {
-                        // 移除页面中不存在的观察者
-                        const initialLength = this.list.length;
-                        this.list = this.list.filter(obs => {
-                            try {
-                                return obs && typeof obs.disconnect === 'function';
-                            } catch (e) {
-                                return false;
-                            }
-                        });
-                        if (initialLength !== this.list.length) {
-                            console.log(`[Bookmark] Cleaned up ${initialLength - this.list.length} broken observers`);
-                        }
+
+                        // 更新lastActiveMap
+                        const path = new URL(newChatUrl).pathname;
+                        lastActiveMap[path] = activeFid;
+                        storage.set({ lastActiveMap });
+
+                        // 重新渲染并高亮
+                        render();
+                        highlightActive();
                     }
-                };
+                });
 
                 observer.observe(qs('div#history'), {childList: true, subtree: true});
 
                 // 添加超时保护，5秒后如果没有成功则断开观察
                 timeoutId = setTimeout(() => {
                     observer.disconnect();
-                    console.warn('[Bookmark] New chat detection timed out');
-                }, 5000);
+                    // 使用debug级别日志而不是警告，此为正常超时情况
+                    console.debug('[Bookmark] New chat detection completed (no new chat found)');
+                }, 10000); // 延长到10秒
             };
 
 
@@ -892,7 +846,13 @@
                 lastClickedChatEl = link;
                 const path = new URL(chat.url, location.origin).pathname;
                 lastActiveMap[path] = fid;
-                storage.set({lastActiveMap});
+                try {
+                    if (chrome?.runtime?.id) {
+                        storage.set({lastActiveMap});
+                    }
+                } catch (err) {
+                    console.warn('[Bookmark] Error saving lastActiveMap:', err);
+                }
                 history.pushState({}, '', chat.url);
                 window.dispatchEvent(new Event('popstate'));
                 // 使用一次性定时器在下一个事件循环中清除引用
@@ -1035,7 +995,13 @@
             lastClickedChatEl = null;
             const path = new URL(a.href, location.origin).pathname;
             lastActiveMap[path] = '__history__';
-            storage.set({lastActiveMap});
+            try {
+                if (chrome?.runtime?.id) {
+                    storage.set({lastActiveMap});
+                }
+            } catch (err) {
+                console.warn('[Bookmark] Error saving lastActiveMap:', err);
+            }
             // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
             setTimeout(() => {
                 highlightActive();
