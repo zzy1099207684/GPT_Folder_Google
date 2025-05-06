@@ -1074,12 +1074,17 @@
 
                 try {
                     liveSyncMap.forEach((arr) => {
-                        totalRefs += arr.length;
-                        arr.forEach(({el}) => {
-                            if (!document.body.contains(el)) {
-                                invalidRefs++;
-                            }
-                        });
+                        if (arr && Array.isArray(arr)) {
+                            const validItems = arr.filter(item => item && typeof item === 'object');
+                            totalRefs += validItems.length;
+
+                            validItems.forEach(({el}) => {
+                                if (el && typeof el === 'object' && el.nodeType &&
+                                    document.body && !document.body.contains(el)) {
+                                    invalidRefs++;
+                                }
+                            });
+                        }
                     });
                 } catch (e) {
                     console.warn('[Bookmark] Error checking map references:', e);
@@ -1107,7 +1112,7 @@
                     }
 
                     // 如果仍有问题，重新初始化
-                    if (mapSize > 1200 || invalidRatio > 0.5 || (wrapperExists && !historyExists)) {
+                    if (mapSize > 2000 || invalidRatio > 0.5 || ((wrapperExists && !historyExists) && document.readyState === 'complete')) {
                         console.warn('[Bookmark] Performing emergency reset');
 
                         // 添加应急日志
