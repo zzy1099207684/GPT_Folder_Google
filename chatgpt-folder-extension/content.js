@@ -1072,7 +1072,6 @@
                 bumpActiveChat();
             }, {capture: true});
 
-            // —— 修改后，回车同样排除“停止生成” ——
             ed.addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     const btn = qs('#composer-submit-button');
@@ -1088,14 +1087,17 @@
         bindSend();
 
         render();
-        // 【新增】在 initBookmarks 顶部定义
         let clearActiveOnHistoryClick = false;
 
+        const clearGroupHighlight = () => {
+            clearActiveOnHistoryClick = true;
+            activeFid = null;
+            setTimeout(highlightActive, 0);
+        };
 
         historyNode.addEventListener('click', e => {
             const a = e.target.closest('a[href*="/c/"]');
             if (!a) return;
-            clearActiveOnHistoryClick = true;
             lastClickedChatEl = null;
             const path = new URL(a.href, location.origin).pathname;
             lastActiveMap[path] = '__history__';
@@ -1106,11 +1108,11 @@
             } catch (err) {
                 console.warn('[Bookmark] Error saving lastActiveMap:', err);
             }
-            // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
-            setTimeout(() => {
-                highlightActive();
-            }, 0);
+            setTimeout(highlightActive, 0);
         });
+
+        const globalNewBtn = qs('a[aria-label="New chat"],button[aria-label="New chat"]');
+        if (globalNewBtn) globalNewBtn.addEventListener('click', clearGroupHighlight);
 
         const highlightActive = () => {
             const path = location.pathname;
