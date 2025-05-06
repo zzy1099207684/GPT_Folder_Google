@@ -1,12 +1,87 @@
 (() => { // 立即执行函数隔离作用域
     /* ===== 通用工具 ===== */
+    function getDebugInfo() {
+        return {
+            observers: observers.list.length,
+            mapSize: liveSyncMap.size,
+            folderCount: Object.keys(folders).length,
+            totalChats: Object.values(folders).reduce((sum, f) => sum + f.chats.length, 0),
+            wrapperExists: !!qs('#cgpt-bookmarks-wrapper'),
+            historyExists: !!qs('div#history')
+        };
+    }
+
+    window.dumpFolderExtensionDebug = () => {
+        console.table(getDebugInfo());
+        return getDebugInfo();
+    };
+    // 在observers对象中添加新方法
+    const observers = {
+        list: [],
+        add(observer) {
+            this.list.push(observer);
+            return observer;
+        },
+        disconnectAll() {
+            this.list.forEach(obs => {
+                try {
+                    obs.disconnect();
+                } catch (e) {
+                    console.warn('[Bookmark] Error disconnecting observer:', e);
+                }
+            });
+            this.list = [];
+        },
+        cleanup() {
+            // 移除页面中不存在的观察者
+            const initialLength = this.list.length;
+            this.list = this.list.filter(obs => {
+                try {
+                    return obs && typeof obs.disconnect === 'function';
+                } catch (e) {
+                    return false;
+                }
+            });
+            if (initialLength !== this.list.length) {
+                console.log(`[Bookmark] Cleaned up ${initialLength - this.list.length} broken observers`);
+            }
+        }
+    };
     const CLS = {tip: 'cgpt-tip'};                                                      // 样式类名常量
     const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'}; // 统一颜色常量
     const samePath = (a, b) => new URL(a, location.origin).pathname === new URL(b, location.origin).pathname; // 比较路径
-    const qs = (sel, root = document) => root.querySelector(sel);                        // 简写 querySelector
-    const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));        // 简写 querySelectorAll
+    // 增强的选择器函数
+    const qs = (sel, root = document) => {
+        try {
+            return root.querySelector(sel);
+        } catch (e) {
+            console.warn(`[Bookmark] Error querying selector "${sel}":`, e);
+            return null;
+        }
+    };
+
+    const qsa = (sel, root = document) => {
+        try {
+            return Array.from(root.querySelectorAll(sel));
+        } catch (e) {
+            console.warn(`[Bookmark] Error querying all selector "${sel}":`, e);
+            return [];
+        }
+    };
     /* ===== 高效封装 storage ===== */
+    // 修改后的存储逻辑
+    // Enhanced storage implementation with better error handling - replace storage object
     const storage = {
+        _pendingWrites: {},
+        _writeTimer: null,
+        _writeDelay: 1000,
+        _lastWriteTime: 0,
+        _minInterval: 2000, // 最小写入间隔
+        _retryCount: 0,
+        _maxRetries: 3,
+        _isRecovering: false,
+        _maxPendingSize: 50, // 最大未处理条目数量
+
         async get(key) {
             try {
                 return (await chrome.storage.sync.get(key))[key];
@@ -15,21 +90,136 @@
                 return null;
             }
         },
-        async set(obj) {                                                             // 同步写入接口
-            try {                                                                    // 捕获全部异常
-                if (chrome?.runtime?.id) {                                           // 确认扩展上下文有效
-                    await chrome.storage.sync.set(obj);                              // 立即写入, 取消延迟
-                } else {                                                             // 无效上下文
-                    console.warn('[Bookmark] storage.set skipped: invalid context'); // 记录并跳过
+
+        async set(obj) {
+            try {
+                if (!chrome?.runtime?.id) {
+                    console.warn('[Bookmark] storage.set skipped: invalid context');
+                    this._clearPendingWrites();
+                    return;
                 }
-            } catch (e) {                                                            // 写入过程中异常
-                if (e?.message?.includes('Extension context invalidated')) {         // 上下文丢失
-                    console.warn('[Bookmark] storage.set skipped (context lost)', e);
-                } else {                                                             // 其他错误
-                    console.warn('[Bookmark] storage.set error', e);
+
+                // 检查未处理队列大小，避免过度积累
+                if (Object.keys(this._pendingWrites).length > this._maxPendingSize) {
+                    console.warn('[Bookmark] Too many pending writes, forcing flush');
+                    this._clearPendingWrites();
+                }
+
+                // 合并待写入数据
+                Object.assign(this._pendingWrites, obj);
+
+                // 清除现有定时器
+                clearTimeout(this._writeTimer);
+
+                // 计算下次写入时间
+                const now = Date.now();
+                const timeSinceLastWrite = now - this._lastWriteTime;
+                const delay = timeSinceLastWrite < this._minInterval ?
+                    this._writeDelay :
+                    Math.min(this._writeDelay, 200); // 如果距离上次写入已经很久，可以更快写入
+
+                // 设置新定时器
+                this._writeTimer = setTimeout(async () => {
+                    try {
+                        const dataToWrite = {...this._pendingWrites};
+                        this._pendingWrites = {};
+                        await chrome.storage.sync.set(dataToWrite);
+                        this._lastWriteTime = Date.now();
+                        this._retryCount = 0; // 重置重试计数
+                    } catch (e) {
+                        if (e?.message?.includes('Extension context invalidated')) {
+                            console.warn('[Bookmark] storage.set skipped (context lost)', e);
+                            this._clearPendingWrites();
+                        } else if (e?.message?.includes('QUOTA_BYTES_PER_ITEM') || e?.message?.includes('QUOTA_BYTES')) {
+                            // 存储配额问题处理
+                            console.warn('[Bookmark] Storage quota exceeded:', e);
+                            this._handleQuotaError();
+                        } else {
+                            console.warn('[Bookmark] storage.set error', e);
+                            // 重试逻辑
+                            this._retryWrite(delay * 2);
+                        }
+                    }
+                }, delay);
+            } catch (e) {
+                console.warn('[Bookmark] Error setting up storage write:', e);
+                this._clearPendingWrites();
+            }
+        },
+
+        // 添加处理配额超出的方法
+        _handleQuotaError() {
+            console.warn('[Bookmark] Trying to recover from quota error');
+            // 清空当前挂起的写入
+            this._clearPendingWrites();
+
+            // 保存关键数据 - 最小化数据体积
+            if (folders) {
+                try {
+                    // 只保存基本结构，丢弃过大的数据
+                    const minimalFolders = {};
+                    Object.entries(folders).forEach(([id, folder]) => {
+                        // 保留最多10个聊天
+                        const limitedChats = (folder.chats || []).slice(0, 10).map(chat => ({
+                            url: chat.url,
+                            title: (chat.title || '').slice(0, 50) // 限制标题长度
+                        }));
+
+                        minimalFolders[id] = {
+                            name: folder.name || 'Group',
+                            chats: limitedChats,
+                            collapsed: folder.collapsed || false,
+                            prompt: (folder.prompt || '').slice(0, 100) // 限制提示长度
+                        };
+                    });
+
+                    // 尝试直接写入精简版数据
+                    setTimeout(async () => {
+                        try {
+                            await chrome.storage.sync.set({folders: minimalFolders});
+                            console.log('[Bookmark] Saved minimal version of folders');
+                        } catch (err) {
+                            console.error('[Bookmark] Failed to save minimal folders:', err);
+                        }
+                    }, 1000);
+                } catch (err) {
+                    console.error('[Bookmark] Error creating minimal folders:', err);
                 }
             }
         },
+
+        _clearPendingWrites() {
+            this._pendingWrites = {};
+            clearTimeout(this._writeTimer);
+        },
+
+        _retryWrite(delay) {
+            if (this._retryCount < this._maxRetries) {
+                this._retryCount++;
+                console.log(`[Bookmark] Retrying write (${this._retryCount}/${this._maxRetries})`);
+                clearTimeout(this._writeTimer);
+                this._writeTimer = setTimeout(async () => {
+                    try {
+                        const dataToWrite = {...this._pendingWrites};
+                        this._pendingWrites = {};
+                        await chrome.storage.sync.set(dataToWrite);
+                        this._lastWriteTime = Date.now();
+                        this._retryCount = 0;
+                    } catch (e) {
+                        console.warn(`[Bookmark] Retry ${this._retryCount} failed:`, e);
+                        if (this._retryCount >= this._maxRetries) {
+                            console.error('[Bookmark] Max retries reached, clearing pending writes');
+                            this._clearPendingWrites();
+                        } else {
+                            this._retryWrite(delay * 1.5);
+                        }
+                    }
+                }, delay);
+            } else {
+                console.error('[Bookmark] Max retries reached, clearing pending writes');
+                this._clearPendingWrites();
+            }
+        }
     };
 
     /* ===== 提示气泡 ===== */
@@ -53,17 +243,35 @@
     let folders = {};                                                                         // 收藏夹数据
 
     /* ===== 等待侧栏就绪 ===== */
-    const readyObs = new MutationObserver(() => {
+    const readyObs = observers.add(new MutationObserver(() => {
         const hist = qs('div#history');
         const wrapper = qs('#cgpt-bookmarks-wrapper');
         if (hist && !wrapper) {
             initBookmarks(hist);      // #history 又出现并且 wrapper 不在时重新插入
         }
-    });
+    }));
     readyObs.observe(document.body, {childList: true, subtree: true});
 
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {
+        // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
+        const historyClickHandler = e => {
+            const a = e.target.closest('a[href*="/c/"]');
+            if (!a) return;
+            clearActiveOnHistoryClick = true;
+            lastClickedChatEl = null;
+            const path = new URL(a.href, location.origin).pathname;
+            lastActiveMap[path] = '__history__';
+            storage.set({lastActiveMap});
+            // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
+            setTimeout(() => {
+                highlightActive();
+            }, 0);
+        };
+
+        historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
+        historyNode.addEventListener('click', historyClickHandler);
+
         if (qs('#cgpt-bookmarks-wrapper')) return;                                            // 防重复
 
         /* ---------- DOM 构建 ---------- */
@@ -117,6 +325,139 @@
 
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
+
+        // Enhanced cleanup function for liveSyncMap - replace existing function
+        function cleanupLiveSyncMap() {
+            try {
+                // 如果Map过大，进行更激进的清理
+                const aggressiveCleanup = liveSyncMap.size > 500;
+
+                // 移除引用已不在DOM中的元素
+                let cleaned = false;
+                let totalRemoved = 0;
+
+                // 如果映射为空，跳过清理
+                if (liveSyncMap.size === 0) return false;
+
+                // 优先检查最近未访问的路径
+                const pathsToCheck = [...liveSyncMap.keys()];
+
+                // 收集当前在DOM中的路径以提高性能
+                const activePaths = new Set();
+                try {
+                    qsa('div#history a[href*="/c/"]').forEach(a => {
+                        try {
+                            activePaths.add(new URL(a.href, location.origin).pathname);
+                        } catch (e) {} // Silently ignore URL parsing errors
+                    });
+                } catch (e) {
+                    console.warn('[Bookmark] Error collecting active paths:', e);
+                }
+
+                pathsToCheck.forEach((path) => {
+                    if (!path) {
+                        liveSyncMap.delete(path);
+                        cleaned = true;
+                        return;
+                    }
+
+                    // 如果路径不在当前历史中且进行激进清理，直接删除整个条目
+                    const pathInHistory = activePaths.has(path);
+
+                    if (aggressiveCleanup && !pathInHistory) {
+                        const arr = liveSyncMap.get(path) || [];
+                        totalRemoved += arr.length;
+                        liveSyncMap.delete(path);
+                        cleaned = true;
+                        return;
+                    }
+
+                    // 否则过滤无效的DOM引用
+                    const arr = liveSyncMap.get(path);
+                    if (!arr || !Array.isArray(arr)) {
+                        liveSyncMap.delete(path);
+                        cleaned = true;
+                        return;
+                    }
+
+                    const beforeLength = arr.length;
+
+                    // 优化: 只检查在文档体中的元素
+                    const newArr = arr.filter(({el}) => {
+                        try {
+                            return el && document.body.contains(el);
+                        } catch (e) {
+                            return false;
+                        }
+                    });
+
+                    if (newArr.length === 0) {
+                        liveSyncMap.delete(path);
+                        totalRemoved += beforeLength;
+                        cleaned = true;
+                    } else if (newArr.length !== arr.length) {
+                        liveSyncMap.set(path, newArr);
+                        totalRemoved += (beforeLength - newArr.length);
+                        cleaned = true;
+                    }
+                });
+
+                if (cleaned && totalRemoved > 0) {
+                    console.log(`[Bookmark] Cleaned ${totalRemoved} stale references from liveSyncMap`);
+                }
+
+                return cleaned; // 返回是否有清理发生
+            } catch (err) {
+                console.warn('[Bookmark] Error cleaning liveSyncMap:', err);
+                return false;
+            }
+        }
+
+// 增加更全面的清理策略 - 新增
+        // Improve safety for deep memory cleaning - replace existing function
+        function deepCleanMemory() {
+            try {
+                console.log('[Bookmark] Running deep memory cleanup');
+
+                // Try cleaning liveSyncMap with error handling
+                try {
+                    cleanupLiveSyncMap();
+                } catch (err) {
+                    console.warn('[Bookmark] Error during liveSyncMap cleanup:', err);
+                }
+
+                // Clean observers with error handling
+                try {
+                    observers.cleanup();
+                } catch (err) {
+                    console.warn('[Bookmark] Error during observers cleanup:', err);
+                }
+
+                // Clean lastActiveMap with error handling
+                try {
+                    const paths = [...liveSyncMap.keys()];
+                    let lastActiveMapChanged = false;
+
+                    Object.keys(lastActiveMap).forEach(path => {
+                        if (!paths.includes(path) && path !== '__history__') {
+                            delete lastActiveMap[path];
+                            lastActiveMapChanged = true;
+                        }
+                    });
+
+                    if (lastActiveMapChanged) {
+                        storage.set({ lastActiveMap });
+                    }
+                } catch (err) {
+                    console.warn('[Bookmark] Error during lastActiveMap cleanup:', err);
+                }
+            } catch (err) {
+                console.error('[Bookmark] Critical error in deepCleanMemory:', err);
+            }
+        }
+
+// 每3分钟做一次深度清理
+        const deepCleanerId = setInterval(deepCleanMemory, 180000);
         let activePath = null;
         let activeFid = null;
         let lastClickedChatEl = null;
@@ -154,47 +495,79 @@
         };
 
 
-        new MutationObserver(syncTitles).observe(historyNode, {childList: true, subtree: true, characterData: true});
+        observers.add(new MutationObserver(syncTitles)).observe(historyNode, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
 
         let prevHistoryPaths = new Set(qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname));
         /* —— 检测 history 会话被删除后同步移除收藏夹中对应条目 —— */
-        const historyCleanupObs = new MutationObserver(() => {
-            const anchors = qsa('div#history a[href*="/c/"]');
-            const currentPaths = new Set(anchors.map(a => new URL(a.href).pathname));
-            // 原有删除同步逻辑
-            const activePaths = currentPaths;
-            let changed = false;
-            const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
-            const fidList = Object.keys(folders);
-            for (const [fid, folder] of Object.entries(folders)) {
-                const oldChats = folder.chats;
-                const newChats = oldChats.filter(c => {
-                    if (!c.url) return true;
-                    try {
-                        return activePaths.has(new URL(c.url).pathname);
-                    } catch {
-                        return true;
+        // 修改后的代码
+        let historyCleanupDebouncer = null;
+        const historyCleanupObs = observers.add(new MutationObserver(() => {
+            // 添加防抖，避免短时间内多次触发
+            clearTimeout(historyCleanupDebouncer);
+            historyCleanupDebouncer = setTimeout(() => {
+                try {
+                    const anchors = qsa('div#history a[href*="/c/"]');
+                    const currentPaths = new Set(anchors.map(a => new URL(a.href).pathname));
+
+                    // 如果路径集合没有变化，跳过处理
+                    if (prevHistoryPaths.size === currentPaths.size &&
+                        [...prevHistoryPaths].every(path => currentPaths.has(path))) {
+                        return;
                     }
-                });
-                if (newChats.length !== oldChats.length) {
-                    folder.chats = newChats;
-                    changed = true;
-                    const oldBox = folderZone.children[fidList.indexOf(fid)];
-                    const newBox = renderFolder(fid, folder);
-                    folderZone.replaceChild(newBox, oldBox);
+
+                    // 原有删除同步逻辑
+                    const activePaths = currentPaths;
+                    let changed = false;
+                    const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
+                    if (!folderZone) return; // 安全检查
+
+                    const fidList = Object.keys(folders);
+                    for (const [fid, folder] of Object.entries(folders)) {
+                        const oldChats = folder.chats;
+                        const newChats = oldChats.filter(c => {
+                            if (!c.url) return true;
+                            try {
+                                return activePaths.has(new URL(c.url).pathname);
+                            } catch {
+                                return true;
+                            }
+                        });
+                        if (newChats.length !== oldChats.length) {
+                            folder.chats = newChats;
+                            changed = true;
+                            const idx = fidList.indexOf(fid);
+                            const oldBox = folderZone.children[idx];
+                            if (oldBox) { // 安全检查
+                                const newBox = renderFolder(fid, folder);
+                                folderZone.replaceChild(newBox, oldBox);
+                            }
+                        }
+                    }
+                    if (changed) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    prevHistoryPaths = currentPaths;
+                } catch (err) {
+                    console.warn('[Bookmark] History cleanup error:', err);
                 }
-            }
-            if (changed) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-            prevHistoryPaths = currentPaths;
-        });
+            }, 300); // 300ms 防抖
+        }));
 
 
         historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
 
         /* ---------- 渲染 ---------- */
+        // Add after renderChat function, in the render() function
         function render() {
             folderZone.replaceChildren();
             Object.entries(folders).forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
+
+            // 添加定期清理，避免引用堆积
+            if (Math.random() < 0.2) { // 20% chance on each render
+                setTimeout(cleanupLiveSyncMap, 0);
+            }
         }
 
         /* ---------- 文件夹渲染 ---------- */
@@ -282,39 +655,96 @@
                 };
 
                 // 修改后
+                // 修改后的提示词编辑器
                 menu.querySelector('#f_prompt').onclick = () => {
                     const defaultPrompt = folders[fid]?.prompt || '';
+
+                    // 创建模态框，优化事件处理
                     const modal = document.createElement('div');
                     modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
+
                     const box = document.createElement('div');
                     box.style.cssText = 'background:#2b2521;padding:16px;border-radius:8px;max-width:400px;width:80%;box-shadow:0 4px 10px rgba(0,0,0,0.2)';
+
                     const ta = document.createElement('textarea');
                     ta.value = defaultPrompt;
                     ta.style.cssText = 'width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical;font-size:14px;line-height:1.4';
+
+                    // 避免事件冒泡
+                    ta.onclick = e => e.stopPropagation();
+
                     const btnWrap = document.createElement('div');
                     btnWrap.style.cssText = 'text-align:right;margin-top:10px';
+
                     const okBtn = document.createElement('button');
                     okBtn.textContent = '确定';
-                    okBtn.style.cssText = 'margin-right:8px;cursor:pointer';
+                    okBtn.style.cssText = 'margin-right:8px;cursor:pointer;padding:4px 10px;background:#3a2f28;border:none;border-radius:4px;color:#e7d8c5';
+
                     const cancelBtn = document.createElement('button');
                     cancelBtn.textContent = '取消';
-                    cancelBtn.style.cssText = 'cursor:pointer';
+                    cancelBtn.style.cssText = 'cursor:pointer;padding:4px 10px;background:#2b2521;border:1px solid #3a2f28;border-radius:4px;color:#e7d8c5';
+
+                    // 清除弹窗的通用函数
+                    const removeModal = () => {
+                        try {
+                            document.body.removeChild(modal);
+                        } catch (e) {
+                            console.warn('[Bookmark] Error removing modal:', e);
+                        }
+                    };
+
+                    // 添加键盘事件处理
+                    modal.addEventListener('keydown', e => {
+                        if (e.key === 'Escape') {
+                            e.preventDefault();
+                            removeModal();
+                        } else if (e.key === 'Enter' && e.ctrlKey) {
+                            e.preventDefault();
+                            // 保存并关闭
+                            try {
+                                folders[fid].prompt = ta.value.trim();
+                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                                render();
+                                closeMenu();
+                                removeModal();
+                            } catch (err) {
+                                console.warn('[Bookmark] Error saving prompt:', err);
+                            }
+                        }
+                    });
+
+                    // 单击模态框背景关闭
+                    modal.onclick = e => {
+                        if (e.target === modal) removeModal();
+                    };
+
+                    okBtn.onclick = async (e) => {
+                        e.stopPropagation();
+                        try {
+                            folders[fid].prompt = ta.value.trim();
+                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            render();
+                            closeMenu();
+                            removeModal();
+                        } catch (err) {
+                            console.warn('[Bookmark] Error saving prompt:', err);
+                        }
+                    };
+
+                    cancelBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        removeModal();
+                    };
+
                     btnWrap.appendChild(okBtn);
                     btnWrap.appendChild(cancelBtn);
                     box.appendChild(ta);
                     box.appendChild(btnWrap);
                     modal.appendChild(box);
                     document.body.appendChild(modal);
-                    okBtn.onclick = async () => {
-                        folders[fid].prompt = ta.value.trim();
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                        render();
-                        closeMenu();
-                        document.body.removeChild(modal);
-                    };
-                    cancelBtn.onclick = () => {
-                        document.body.removeChild(modal);
-                    };
+
+                    // 自动聚焦文本区域
+                    setTimeout(() => ta.focus(), 50);
                 };
 
 
@@ -341,46 +771,71 @@
 
             // 新建聊天按钮点击事件处理器
             // 【修改后】用 MutationObserver 监听 history 区域新增节点，替换 setInterval 轮询
+            // 修改后的代码
             newBtn.onclick = e => {
-                clearActiveOnHistoryClick = false;  // ← 点击组内新建会话时清除“history 点击”标志
                 e.stopPropagation();
-                activeFid = fid;                                                            // 标记本次操作所属的文件夹
-                const prevPaths = new Set(                                                   // 保存当前已有的会话路径
+                activeFid = fid;
+                const prevPaths = new Set(
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
-                const globalNewBtn = qs('button[aria-label="New chat"]');   // 获取全局“New chat”按钮
-                if (globalNewBtn) {                                         // 如果按钮存在
-                    globalNewBtn.click();                                   // 模拟点击，走原生新建聊天流程
-                } else {                                                    // 否则
-                    history.pushState({}, '', '/');                         // 回退到根路径，兼容旧逻辑
-                    window.dispatchEvent(new Event('popstate'));            // 触发路由更新
-                }                                 // 通知路由更新
-                const observer = new MutationObserver(async (mutations, obs) => {            // 创建 MutationObserver
-                    for (const mutation of mutations) {                                      // 遍历所有变动记录
-                        for (const node of mutation.addedNodes) {                            // 检查新增节点
-                            if (!(node instanceof HTMLElement)) continue;                    // 非元素节点跳过
-                            const anchors = node.matches('a[href*="/c/"]')                   // 如果节点本身是会话链接
-                                ? [node]                                                     //   直接作为候选
-                                : Array.from(node.querySelectorAll('a[href*="/c/"]'));        // 否则查询子孙链接
-                            for (const a of anchors) {                                       // 遍历所有候选链接
-                                const path = new URL(a.href, location.origin).pathname;       // 解析路径
-                                if (!path.startsWith('/c/') || prevPaths.has(path)) continue; // 跳过非新会话或已记录路径
-                                if (folders[fid]?.chats.some(c =>                            // 跳过已添加到该组的会话
-                                    samePath(c.url, location.origin + path)
-                                )) continue;
-                                const title = a.textContent.trim() || 'loading…';             // 获取标题
-                                const chatUrl = location.origin + path;                      // 构造完整 URL
-                                folders[fid].chats.unshift({ url: chatUrl, title });          // 插入分组数据
-                                await storage.set({ folders });                              // 持久化存储
-                                render();                                                    // 重新渲染侧栏
-                                highlightActive();                                           // 更新高亮
-                                obs.disconnect();                                           // 完成后断开观察
-                                return;                                                     // 退出回调
+                const globalNewBtn = qs('button[aria-label="New chat"]');
+                if (globalNewBtn) {
+                    globalNewBtn.click();
+                } else {
+                    history.pushState({}, '', '/');
+                    window.dispatchEvent(new Event('popstate'));
+                }
+
+                // 添加超时保护和重试机制
+                let timeoutId;
+                // Modified observers cleanup mechanism - add to the observers object
+                const observers = {
+                    list: [],
+                    add(observer) {
+                        this.list.push(observer);
+                        // Schedule periodic cleanup for large observer lists
+                        if (this.list.length > 10 && !this._cleanupInterval) {
+                            this._cleanupInterval = setInterval(() => this.cleanup(), 60000);
+                        }
+                        return observer;
+                    },
+                    disconnectAll() {
+                        this.list.forEach(obs => {
+                            try {
+                                obs.disconnect();
+                            } catch (e) {
+                                console.warn('[Bookmark] Error disconnecting observer:', e);
                             }
+                        });
+                        this.list = [];
+                        if (this._cleanupInterval) {
+                            clearInterval(this._cleanupInterval);
+                            this._cleanupInterval = null;
+                        }
+                    },
+                    cleanup() {
+                        // 移除页面中不存在的观察者
+                        const initialLength = this.list.length;
+                        this.list = this.list.filter(obs => {
+                            try {
+                                return obs && typeof obs.disconnect === 'function';
+                            } catch (e) {
+                                return false;
+                            }
+                        });
+                        if (initialLength !== this.list.length) {
+                            console.log(`[Bookmark] Cleaned up ${initialLength - this.list.length} broken observers`);
                         }
                     }
-                });
-                observer.observe(qs('div#history'), { childList: true, subtree: true });      // 监听 history 区域子树节点变化
+                };
+
+                observer.observe(qs('div#history'), {childList: true, subtree: true});
+
+                // 添加超时保护，5秒后如果没有成功则断开观察
+                timeoutId = setTimeout(() => {
+                    observer.disconnect();
+                    console.warn('[Bookmark] New chat detection timed out');
+                }, 5000);
             };
 
 
@@ -433,12 +888,19 @@
                 clearActiveOnHistoryClick = false;
                 if (!chat.url) return;
                 e.preventDefault();
+                // 仅保存临时引用，在处理完后清除
                 lastClickedChatEl = link;
                 const path = new URL(chat.url, location.origin).pathname;
-                lastActiveMap[path] = fid;            // 保留
-                storage.set({ lastActiveMap });       // 保留
+                lastActiveMap[path] = fid;
+                storage.set({lastActiveMap});
                 history.pushState({}, '', chat.url);
                 window.dispatchEvent(new Event('popstate'));
+                // 使用一次性定时器在下一个事件循环中清除引用
+                setTimeout(() => {
+                    if (lastClickedChatEl === link) {
+                        lastClickedChatEl = null;
+                    }
+                }, 100);
             };
 
             const del = document.createElement('span');
@@ -468,18 +930,18 @@
         }
 
         /* ---------- 拖拽源委托 ---------- */
-        const dragSrcObs = new MutationObserver(() => {
+        const dragSrcObs = observers.add(new MutationObserver(() => {
             qsa('a[href*="/c/"]').forEach(a => {
                 if (a.dataset.drag) return;
                 a.dataset.drag = 1;
                 a.draggable = true;
                 a.ondragstart = e => e.dataTransfer.setData('text/plain', a.href);
             });
-        });
+        }));
         dragSrcObs.observe(historyNode, {childList: true, subtree: true});
 
         /* ---------- 移除压缩按钮 ---------- */
-        new MutationObserver(() => qsa('path[d^="M316.9 18"]').forEach(p => p.closest('button')?.remove()))
+        observers.add(new MutationObserver(() => qsa('path[d^="M316.9 18"]').forEach(p => p.closest('button')?.remove())))
             .observe(document.body, {childList: true, subtree: true});
 
         /* ---------- 输入尾部提示 ---------- */
@@ -558,14 +1020,14 @@
             }, {capture: true});
         }
 
-        new MutationObserver(bindSend).observe(document.body, {childList: true, subtree: true});
+        observers.add(new MutationObserver(bindSend)).observe(document.body, {childList: true, subtree: true});
         bindSend();
 
         render();
         // 【新增】在 initBookmarks 顶部定义
         let clearActiveOnHistoryClick = false;
 
-// 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
+
         historyNode.addEventListener('click', e => {
             const a = e.target.closest('a[href*="/c/"]');
             if (!a) return;
@@ -573,7 +1035,7 @@
             lastClickedChatEl = null;
             const path = new URL(a.href, location.origin).pathname;
             lastActiveMap[path] = '__history__';
-            storage.set({ lastActiveMap });
+            storage.set({lastActiveMap});
             // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
             setTimeout(() => {
                 highlightActive();
@@ -627,5 +1089,184 @@
 
         highlightActive();                                                      // 初始渲染立即同步
         window.addEventListener('popstate', highlightActive);
+
+        // 在 initBookmarks 方法内部添加
+        // Improve memory checker safety - replace existing function
+        function checkMemoryUsage() {
+            try {
+                // 检测已知的内存泄漏指标
+                const mapSize = liveSyncMap.size;
+                const observerCount = observers.list.length;
+
+                // 检查DOM是否存在异常
+                const wrapperExists = !!qs('#cgpt-bookmarks-wrapper');
+                const historyExists = !!qs('div#history');
+
+                // 计算liveSyncMap中无效引用比例
+                let invalidRefs = 0;
+                let totalRefs = 0;
+
+                try {
+                    liveSyncMap.forEach((arr) => {
+                        totalRefs += arr.length;
+                        arr.forEach(({el}) => {
+                            if (!document.body.contains(el)) {
+                                invalidRefs++;
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.warn('[Bookmark] Error checking map references:', e);
+                }
+
+                const invalidRatio = totalRefs > 0 ? invalidRefs / totalRefs : 0;
+
+                console.log(`[Bookmark] Memory check: mapSize=${mapSize}, observers=${observerCount}, invalidRefs=${invalidRefs}/${totalRefs} (${(invalidRatio*100).toFixed(1)}%)`);
+
+                // 如果有明显异常 (地图过大或DOM不一致或太多无效引用)
+                if (mapSize > 1000 || invalidRatio > 0.3 || (wrapperExists && !historyExists) || (!wrapperExists && historyExists)) {
+                    console.warn(`[Bookmark] Memory check failed: mapSize=${mapSize}, observers=${observerCount}, invalidRatio=${invalidRatio.toFixed(2)}`);
+
+                    // 尝试清理
+                    try {
+                        cleanupLiveSyncMap();
+                    } catch (err) {
+                        console.warn('[Bookmark] Error during emergency cleanup of liveSyncMap:', err);
+                    }
+
+                    try {
+                        observers.cleanup();
+                    } catch (err) {
+                        console.warn('[Bookmark] Error during emergency cleanup of observers:', err);
+                    }
+
+                    // 如果仍有问题，重新初始化
+                    if (mapSize > 1200 || invalidRatio > 0.5 || (wrapperExists && !historyExists)) {
+                        console.warn('[Bookmark] Performing emergency reset');
+
+                        // 添加应急日志
+                        console.log('[Bookmark] Emergency reset triggered', {
+                            mapSize,
+                            observerCount,
+                            invalidRatio,
+                            wrapperExists,
+                            historyExists,
+                            folders: Object.keys(folders).length,
+                            totalChats: Object.values(folders).reduce((sum, f) => sum + f.chats.length, 0)
+                        });
+
+                        // 移除现有DOM
+                        const wrapper = qs('#cgpt-bookmarks-wrapper');
+                        if (wrapper) {
+                            try {
+                                wrapper.remove();
+                            } catch (e) {
+                                console.error('[Bookmark] Failed to remove wrapper:', e);
+                            }
+                        }
+
+                        // 执行完整清理
+                        try {
+                            cleanup();
+                        } catch (err) {
+                            console.error('[Bookmark] Failed during emergency cleanup:', err);
+                        }
+
+                        // 重新初始化
+                        const hist = qs('div#history');
+                        if (hist) {
+                            setTimeout(() => {
+                                try {
+                                    console.log('[Bookmark] Re-initializing bookmarks');
+                                    initBookmarks(hist);
+                                } catch (e) {
+                                    console.error('[Bookmark] Failed to reinitialize:', e);
+                                }
+                            }, 500);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('[Bookmark] Critical error in memory checker:', err);
+            }
+        }
+
+// 每2分钟检查一次内存状态
+        const memoryCheckerId = setInterval(checkMemoryUsage, 120000);
+        // 正确创建cleanup函数
+        // Enhanced cleanup function - replace existing cleanup function
+        const cleanup = () => {
+            // 清理所有观察器
+            try {
+                observers.disconnectAll();
+            } catch (e) {
+                console.warn('[Bookmark] Error disconnecting observers:', e);
+            }
+
+            // 清理定时器
+            try {
+                if (typeof liveSyncCleanerId !== 'undefined') clearInterval(liveSyncCleanerId);
+                if (typeof memoryCheckerId !== 'undefined') clearInterval(memoryCheckerId);
+                if (typeof deepCleanerId !== 'undefined') clearInterval(deepCleanerId);
+            } catch (e) {
+                console.warn('[Bookmark] Error clearing intervals:', e);
+            }
+
+            // 移除事件监听
+            try {
+                window.removeEventListener('popstate', highlightActive);
+            } catch (e) {
+                console.warn('[Bookmark] Error removing popstate listener:', e);
+            }
+
+            // 清理历史记录节点上的事件监听器
+            try {
+                const hist = qs('div#history');
+                if (hist) {
+                    if (hist._folderClickHandler) {
+                        hist.removeEventListener('click', hist._folderClickHandler);
+                        delete hist._folderClickHandler;
+                    }
+
+                    // 清理可能的其他动态添加的事件监听器
+                    const clone = hist.cloneNode(true);
+                    hist.parentNode?.replaceChild(clone, hist);
+                }
+            } catch (e) {
+                console.warn('[Bookmark] Error removing history event listeners:', e);
+            }
+
+            // 清理其他全局引用
+            try {
+                activePath = null;
+                activeFid = null;
+                lastClickedChatEl = null;
+            } catch (e) {
+                console.warn('[Bookmark] Error cleaning global references:', e);
+            }
+
+            // 标记初始化状态重置
+            if (historyNode) {
+                try {
+                    historyNode.dataset.ready = '';
+                    delete historyNode._hasFolderListeners;
+                } catch (e) {
+                    console.warn('[Bookmark] Error resetting history node state:', e);
+                }
+            }
+
+            // 最后尝试清理liveSyncMap
+            try {
+                liveSyncMap.clear();
+            } catch (e) {
+                console.warn('[Bookmark] Error clearing liveSyncMap:', e);
+            }
+        };
+
+// 页面卸载时清理资源
+        window.addEventListener('beforeunload', cleanup);
+
+// 在动态内容页面可能发生的导航事件上添加清理
+        document.addEventListener('spa:navigation', cleanup);
     }
 })();
