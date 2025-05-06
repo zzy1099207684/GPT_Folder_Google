@@ -349,13 +349,7 @@
                 const prevPaths = new Set(                                                   // 保存当前已有的会话路径
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
-                const globalNewBtn = qs('button[aria-label="New chat"]');   // 获取全局“New chat”按钮
-                if (globalNewBtn) {                                         // 如果按钮存在
-                    globalNewBtn.click();                                   // 模拟点击，走原生新建聊天流程
-                } else {                                                    // 否则
-                    history.pushState({}, '', '/');                         // 回退到根路径，兼容旧逻辑
-                    window.dispatchEvent(new Event('popstate'));            // 触发路由更新
-                }                                 // 通知路由更新
+                const historyEl = qs('div#history');
                 const observer = new MutationObserver(async (mutations, obs) => {            // 创建 MutationObserver
                     for (const mutation of mutations) {                                      // 遍历所有变动记录
                         for (const node of mutation.addedNodes) {                            // 检查新增节点
@@ -381,7 +375,15 @@
                         }
                     }
                 });
-                observer.observe(qs('div#history'), { childList: true, subtree: true });      // 监听 history 区域子树节点变化
+                observer.observe(qs('div#history'), { childList: true, subtree: true });
+                const globalNewBtn = qs('button[aria-label="New chat"]');   // 获取全局“New chat”按钮
+                if (globalNewBtn) {                                         // 如果按钮存在
+                    globalNewBtn.click();                                   // 模拟点击，走原生新建聊天流程
+                } else {                                                    // 否则
+                    history.pushState({}, '', '/');                         // 回退到根路径，兼容旧逻辑
+                    window.dispatchEvent(new Event('popstate'));            // 触发路由更新
+                }                                 // 通知路由更新
+                globalNewBtn?.click();
             };
 
 
@@ -548,13 +550,30 @@
             }, {capture: true});
 
             // —— 修改后，回车同样排除“停止生成” ——
-            ed.addEventListener('keydown', e => {
+            ed.addEventListener('keydown', async e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     const btn = qs('#composer-submit-button');
                     const label = btn.getAttribute('aria-label') || btn.innerText;
                     if (label.toLowerCase().includes('stop')) return;
                     appendSuffix();
                     bumpActiveChat();
+
+                    // —— 新增：按回车后，如果是新会话且还没加入当前分组，就立刻插入 ——
+                    if (activeFid && location.pathname.startsWith('/c/')) {
+                        const path = location.pathname;
+                        const chatUrl = location.origin + path;
+                        const folder = folders[activeFid];
+                        if (!folder.chats.some(c => samePath(c.url, chatUrl))) {
+                            // 从侧栏取标题
+                            const anchor = qs(`div#history a[href$="${path}"]`);
+                            const title = anchor ? anchor.textContent.trim() : 'loading…';
+                            // 插入并持久化
+                            folder.chats.unshift({ url: chatUrl, title });
+                            await storage.set({ folders });
+                            render();
+                            highlightActive();
+                        }
+                    }
                 }
             }, {capture: true});
         }

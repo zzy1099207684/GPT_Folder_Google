@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Folder",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Add collapsible favorites to ChatGPT's left side",
   "icons": {
     "128": "icon128.png"
