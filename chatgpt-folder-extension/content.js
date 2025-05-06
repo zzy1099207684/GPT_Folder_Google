@@ -332,6 +332,17 @@
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
 
+        // ========= 新增：当链接节点被移除时同步清理 =========
+        function detachLink(el) {
+            if (!el || !el.dataset?.url) return;
+            let path;
+            try { path = new URL(el.dataset.url, location.origin).pathname; } catch { }
+            if (!path || !liveSyncMap.has(path)) return;
+            const arr = liveSyncMap.get(path).filter(i => i.el !== el);
+            arr.length ? liveSyncMap.set(path, arr) : liveSyncMap.delete(path);
+        }
+
+
         // Enhanced cleanup function for liveSyncMap - replace existing function
         function cleanupLiveSyncMap() {
             try {
@@ -563,6 +574,19 @@
 
 
         historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
+
+        // ========= 新增：监听节点移除事件 =========
+        const linkDetachObs = observers.add(new MutationObserver(muts => {
+            muts.forEach(m => {
+                m.removedNodes.forEach(n => {
+                    if (n.nodeType !== 1) return;
+                    if (n.matches?.('a[data-url]')) detachLink(n);
+                    n.querySelectorAll?.('a[data-url]').forEach(detachLink);
+                });
+            });
+        }));
+        linkDetachObs.observe(document.body, { childList: true, subtree: true });
+
 
         /* ---------- 渲染 ---------- */
         // Add after renderChat function, in the render() function
