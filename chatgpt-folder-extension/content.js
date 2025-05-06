@@ -56,16 +56,13 @@
     const readyObs = new MutationObserver(() => {
         const hist = qs('div#history');
         const wrapper = qs('#cgpt-bookmarks-wrapper');
-        if (hist) {
-            if (!wrapper) initBookmarks(hist);                    // 首次
-            else if (wrapper.nextSibling !== hist)                // #history 被替换
-                hist.parentElement.insertBefore(wrapper, hist);   // 重新就位
+        if (hist && !wrapper) {
+            initBookmarks(hist);      // #history 又出现并且 wrapper 不在时重新插入
         }
     });
     readyObs.observe(document.body, {childList: true, subtree: true});
 
     /* ===== 初始化收藏夹 ===== */
-    const missCount = {};
     async function initBookmarks(historyNode) {
         if (qs('#cgpt-bookmarks-wrapper')) return;                                            // 防重复
 
@@ -172,10 +169,12 @@
             for (const [fid, folder] of Object.entries(folders)) {
                 const oldChats = folder.chats;
                 const newChats = oldChats.filter(c => {
-                    const p = new URL(c.url).pathname;
-                    if (activePaths.has(p)) { missCount[p] = 0; return true; }
-                    missCount[p] = (missCount[p] || 0) + 1;
-                    return missCount[p] < 3;             // 连续 3 次都找不到才真正删除
+                    if (!c.url) return true;
+                    try {
+                        return activePaths.has(new URL(c.url).pathname);
+                    } catch {
+                        return true;
+                    }
                 });
                 if (newChats.length !== oldChats.length) {
                     folder.chats = newChats;
@@ -349,7 +348,13 @@
                 const prevPaths = new Set(                                                   // 保存当前已有的会话路径
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
-                const historyEl = qs('div#history');
+                const globalNewBtn = qs('button[aria-label="New chat"]');   // 获取全局“New chat”按钮
+                if (globalNewBtn) {                                         // 如果按钮存在
+                    globalNewBtn.click();                                   // 模拟点击，走原生新建聊天流程
+                } else {                                                    // 否则
+                    history.pushState({}, '', '/');                         // 回退到根路径，兼容旧逻辑
+                    window.dispatchEvent(new Event('popstate'));            // 触发路由更新
+                }                                 // 通知路由更新
                 const observer = new MutationObserver(async (mutations, obs) => {            // 创建 MutationObserver
                     for (const mutation of mutations) {                                      // 遍历所有变动记录
                         for (const node of mutation.addedNodes) {                            // 检查新增节点
@@ -375,15 +380,7 @@
                         }
                     }
                 });
-                observer.observe(qs('div#history'), { childList: true, subtree: true });
-                const globalNewBtn = qs('button[aria-label="New chat"]');   // 获取全局“New chat”按钮
-                if (globalNewBtn) {                                         // 如果按钮存在
-                    globalNewBtn.click();                                   // 模拟点击，走原生新建聊天流程
-                } else {                                                    // 否则
-                    history.pushState({}, '', '/');                         // 回退到根路径，兼容旧逻辑
-                    window.dispatchEvent(new Event('popstate'));            // 触发路由更新
-                }                                 // 通知路由更新
-                globalNewBtn?.click();
+                observer.observe(qs('div#history'), { childList: true, subtree: true });      // 监听 history 区域子树节点变化
             };
 
 
@@ -550,30 +547,13 @@
             }, {capture: true});
 
             // —— 修改后，回车同样排除“停止生成” ——
-            ed.addEventListener('keydown', async e => {
+            ed.addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     const btn = qs('#composer-submit-button');
                     const label = btn.getAttribute('aria-label') || btn.innerText;
                     if (label.toLowerCase().includes('stop')) return;
                     appendSuffix();
                     bumpActiveChat();
-
-                    // —— 新增：按回车后，如果是新会话且还没加入当前分组，就立刻插入 ——
-                    if (activeFid && location.pathname.startsWith('/c/')) {
-                        const path = location.pathname;
-                        const chatUrl = location.origin + path;
-                        const folder = folders[activeFid];
-                        if (!folder.chats.some(c => samePath(c.url, chatUrl))) {
-                            // 从侧栏取标题
-                            const anchor = qs(`div#history a[href$="${path}"]`);
-                            const title = anchor ? anchor.textContent.trim() : 'loading…';
-                            // 插入并持久化
-                            folder.chats.unshift({ url: chatUrl, title });
-                            await storage.set({ folders });
-                            render();
-                            highlightActive();
-                        }
-                    }
                 }
             }, {capture: true});
         }
