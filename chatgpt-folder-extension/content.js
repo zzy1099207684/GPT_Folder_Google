@@ -55,13 +55,12 @@
     /* ===== 等待侧栏就绪 ===== */
     const readyObs = new MutationObserver(() => {
         const hist = qs('div#history');
-        if (hist && !hist.dataset.ready) {
-            hist.dataset.ready = 1;
-            initBookmarks(hist);
-            readyObs.disconnect();
+        const wrapper = qs('#cgpt-bookmarks-wrapper');
+        if (hist && !wrapper) {
+            initBookmarks(hist);      // #history 又出现并且 wrapper 不在时重新插入
         }
     });
-    readyObs.observe(document.body, {childList: true, subtree: true});                        // 监听
+    readyObs.observe(document.body, {childList: true, subtree: true});
 
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {
@@ -121,13 +120,6 @@
         let activePath = null;
         let activeFid = null;
         let lastClickedChatEl = null;
-        const debounce = (fn, wait = 120) => {
-            let t;
-            return (...a) => {
-                clearTimeout(t);
-                t = setTimeout(() => fn(...a), wait);
-            };
-        };
         const syncTitles = () => {
             let updated = false;
             liveSyncMap.forEach((arr, path) => {
@@ -349,9 +341,10 @@
 
             // 新建聊天按钮点击事件处理器
             // 【修改后】用 MutationObserver 监听 history 区域新增节点，替换 setInterval 轮询
-            newBtn.onclick = e => {                                                         // 点击“新建会话”按钮时执行
-                e.stopPropagation();                                                         // 阻止事件冒泡，避免折叠文件夹
-                activeFid = fid;                                                             // 标记本次操作所属的文件夹
+            newBtn.onclick = e => {
+                clearActiveOnHistoryClick = false;  // ← 点击组内新建会话时清除“history 点击”标志
+                e.stopPropagation();
+                activeFid = fid;                                                            // 标记本次操作所属的文件夹
                 const prevPaths = new Set(                                                   // 保存当前已有的会话路径
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
@@ -437,14 +430,15 @@
                 link.style.color = '#fff';                                          // 文字改为白色
             }
             link.onclick = e => {
-                if (!chat.url) return;                                                          // URL 不存在则跳过
-                e.preventDefault();                                                             // 阻止默认跳转
-                lastClickedChatEl = link;                                                       // 记录最后一次点击的 DOM 元素
-                const path = new URL(chat.url, location.origin).pathname;                       // 解析当前会话的 pathname
-                lastActiveMap[path] = fid;                                                      // 缓存此 path 对应的文件夹 ID
-                storage.set({ lastActiveMap });                                                 // 持久化映射到 chrome.storage
-                history.pushState({}, '', chat.url);                                            // 更新浏览器历史
-                window.dispatchEvent(new Event('popstate'));                                    // 触发路由更新
+                clearActiveOnHistoryClick = false;
+                if (!chat.url) return;
+                e.preventDefault();
+                lastClickedChatEl = link;
+                const path = new URL(chat.url, location.origin).pathname;
+                lastActiveMap[path] = fid;            // 保留
+                storage.set({ lastActiveMap });       // 保留
+                history.pushState({}, '', chat.url);
+                window.dispatchEvent(new Event('popstate'));
             };
 
             const del = document.createElement('span');
@@ -568,39 +562,59 @@
         bindSend();
 
         render();
-        const highlightActive = () => {                                         // 仅更新必要元素
-            const path = location.pathname;                                     // 当前路径
-            if (activePath) {                                             // 若已有旧路径
-                const oldArr = liveSyncMap.get(activePath);               // 取出旧路径所有克隆
-                if (oldArr) oldArr.forEach(({el}) => {                    // 逐个清除高亮
+        // 【新增】在 initBookmarks 顶部定义
+        let clearActiveOnHistoryClick = false;
+
+// 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
+        historyNode.addEventListener('click', e => {
+            const a = e.target.closest('a[href*="/c/"]');
+            if (!a) return;
+            clearActiveOnHistoryClick = true;
+            lastClickedChatEl = null;
+            const path = new URL(a.href, location.origin).pathname;
+            lastActiveMap[path] = '__history__';
+            storage.set({ lastActiveMap });
+            // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
+            setTimeout(() => {
+                highlightActive();
+            }, 0);
+        });
+
+        const highlightActive = () => {
+            const path = location.pathname;
+            if (activePath) {
+                const oldArr = liveSyncMap.get(activePath);
+                if (oldArr) oldArr.forEach(({el}) => {
                     el.style.background = '';
                     el.style.color = '#b2b2b2';
                 });
             }
-            const arr = liveSyncMap.get(path);                            // 获取当前路径克隆
-            if (arr && arr.length) arr.forEach(({el}) => {                // 为全部克隆加高亮
-                el.style.background = 'rgba(255,255,255,.07)';
-                el.style.color = '#fff';
-            });
-            activePath = path;
-            /* ----------【修改后 ②】---------- */
+            const arr = liveSyncMap.get(path);
             if (arr && arr.length) {
-                if (lastClickedChatEl) {
-                    const entry = arr.find(item => item.el === lastClickedChatEl);
-                    activeFid = entry ? entry.fid : arr[arr.length - 1].fid;
-                    lastClickedChatEl = null;
-                } else {
-                    let storedFid = lastActiveMap[path];                                           // 取出此 path 的缓存文件夹 ID
-                    if (storedFid && arr.some(item => item.fid === storedFid)) {                    // 如果缓存存在且当前条目中有对应项
-                        activeFid = storedFid;                                                      // 直接使用缓存的文件夹 ID
-                    } else {
-                        for (const [fid, folder] of Object.entries(folders)) {                      // 否则按原逻辑遍历所有文件夹
-                            if (folder.chats.some(c => samePath(c.url, location.origin + path))) {  // 找到包含当前路径的聊天
-                                activeFid = fid;                                                     // 设置第一次匹配的文件夹 ID
-                                break;                                                               // 跳出循环
-                            }
-                        }
-                        if (!activeFid && arr.length) activeFid = arr[arr.length - 1].fid;           // 若仍未找到则使用最后一个
+                const isHistoryView = lastActiveMap[path] === '__history__';   // ← 本次来源于 history 面板
+                arr.forEach(({el}) => {
+                    const inHistory = !!el.closest('#history');                // 判断链接属于 history 还是分组
+                    if (isHistoryView && !inHistory) {                         // 来自 history 且是组内链接 → 不高亮
+                        el.style.background = '';
+                        el.style.color = '#b2b2b2';
+                    } else {                                                   // 其余情况正常高亮
+                        el.style.background = 'rgba(255,255,255,.07)';
+                        el.style.color = '#fff';
+                    }
+                });
+            }
+            activePath = path;
+
+            let storedFid = lastActiveMap[path];
+            if (storedFid === '__history__') {        // 新增：来自 history，保持未选中
+                activeFid = null;
+            } else if (storedFid && arr?.some(i => i.fid === storedFid)) {
+                activeFid = storedFid;
+            } else if (arr && arr.length && !clearActiveOnHistoryClick) { // 原有回退逻辑
+                for (const [fid, folder] of Object.entries(folders)) {
+                    if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
+                        activeFid = fid;
+                        break;
                     }
                 }
             }
@@ -608,8 +622,9 @@
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
-
         };
+
+
         highlightActive();                                                      // 初始渲染立即同步
         window.addEventListener('popstate', highlightActive);
     }
