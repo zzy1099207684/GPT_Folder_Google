@@ -261,6 +261,8 @@
     async function initBookmarks(historyNode) {
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
+        let currentNewChatObserver = null;
+        let currentNewChatTimeout = null;
 
         // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
         const historyClickHandler = e => {
@@ -343,12 +345,14 @@
         if (_migrated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
 
 
-
         // ========= 新增：当链接节点被移除时同步清理 =========
         function detachLink(el) {
             if (!el || !el.dataset?.url) return;
             let path;
-            try { path = new URL(el.dataset.url, location.origin).pathname; } catch { }
+            try {
+                path = new URL(el.dataset.url, location.origin).pathname;
+            } catch {
+            }
             if (!path || !liveSyncMap.has(path)) return;
             const arr = liveSyncMap.get(path).filter(i => i.el !== el);
             arr.length ? liveSyncMap.set(path, arr) : liveSyncMap.delete(path);
@@ -377,7 +381,8 @@
                     qsa('div#history a[href*="/c/"]').forEach(a => {
                         try {
                             activePaths.add(new URL(a.href, location.origin).pathname);
-                        } catch (e) {} // Silently ignore URL parsing errors
+                        } catch (e) {
+                        } // Silently ignore URL parsing errors
                     });
                 } catch (e) {
                     console.warn('[Bookmark] Error collecting active paths:', e);
@@ -475,7 +480,7 @@
                     });
 
                     if (lastActiveMapChanged) {
-                        storage.set({ lastActiveMap });
+                        storage.set({lastActiveMap});
                     }
                 } catch (err) {
                     console.warn('[Bookmark] Error during lastActiveMap cleanup:', err);
@@ -598,10 +603,11 @@
                 });
             });
         }));
-        linkDetachObs.observe(document.body, { childList: true, subtree: true });
+        linkDetachObs.observe(document.body, {childList: true, subtree: true});
 
 
         /* ---------- 渲染 ---------- */
+
         // Add after renderChat function, in the render() function
         function render() {
             // —— 新增：对所有路径剔除已断开节点 ——
@@ -675,7 +681,7 @@
                 const rect = menuBtn.getBoundingClientRect();
 
                 const menu = Object.assign(document.createElement('div'), {
-                    id:'cgpt-folder-menu'
+                    id: 'cgpt-folder-menu'
                 });
                 menu.style.cssText = `
         position:fixed;z-index:2147483647;
@@ -690,49 +696,60 @@
     `;
                 document.body.appendChild(menu);
                 menu.style.left = rect.right - menu.offsetWidth + 'px';
-                menu.style.top  = rect.bottom + 6 + 'px';
+                menu.style.top = rect.bottom + 6 + 'px';
 
-                const close = ()=>menu.remove();
-                setTimeout(()=>document.addEventListener('click',close,{once:true}),0);
+                const close = () => menu.remove();
+                setTimeout(() => document.addEventListener('click', close, {once: true}), 0);
 
-                menu.addEventListener('click', async ev=>{
+                menu.addEventListener('click', async ev => {
                     ev.stopPropagation();
                     const act = ev.target.dataset.act;
-                    if(!act) return;
+                    if (!act) return;
 
-                    if(act==='rename'){                       // 重命名
-                        const n = prompt('rename group',folders[fid].name);
-                        if(n&&n.trim()){
-                            const t=n.trim().slice(0,20)+(n.trim().length>20?'…':'');
-                            folders[fid].name=t; chrome.runtime.sendMessage({type:'save-folders',data:folders}); render();
+                    if (act === 'rename') {                       // 重命名
+                        const n = prompt('rename group', folders[fid].name);
+                        if (n && n.trim()) {
+                            const t = n.trim().slice(0, 20) + (n.trim().length > 20 ? '…' : '');
+                            folders[fid].name = t;
+                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            render();
                         }
                         close();
                     }
 
-                    if(act==='delete'){                       // 删除
-                        if(confirm('确认删除此分组？')){
+                    if (act === 'delete') {                       // 删除
+                        if (confirm('确认删除此分组？')) {
                             delete folders[fid];
-                            chrome.runtime.sendMessage({type:'save-folders',data:folders}); render();
+                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            render();
                         }
                         close();
                     }
 
-                    if(act==='prompt'){                       // 设置 prompt
-                        const modal=document.createElement('div');
-                        modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
-                        const box=document.createElement('div');
-                        box.style.cssText='background:#2b2521;padding:16px;border-radius:8px;max-width:400px;width:80%';
-                        const ta=document.createElement('textarea');
-                        ta.value=folders[fid].prompt||'';
-                        ta.style.cssText='width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical';
+                    if (act === 'prompt') {                       // 设置 prompt
+                        const modal = document.createElement('div');
+                        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
+                        const box = document.createElement('div');
+                        box.style.cssText = 'background:#2b2521;padding:16px;border-radius:8px;max-width:400px;width:80%';
+                        const ta = document.createElement('textarea');
+                        ta.value = folders[fid].prompt || '';
+                        ta.style.cssText = 'width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical';
 
                         // ① 预设提示词
-                        const hints=[
-                            {label:'NORMAL', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
-                                    '```Please answer in natural language, and try to imitate Claude\'s style and thinking.Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
-                            {label:'NO_GUESS', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
-                                    '```Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. Use natural and coherent language. Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
-                            {label:'change_code', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
+                        const hints = [
+                            {
+                                label: 'NORMAL',
+                                text: '# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
+                                    '```Please answer in natural language, and try to imitate Claude\'s style and thinking.Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'
+                            },
+                            {
+                                label: 'NO_GUESS',
+                                text: '# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
+                                    '```Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. Use natural and coherent language. Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'
+                            },
+                            {
+                                label: 'change_code',
+                                text: '# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
                                     '```Strictly adhere to the following requirements:\n' +
                                     'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
                                     'After the modification, you must first test it yourself and ensure the following two points are met:\n' +
@@ -740,34 +757,44 @@
                                     '2. No other functional code has been mistakenly modified.\n' +
                                     '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
                                     'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
-                                    'Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
+                                    'Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'
+                            },
                         ];         // 自行增删
-                        const hintBar=document.createElement('div');
-                        hintBar.style.cssText='margin-top:6px;display:flex;gap:6px;flex-wrap:wrap';
-                        hints.forEach(h=>{
-                            const btn=document.createElement('span');
-                            btn.textContent=h.label;
-                            btn.style.cssText='cursor:pointer;padding:2px 6px;border:1px solid #555;border-radius:4px;font-size:12px';
-                            btn.onclick=()=>{
+                        const hintBar = document.createElement('div');
+                        hintBar.style.cssText = 'margin-top:6px;display:flex;gap:6px;flex-wrap:wrap';
+                        hints.forEach(h => {
+                            const btn = document.createElement('span');
+                            btn.textContent = h.label;
+                            btn.style.cssText = 'cursor:pointer;padding:2px 6px;border:1px solid #555;border-radius:4px;font-size:12px';
+                            btn.onclick = () => {
                                 ta.focus();
-                                const {selectionStart:s,selectionEnd:e}=ta;
-                                ta.setRangeText(h.text,s,e,'end');
-                                ta.dispatchEvent(new Event('input',{bubbles:true}));
+                                const {selectionStart: s, selectionEnd: e} = ta;
+                                ta.setRangeText(h.text, s, e, 'end');
+                                ta.dispatchEvent(new Event('input', {bubbles: true}));
                             };
                             hintBar.appendChild(btn);
                         });
-                        box.append(ta,hintBar);            // ② 把快捷栏放在 textarea 下
+                        box.append(ta, hintBar);            // ② 把快捷栏放在 textarea 下
 
-                        const ok=document.createElement('button');
-                        ok.textContent='确定'; ok.style.cssText='margin-right:8px';
-                        const cancel=document.createElement('button');
-                        cancel.textContent='取消';
-                        const wrap=document.createElement('div');
-                        wrap.style.cssText='text-align:right;margin-top:10px';
-                        wrap.append(ok,cancel); box.append(ta,wrap); modal.appendChild(box); document.body.appendChild(modal);
+                        const ok = document.createElement('button');
+                        ok.textContent = '确定';
+                        ok.style.cssText = 'margin-right:8px';
+                        const cancel = document.createElement('button');
+                        cancel.textContent = '取消';
+                        const wrap = document.createElement('div');
+                        wrap.style.cssText = 'text-align:right;margin-top:10px';
+                        wrap.append(ok, cancel);
+                        box.append(ta, wrap);
+                        modal.appendChild(box);
+                        document.body.appendChild(modal);
 
-                        ok.onclick=()=>{folders[fid].prompt=ta.value.trim();chrome.runtime.sendMessage({type:'save-folders',data:folders});render();document.body.removeChild(modal);};
-                        cancel.onclick=()=>document.body.removeChild(modal);
+                        ok.onclick = () => {
+                            folders[fid].prompt = ta.value.trim();
+                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            render();
+                            document.body.removeChild(modal);
+                        };
+                        cancel.onclick = () => document.body.removeChild(modal);
                         close();
                     }
                 });
@@ -775,7 +802,18 @@
 
             newBtn.onclick = e => {
                 e.stopPropagation();
-                const clickedFid = fid; // 保存当前点击时的文件夹ID
+
+                // 断开旧的 New-chat 监视器，保证仅响应最后一次点击
+                if (currentNewChatObserver) {
+                    try { currentNewChatObserver.disconnect(); } catch {}
+                    currentNewChatObserver = null;
+                }
+                if (currentNewChatTimeout) {
+                    clearTimeout(currentNewChatTimeout);
+                    currentNewChatTimeout = null;
+                }
+
+                const clickedFid = fid;
                 activeFid = clickedFid;
                 const prevPaths = new Set(
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
@@ -793,66 +831,88 @@
 
                 // 定义observer - 监视history区域变化以检测新聊天
                 const observer = new MutationObserver(() => {
-                    // 获取当前所有聊天路径
+                    const anchors = qsa('div#history a[href*="/c/"]');
+
+                    // 当前路径集合
                     const currentPaths = new Set(
-                        qsa('div#history a[href*="/c/"]').map(a => {
+                        anchors.map(a => {
                             try {
-                                return new URL(a.href).pathname;
-                            } catch (e) {
+                                return new URL(a.href, location.origin).pathname;
+                            } catch {
                                 return '';
                             }
                         }).filter(Boolean)
                     );
 
-                    // 查找新出现的路径（之前不存在的）
-                    const newPaths = [...currentPaths].filter(path => !prevPaths.has(path));
+                    // 仅保留本次真正新增的路径
+                    const newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
+                    if (!newPaths.length) return;
 
-                    if (newPaths.length > 0) {
-                        // 找到了新创建的聊天
-                        observer.disconnect();
-                        clearTimeout(timeoutId);
+                    observer.disconnect();
+                    clearTimeout(timeoutId);
+                    currentNewChatObserver = null;
+                    currentNewChatTimeout = null;
 
-                        // 添加聊天到活动文件夹
-                        const newChatUrl = location.origin + newPaths[0];
-                        const title = qsa('div#history a[href*="/c/"]')
-                            .find(a => samePath(a.href, newChatUrl))?.textContent.trim() || '新对话';
-
+                    /* 1. 依据侧栏顺序挑选最上面的新增会话 */
+                    let newChatAnchor = anchors.find(a => {
                         try {
-                            // 使用保存的clickedFid而非可能会变化的activeFid
-                            if (folders[clickedFid] && Array.isArray(folders[clickedFid].chats)) {
-                                folders[clickedFid].chats.unshift({ url: newChatUrl, title });
-                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                            } else {
-                                console.warn(`[Bookmark] Cannot add chat to folder: clickedFid=${clickedFid}, folderExists=${!!folders[clickedFid]}`);
-                            }
-
-                            // 更新lastActiveMap也使用clickedFid
-                            const path = new URL(newChatUrl).pathname;
-                            lastActiveMap[path] = clickedFid;
-                            storage.set({ lastActiveMap });
-
-                            // 重新渲染并高亮
-                            render();
-                            highlightActive();
-                        } catch (err) {
-                            console.warn('[Bookmark] Error adding new chat:', err);
+                            const p = new URL(a.href, location.origin).pathname;
+                            return newPaths.includes(p);
+                        } catch {
+                            return false;
                         }
+                    });
+
+                    /* 2. 若仍有歧义，排除已在该分组中的路径 */
+                    if (!newChatAnchor) {
+                        newChatAnchor = anchors.find(a => {
+                            try {
+                                const p = new URL(a.href, location.origin).pathname;
+                                return newPaths.includes(p) &&
+                                    !folders[clickedFid]?.chats.some(c => samePath(c.url, a.href));
+                            } catch {
+                                return false;
+                            }
+                        });
+                    }
+
+                    /* 3. 兜底方案 */
+                    const newChatUrl = newChatAnchor ? newChatAnchor.href
+                        : (location.origin + newPaths[0]);
+                    const title = (newChatAnchor?.textContent || '新对话').trim();
+
+                    try {
+                        // 使用保存的clickedFid而非可能会变化的activeFid
+                        if (folders[clickedFid] && Array.isArray(folders[clickedFid].chats)) {
+                            // 已存在同一路径就跳过，防止因多次点击产生重复
+                            if (!folders[clickedFid].chats.some(c => samePath(c.url, newChatUrl))) {
+                                folders[clickedFid].chats.unshift({url: newChatUrl, title});
+                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            }
+                        } else {
+                            console.warn(`[Bookmark] Cannot add chat to folder: clickedFid=${clickedFid}, folderExists=${!!folders[clickedFid]}`);
+                        }
+
+                        // 更新lastActiveMap也使用clickedFid
+                        const path = new URL(newChatUrl).pathname;
+                        lastActiveMap[path] = clickedFid;
+                        storage.set({lastActiveMap});
+
+                        // 重新渲染并高亮
+                        render();
+                        highlightActive();
+                    } catch (err) {
+                        console.warn('[Bookmark] Error adding new chat:', err);
                     }
                 });
 
-                observer.observe(qs('div#history'), {childList: true, subtree: true});
-
-                // 添加超时保护，5秒后如果没有成功则断开观察
-                timeoutId = setTimeout(() => {
-                    try {
-                        observer.disconnect();
-                        // 使用debug级别日志而不是警告，此为正常超时情况
-                        console.debug('[Bookmark] New chat detection completed (no new chat found)');
-                    } catch (e) {
-                        // 静默处理可能的"Extension context invalidated"错误
-                        console.debug('[Bookmark] Observer cleanup error (context may be invalid)');
-                    }
-                }, 10000); // 延长到10秒
+                observer.observe(qs('div#history'), {childList:true, subtree:true});
+                currentNewChatObserver = observer;
+                currentNewChatTimeout = setTimeout(() => {
+                    try { observer.disconnect(); } catch {}
+                    currentNewChatObserver = null;
+                    currentNewChatTimeout = null;
+                }, 10000);
             };
 
 
@@ -927,7 +987,7 @@
                 const newFolders = {};
                 keys.forEach(id => newFolders[id] = folders[id]);
                 folders = newFolders;
-                storage.set({ folders, folderOrder: keys });
+                storage.set({folders, folderOrder: keys});
                 render();
             };
 
@@ -1179,7 +1239,7 @@
 
                 // 检测已知的内存泄漏指标
                 const preCleaned = cleanupLiveSyncMap();
-                const mapSize       = liveSyncMap.size;
+                const mapSize = liveSyncMap.size;
                 const observerCount = observers.list.length;
 
                 // 检查DOM是否存在异常
@@ -1211,7 +1271,7 @@
                 const invalidRatio = totalRefs > 0 ? invalidRefs / totalRefs : 0;
                 const significantLeak = invalidRefs >= 50;
 
-                console.log(`[Bookmark] Memory check: mapSize=${mapSize}, observers=${observerCount}, invalidRefs=${invalidRefs}/${totalRefs} (${(invalidRatio*100).toFixed(1)}%)`);
+                console.log(`[Bookmark] Memory check: mapSize=${mapSize}, observers=${observerCount}, invalidRefs=${invalidRefs}/${totalRefs} (${(invalidRatio * 100).toFixed(1)}%)`);
 
                 // 如果有明显异常 (地图过大或DOM不一致或太多无效引用)
                 if (mapSize > 1000 || (significantLeak && invalidRatio > 0.3) ||
@@ -1299,8 +1359,14 @@
             // 清理定时器
             try {
                 if (typeof liveSyncCleanerId !== 'undefined') clearInterval(liveSyncCleanerId);
-                if (window.__memoryCheckerId) { clearInterval(window.__memoryCheckerId); window.__memoryCheckerId = null; }
-                if (window.__deepCleanerId)   { clearInterval(window.__deepCleanerId);   window.__deepCleanerId = null; }
+                if (window.__memoryCheckerId) {
+                    clearInterval(window.__memoryCheckerId);
+                    window.__memoryCheckerId = null;
+                }
+                if (window.__deepCleanerId) {
+                    clearInterval(window.__deepCleanerId);
+                    window.__deepCleanerId = null;
+                }
             } catch (e) {
                 console.warn('[Bookmark] Error clearing intervals:', e);
             }
