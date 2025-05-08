@@ -230,14 +230,19 @@
         s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
         document.head.appendChild(s);                                                         // 注入
     }
-    const tip = (el, txt) => {                                                                // 显示提示气泡
+    const tip = (el, txt) => {
+        // 先清除页面上所有可能残留的气泡，避免重复或卡死
+        document.querySelectorAll(`.${CLS.tip}`).forEach(node => node.remove());
         const d = Object.assign(document.createElement('div'), {className: CLS.tip, textContent: txt});
-        document.body.appendChild(d);                                                         // 插入 body
-        const r = el.getBoundingClientRect();                                                 // 目标位置
-        d.style.left = r.left + r.width / 2 - d.offsetWidth / 2 + 'px';                       // 水平
-        d.style.top = r.top - d.offsetHeight - 6 + 'px';                                      // 垂直
-        return () => d.remove();                                                              // 返回关闭函数
+        document.body.appendChild(d);
+        const r = el.getBoundingClientRect();
+        d.style.left = r.left + r.width / 2 - d.offsetWidth / 2 + 'px';
+        d.style.top = r.top - d.offsetHeight - 6 + 'px';
+        // 安全保险：3 秒后自动销毁，防止意外卡死
+        setTimeout(() => d.remove(), 3000);
+        return () => d.remove();
     };
+
 
     /* ===== 全局数据 ===== */
     let folders = {};                                                                         // 收藏夹数据
@@ -721,7 +726,7 @@
                             {label:'NORMAL', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
                                     '```Please answer in natural language, and try to imitate Claude\'s style and thinking.Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
                             {label:'NO_GUESS', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
-                                    '```Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. Use natural and coherent language. Please answer in natural language, and try to imitate Claude\'s style and thinking.. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
+                                    '```Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. Use natural and coherent language. Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
                             {label:'change_code', text:'# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
                                     '```Strictly adhere to the following requirements:\n' +
                                     'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
@@ -730,7 +735,7 @@
                                     '2. No other functional code has been mistakenly modified.\n' +
                                     '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
                                     'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
-                                    'Please answer in natural language, and try to imitate Claude\'s style and thinking.. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
+                                    'Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'},
                         ];         // 自行增删
                         const hintBar=document.createElement('div');
                         hintBar.style.cssText='margin-top:6px;display:flex;gap:6px;flex-wrap:wrap';
