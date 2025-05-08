@@ -326,7 +326,12 @@
         historyNode.parentElement.insertBefore(wrap, historyNode);                            // 插入侧栏顶部
 
         /* ---------- 数据读取 ---------- */
-        folders = (await storage.get('folders')) || {}; // 从 storage 读取所有分组数据，如果没有则初始化为空对象
+        const storedFolders = (await storage.get('folders')) || {};
+        const storedOrder = (await storage.get('folderOrder')) || Object.keys(storedFolders);
+        folders = {};
+        storedOrder.forEach(fid => {
+            if (storedFolders[fid]) folders[fid] = storedFolders[fid];
+        });
         let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
         let _migrated = false; // 标记旧版本数据迁移逻辑
         Object.values(folders).forEach(f => {
@@ -965,8 +970,46 @@
                 highlightActive()
             };
 
+            // 先收集当前所有分组的 id 顺序
+            const keys = Object.keys(folders);
+            const idx = keys.indexOf(fid);
+            // 把拖拽事件绑到 header 上
+            header.dataset.idx = idx;
+            header.draggable = true;
+            header.ondragstart = e => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('folder', String(idx));
+            };
+            header.ondragover = e => {
+                e.preventDefault();
+                header.style.background = COLOR.bgHover;
+            };
+            header.ondragleave = () => {
+                header.style.background = COLOR.bgLight;
+            };
+            header.ondrop = e => {
+                e.preventDefault();
+                header.style.background = COLOR.bgLight;
+                const fromData = e.dataTransfer.getData('folder');
+                if (!fromData) return;    // 只有 folder 拖拽才处理
+                const from = parseInt(fromData, 10);
+                const to = parseInt(header.dataset.idx, 10);
+                if (from === to) return;
+                // 重新排序 keys
+                const moved = keys.splice(from, 1)[0];
+                keys.splice(to, 0, moved);
+                // 重建 folders 并持久化
+                const newFolders = {};
+                keys.forEach(id => newFolders[id] = folders[id]);
+                folders = newFolders;
+                storage.set({ folders, folderOrder: keys });
+                render();
+            };
+
+
             box.append(header, ul);
             return box;
+
         }
 
         /* ---------- 聊天渲染 ---------- */
