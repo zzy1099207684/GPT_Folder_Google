@@ -1107,20 +1107,27 @@
             if (!ed || !send || send.dataset.hooked) return;
             send.dataset.hooked = 1;                                                   // 标记已挂钩避免重复
 
-            const bumpActiveChat = () => {                                             // 把当前会话提至所在文件夹首位
-                if (!location.pathname.startsWith('/c/')) return;                      // 非会话页面直接忽略
-                const cur = location.href;                                             // 记录当前完整 URL
-                for (const [, folder] of Object.entries(folders)) {                 // 遍历所有收藏夹
-                    const i = folder.chats.findIndex(c => c.url && samePath(c.url, cur));// 查找当前会话索引
-                    if (i > 0) {                                                       // 若存在且不在首位
-                        const [chat] = folder.chats.splice(i, 1);                      // 从原位置取出
-                        folder.chats.unshift(chat);                                    // 插入数组开头
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});                                        // 同步到 chrome.storage
-                        render();                                                      // 立即重渲染侧栏
-                        break;                                                         // 处理完即可退出循环
-                    }
+            // 修改后版本：新增 i === -1 时插入逻辑，只对 activeFid 生效
+            const bumpActiveChat = () => {
+                if (!location.pathname.startsWith('/c/')) return;
+                const cur = location.href;
+                // 优先从 history 里取标题，取不到就用“新对话”
+                const title = qs(`div#history a[href*="${cur}"]`)?.textContent.trim() || '新对话';
+                const folder = activeFid ? folders[activeFid] : null;
+                if (!folder) return;
+                const i = folder.chats.findIndex(c => samePath(c.url, cur));
+                if (i >= 0) {
+                    // 已存在则上提
+                    const [chat] = folder.chats.splice(i, 1);
+                    folder.chats.unshift(chat);
+                } else {
+                    // 不存在则插入
+                    folder.chats.unshift({url: cur, title});
                 }
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                render();
             };
+
 
             // —— 修改后，排除“停止生成”状态 ——
             send.addEventListener('click', e => {
