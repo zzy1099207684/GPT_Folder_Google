@@ -808,10 +808,7 @@
                     try { currentNewChatObserver.disconnect(); } catch {}
                     currentNewChatObserver = null;
                 }
-                if (currentNewChatTimeout) {
-                    clearTimeout(currentNewChatTimeout);
-                    currentNewChatTimeout = null;
-                }
+
 
                 const clickedFid = fid;
                 activeFid = clickedFid;
@@ -826,8 +823,7 @@
                     window.dispatchEvent(new Event('popstate'));
                 }
 
-                // 添加超时保护和重试机制
-                let timeoutId;
+
 
                 // 定义observer - 监视history区域变化以检测新聊天
                 const observer = new MutationObserver(() => {
@@ -849,9 +845,7 @@
                     if (!newPaths.length) return;
 
                     observer.disconnect();
-                    clearTimeout(timeoutId);
                     currentNewChatObserver = null;
-                    currentNewChatTimeout = null;
 
                     /* 1. 依据侧栏顺序挑选最上面的新增会话 */
                     let newChatAnchor = anchors.find(a => {
@@ -908,11 +902,6 @@
 
                 observer.observe(qs('div#history'), {childList:true, subtree:true});
                 currentNewChatObserver = observer;
-                currentNewChatTimeout = setTimeout(() => {
-                    try { observer.disconnect(); } catch {}
-                    currentNewChatObserver = null;
-                    currentNewChatTimeout = null;
-                }, 10000);
             };
 
 
