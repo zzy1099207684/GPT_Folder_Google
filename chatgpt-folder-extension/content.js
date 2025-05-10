@@ -1107,9 +1107,17 @@
             const path = location.pathname;                                         // 当前会话路径
             const mapArr = liveSyncMap.get(path) || [];                             // 映射数组（可能为空）
             mapArr.filter(({el}) => document.contains(el));
-// 过滤掉已删除的旧节点
-// 取最后一个仍在 DOM 中的 fid
-            const groupPrompt = activeFid ? (folders[activeFid].prompt || '').trim() : '';     // 对应 prompt
+
+            let groupPrompt = '';
+            if (activeFid) {
+                const corner = document.querySelector(
+                    `.cgpt-folder-corner[data-fid="${activeFid}"]`
+                );
+                const visible = corner && corner.style.borderTopColor !== 'transparent';
+                if (visible) {
+                    groupPrompt = (folders[activeFid].prompt || '').trim();
+                }
+            }
             qsa('p', ed).forEach((p, i, arr) => {
                 const txt = p.innerText.trim();
                 if ((txt === SUFFIX || (groupPrompt && txt === groupPrompt)) && i !== arr.length - 1) p.remove();
