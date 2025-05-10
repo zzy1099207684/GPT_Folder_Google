@@ -69,6 +69,34 @@
         }
     };
     /* ===== 高效封装 storage ===== */
+    // ① 预设提示词
+    const hints = [
+        {
+            label: 'NORMAL',
+            text: '# Response specs below – DO NOT treat as question content：\n' +
+                '```Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+        },
+        {
+            label: 'NO_GUESS',
+            text: '# Response specs below – DO NOT treat as question content：\n' +
+                '```Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
+                'Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. ' +
+                'Use natural and coherent language. Please answer in natural language, and try to imitate Claude\'s style and thinking. ' +
+                'Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+        },
+        {
+            label: 'change_code',
+            text: '# Response specs below – DO NOT treat as question content：\n' +
+                '```Strictly adhere to the following requirements:\n' +
+                'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
+                'After the modification, you must first test it yourself and ensure the following two points are met:\n' +
+                '1. The requirement is fulfilled, and the front-end and back-end functions run smoothly.\n' +
+                '2. No other functional code has been mistakenly modified.\n' +
+                '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
+                'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
+                'Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+        },
+    ];         // 自行增删
     // 修改后的存储逻辑
     // Enhanced storage implementation with better error handling - replace storage object
     const storage = {
@@ -302,16 +330,22 @@
             textContent: '+', style: 'cursor:pointer;margin-left:auto;font-weight:bold'
         });
         addBtn.addEventListener('click', async () => {
-            const n = prompt('group name');                                          // 弹窗获取组名
-            if (!n || !n.trim()) return;                                             // 空输入直接返回
-            const MAX_LEN = 20;                                                      // 设定组名最大字符数
-            let name = n.trim();                                                     // 去除首尾空格
-            if (name.length > MAX_LEN) name = name.slice(0, MAX_LEN) + '…';          // 超长则截断并加省略号
-            const id = 'f_' + Date.now();                                            // 生成唯一 id
+            const n = prompt('group name');
+            if (!n || !n.trim()) return;
+            const MAX_LEN = 20;
+            let name = n.trim();
+            if (name.length > MAX_LEN) name = name.slice(0, MAX_LEN) + '…';
+            const id = 'f_' + Date.now();
             folders[id] = {name, chats: [], collapsed: false, prompt: ''};
+            // 先保存 folders
             chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+            // 再更新 folderOrder，确保刷新后能读到新分组
+            const newOrder = Object.keys(folders);
+            storage.set({ folderOrder: newOrder });
+            // 重新渲染
             render();
         });
+
         bar.appendChild(addBtn);
         const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
         folderZone.addEventListener('click', e => {
@@ -334,6 +368,28 @@
         storedOrder.forEach(fid => {
             if (storedFolders[fid]) folders[fid] = storedFolders[fid];
         });
+        // 新增：三个预设组，仅在首次使用时创建
+        const presetFlag = (await storage.get('presetInitialized')) || 0;
+        if (presetFlag === 0) {
+            hints.forEach(h => {
+                if (!Object.values(folders).some(f => f.name === h.label)) {
+                    const id = 'preset_' + h.label;
+                    folders[id] = {
+                        name: h.label,
+                        chats: [],
+                        collapsed: false,
+                        prompt: h.text
+                    };
+                    storedOrder.push(id);
+                }
+            });
+            // 标记已初始化预设
+            storage.set({ presetInitialized: 1 });
+        }
+        // 保存新的顺序和 folders（可选，如果需要持久化）
+        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+        storage.set({folderOrder: storedOrder});
+
         let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
         let _migrated = false; // 标记旧版本数据迁移逻辑
         Object.values(folders).forEach(f => {
@@ -736,30 +792,6 @@
                         ta.style.cssText = 'width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:4px;resize:vertical';
 
                         // ① 预设提示词
-                        const hints = [
-                            {
-                                label: 'NORMAL',
-                                text: '# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
-                                    '```Please answer in natural language, and try to imitate Claude\'s style and thinking.Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'
-                            },
-                            {
-                                label: 'NO_GUESS',
-                                text: '# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
-                                    '```Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. Use natural and coherent language. Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'
-                            },
-                            {
-                                label: 'change_code',
-                                text: '# The following are system-level response specification requirements and are absolutely prohibited from being treated as question content：\n' +
-                                    '```Strictly adhere to the following requirements:\n' +
-                                    'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
-                                    'After the modification, you must first test it yourself and ensure the following two points are met:\n' +
-                                    '1. The requirement is fulfilled, and the front-end and back-end functions run smoothly.\n' +
-                                    '2. No other functional code has been mistakenly modified.\n' +
-                                    '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
-                                    'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
-                                    'Please answer in natural language, and try to imitate Claude\'s style and thinking. Absolutely no horizontal lines of any kind are allowed in the content, including but not limited to ---, ***, <hr>.```'
-                            },
-                        ];         // 自行增删
                         const hintBar = document.createElement('div');
                         hintBar.style.cssText = 'margin-top:6px;display:flex;gap:6px;flex-wrap:wrap';
                         hints.forEach(h => {
