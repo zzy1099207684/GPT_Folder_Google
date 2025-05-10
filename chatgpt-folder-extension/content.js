@@ -316,7 +316,7 @@
         historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
         historyNode.addEventListener('click', historyClickHandler);
 
-        if (qs('#cgpt-bookmarks-wrapper')) return;                                            // 防重复
+        if (qs('#cgpt-bookmarks-wrapper')) return;               // 防重复
 
         /* ---------- DOM 构建 ---------- */
         const wrap = Object.assign(document.createElement('div'), {
