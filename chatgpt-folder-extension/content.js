@@ -640,7 +640,8 @@
                     // 原有删除同步逻辑
                     const activePaths = currentPaths;
                     let changed = false;
-                    const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
+                    const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+
                     if (!folderZone) return; // 安全检查
 
                     const fidList = Object.keys(folders);
@@ -994,7 +995,7 @@
                 const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || '会话';
                 f.chats.unshift({url, title: t}); // 插入到数组开头
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(2)');
+                const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
                 const fidList = Object.keys(folders);
                 const idx = fidList.indexOf(fid);
                 const oldBox = folderZone.children[idx];
