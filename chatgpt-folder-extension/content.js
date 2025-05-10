@@ -1,4 +1,11 @@
 (() => { // 立即执行函数隔离作用域
+    // 单实例哨兵：若已存在则直接退出，防止重复执行
+    if (window.__cgptBookmarksInstance) {
+        console.warn('[Bookmark] Duplicate instance detected, aborting.');
+        return;
+    }
+    window.__cgptBookmarksInstance = true;
+
     /* ===== 通用工具 ===== */
     function getDebugInfo() {
         return {
@@ -374,10 +381,35 @@
         const bar = Object.assign(document.createElement('div'), {
             textContent: 'Groups', style: 'display:flex;align-items:center;font:bold 14px/1 white;padding:4px 12px'
         });
+        // 保留原有两行
         const addBtn = Object.assign(document.createElement('span'), {
             textContent: '+', style: 'cursor:pointer;margin-left:auto;font-weight:bold'
         });
         bar.appendChild(addBtn);
+
+// 新增：点击“+”创建分组
+        addBtn.addEventListener('click', () => {
+            const raw = prompt('Group name', '');
+            if (!raw) return;                      // 取消或空输入
+            const name = raw.trim();
+            if (!name) return;
+
+            const fid = 'grp_' + Date.now().toString(36); // 生成简单唯一 ID
+            folders[fid] = {                              // 初始化分组结构
+                name: name.slice(0, 20) + (name.length > 20 ? '…' : ''),
+                chats: [],
+                collapsed: false,
+                prompt: ''
+            };
+
+            const order = Object.keys(folders);           // 维持渲染顺序
+            if (chrome?.runtime?.id) {
+                storage.set({folders, folderOrder: order});
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+            }
+            render();                                     // 刷新 UI
+        });
+
 
         const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
 // …原 folderZone 事件监听保持不变…
@@ -1091,7 +1123,20 @@
             del.style.cssText = 'cursor:pointer;color:white';
             del.dataset.url = chat.url;
             del.dataset.fid = fid;
+            del.onclick = e => {
+                e.stopPropagation();
+                // 从对应分组中删除这条聊天
+                const arr = folders[fid].chats;
+                const index = arr.findIndex(c => samePath(c.url, chat.url));
+                if (index !== -1) {
+                    arr.splice(index, 1);
+                    // 同步存储并重新渲染
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    render();
+                }
+            };
             li.append(link, del);
+
 
             parentUl.appendChild(li);
 
