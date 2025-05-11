@@ -1255,12 +1255,14 @@
             ed.addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     const btn = qs('#composer-submit-button');
+                    if (!btn) return;
                     const label = btn.getAttribute('aria-label') || btn.innerText;
                     if (label.toLowerCase().includes('stop')) return;
                     appendSuffix();
                     bumpActiveChat();
                 }
             }, {capture: true});
+
         }
 
         observers.add(new MutationObserver(bindSend)).observe(document.body, {childList: true, subtree: true});
