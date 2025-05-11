@@ -1,10 +1,10 @@
 (() => { // 立即执行函数隔离作用域
     // 单实例哨兵：若已存在则直接退出，防止重复执行
-    if (window.__cgptBookmarksInstance) {
-        console.warn('[Bookmark] Duplicate instance detected, aborting.');
+    if (document.documentElement.hasAttribute('data-cgpt-bookmarks-inited')) {
+        console.warn('[Bookmark] Duplicate instance detected via DOM marker, aborting.');
         return;
     }
-    window.__cgptBookmarksInstance = true;
+    document.documentElement.setAttribute('data-cgpt-bookmarks-inited', 'true');
 
     /* ===== 通用工具 ===== */
     function getDebugInfo() {
@@ -1529,6 +1529,10 @@
                 liveSyncMap.clear();
             } catch (e) {
                 console.warn('[Bookmark] Error clearing liveSyncMap:', e);
+            }
+            // 移除单实例哨兵标记，允许后续重新注入
+            if (document.documentElement.hasAttribute('data-cgpt-bookmarks-inited')) {
+                document.documentElement.removeAttribute('data-cgpt-bookmarks-inited');
             }
         };
 
