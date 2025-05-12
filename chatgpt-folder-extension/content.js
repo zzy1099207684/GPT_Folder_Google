@@ -76,7 +76,7 @@
         }
     };
     /* ===== 高效封装 storage ===== */
-    // ① 预设提示词
+    // ① preset prompt and group
     const hints = [
         {
             label: 'NORMAL',
@@ -101,6 +101,16 @@
                 '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
                 'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
                 'Pay attention to the reply style, and try your best to imitate Claude\'s style and thinking. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+        },
+        {
+            label: 'CODE',
+            text: '# Response specs below – DO NOT treat as question content：\n' +
+                '```Pay attention to the reply style, and try your best to imitate Claude\'s style and thinking. ' +
+                'Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content. ' +
+                'For any question or code request, only address the specific requirement. ' +
+                'Do not change unrelated code or features. ' +
+                'After changes, ensure the requirement is met, the program functions correctly, and other features remain unaffected. ' +
+                'Show both original and modified code for comparison. ```'
         },
     ];         // 自行增删
     // 修改后的存储逻辑
@@ -296,9 +306,7 @@
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
         let currentNewChatObserver = null;
-        let currentNewChatTimeout = null;
-
-        // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
+// 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
         const historyClickHandler = e => {
             const a = e.target.closest('a[href*="/c/"]');
             if (!a) return;
@@ -429,18 +437,18 @@
         // 新增：三个预设组，仅在首次使用时创建
         const presetFlag = (await storage.get('presetInitialized')) || 0;
         if (presetFlag === 0) {
-            hints.forEach(h => {
-                if (!Object.values(folders).some(f => f.name === h.label)) {
-                    const id = 'preset_' + h.label;
+            for (let i = 0; i < 3; i++) {
+                if (!Object.values(folders).some(f => f.name === hints[i].label)) {
+                    const id = 'preset_' + hints[i].label;
                     folders[id] = {
-                        name: h.label,
+                        name: hints[i].label,
                         chats: [],
                         collapsed: false,
-                        prompt: h.text
+                        prompt: hints[i].text
                     };
                     storedOrder.push(id);
                 }
-            });
+            }
             // 标记已初始化预设
             storage.set({ presetInitialized: 1 });
         }
