@@ -81,7 +81,7 @@
         {
             label: 'NORMAL',
             text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Pay attention to the reply style, Please answer in natural language, and try your best to imitate Claude\'s style and thinking. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+                '```Pay attention to the reply style, and try your best to imitate Claude\'s style and thinking. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
         },
         {
             label: 'NO_GUESS',
