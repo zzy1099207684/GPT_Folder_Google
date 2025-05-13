@@ -327,15 +327,20 @@
             }, 0);
         };
 
-        historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
+        historyNode._folderClickHandler = historyClickHandler;
         historyNode.addEventListener('click', historyClickHandler);
 
-        if (qs('#cgpt-bookmarks-wrapper')) return;               // 防重复
+        const existingWrapper = qs('#cgpt-bookmarks-wrapper');
+        if (existingWrapper) {
+            console.warn('[Bookmark] 发现重复 wrapper，移除后重新初始化。');
+            existingWrapper.remove();
+        }
 
         /* ---------- DOM 构建 ---------- */
         const wrap = Object.assign(document.createElement('div'), {
             id: 'cgpt-bookmarks-wrapper', style: 'width:100%;margin-bottom:4px'
         });
+
         const inner = Object.assign(document.createElement('div'), {style: 'padding:4px 0'});
 
         /* ---------- 新增：页面字体选择块 ---------- */
@@ -729,10 +734,25 @@
         linkDetachObs.observe(document.body, {childList: true, subtree: true});
 
 
-        /* ---------- 渲染 ---------- */
+        /* ---------- 聊天去重工具 ---------- */
+        function dedupChats() {
+            let changed = false;
+            Object.values(folders).forEach(f => {
+                const uniq = [];
+                f.chats.forEach(c => {
+                    if (!uniq.some(u => samePath(u.url, c.url))) uniq.push(c);   // 同一路径仅保留一次
+                });
+                if (uniq.length !== f.chats.length) {
+                    f.chats = uniq;
+                    changed = true;
+                }
+            });
+            if (changed && chrome?.runtime?.id)                                // 仅在确有变动时持久化
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+        }
 
-        // Add after renderChat function, in the render() function
         function render() {
+            dedupChats();                                                       // ← 加入去重
             // —— 新增：对所有路径剔除已断开节点 ——
             for (const [path, arr] of liveSyncMap) {
                 const live = arr.filter(item => item.el.isConnected);
@@ -743,10 +763,7 @@
             Object.entries(folders)
                 .forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
 
-            // 添加定期清理，避免引用堆积
-            if (Math.random() < 0.2) {
-                setTimeout(cleanupLiveSyncMap, 0);
-            }
+            if (Math.random() < 0.2) setTimeout(cleanupLiveSyncMap, 0);
         }
 
 
