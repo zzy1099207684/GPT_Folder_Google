@@ -291,15 +291,34 @@
     /* ===== 全局数据 ===== */
     let folders = {};                                                                         // 收藏夹数据
 
-    /* ===== 等待侧栏就绪 ===== */
+    // 修复窗口尺寸变化后侧边栏重复插入的问题
     const readyObs = observers.add(new MutationObserver(() => {
         const hist = qs('div#history');
-        const wrapper = qs('#cgpt-bookmarks-wrapper');
+
+        // ① 若出现多个 wrapper，仅保留第一个
+        const wrappers = qsa('#cgpt-bookmarks-wrapper');
+        if (wrappers.length > 1) {
+            wrappers.slice(1).forEach(w => w.remove());
+        }
+
+        const wrapper = wrappers[0];   // 可能为 undefined
+
+        // ② wrapper 已存在但挂载位置不正确 → 移动到当前 history 所在容器
+        if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
+            try {
+                hist.parentElement.insertBefore(wrapper, hist);
+            } catch (e) {
+                console.warn('[Bookmark] Failed to relocate wrapper:', e);
+            }
+        }
+
+        // ③ history 存在且 wrapper 不存在 → 重新初始化
         if (hist && !wrapper) {
-            initBookmarks(hist);      // #history 又出现并且 wrapper 不在时重新插入
+            initBookmarks(hist);
         }
     }));
     readyObs.observe(document.body, {childList: true, subtree: true});
+
 
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {
