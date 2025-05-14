@@ -22,6 +22,26 @@
         console.table(getDebugInfo());
         return getDebugInfo();
     };
+
+    /* ===== debounced save ===== */
+    let _saveFoldersTimer = null;
+    /**
+     * 将 folders 变化延迟写入, 默认 8 s 后执行(可按需调整)
+     * 若在等待期间再次调用, 则重新计时
+     */
+    function scheduleSaveFolders(delay = 8000) {
+        clearTimeout(_saveFoldersTimer);
+        _saveFoldersTimer = setTimeout(() => {
+            try {
+                if (chrome?.runtime?.id) {
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                }
+            } catch (e) {
+                console.warn('[Bookmark] Debounced save error:', e);
+            }
+        }, delay);
+    }
+
     // 在observers对象中添加新方法
     const observers = {
         list: [],
@@ -128,12 +148,15 @@
 
         async get(key) {
             try {
-                return (await chrome.storage.sync.get(key))[key];
+                if (!chrome?.runtime?.id) return null;          // 新增：上下文失效时短路
+                const obj = await chrome.storage.sync.get(key); // 继续正常读取
+                return obj[key];
             } catch (e) {
                 console.warn('[Bookmark] storage.get error', e);
                 return null;
             }
         },
+
 
         async set(obj) {
             try {
@@ -165,25 +188,25 @@
                 // 设置新定时器
                 this._writeTimer = setTimeout(async () => {
                     try {
-                        const dataToWrite = {...this._pendingWrites};
+                        const dataToWrite = {...this._pendingWrites};        // 先备份待写数据
+                        await chrome.storage.sync.set(dataToWrite);          // 成功后再清空队列
                         this._pendingWrites = {};
-                        await chrome.storage.sync.set(dataToWrite);
+
                         this._lastWriteTime = Date.now();
                         this._retryCount = 0; // 重置重试计数
                     } catch (e) {
-                        if (e?.message?.includes('Extension context invalidated')) {
-                            console.warn('[Bookmark] storage.set skipped (context lost)', e);
-                            this._clearPendingWrites();
+                        if (e?.message?.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {      // 新增：写入过频
+                            console.warn('[Bookmark] Too many writes, backing off:', e);
+                            this._retryWrite(Math.max(delay * 2, 60000));                   // 至少等待 60 s
                         } else if (e?.message?.includes('QUOTA_BYTES_PER_ITEM') || e?.message?.includes('QUOTA_BYTES')) {
-                            // 存储配额问题处理
                             console.warn('[Bookmark] Storage quota exceeded:', e);
                             this._handleQuotaError();
                         } else {
                             console.warn('[Bookmark] storage.set error', e);
-                            // 重试逻辑
                             this._retryWrite(delay * 2);
                         }
                     }
+
                 }, delay);
             } catch (e) {
                 console.warn('[Bookmark] Error setting up storage write:', e);
@@ -244,16 +267,23 @@
                 clearTimeout(this._writeTimer);
                 this._writeTimer = setTimeout(async () => {
                     try {
-                        const dataToWrite = {...this._pendingWrites};
-                        this._pendingWrites = {};
+                        const dataToWrite = {...this._pendingWrites};          // 先备份，成功后再清空
                         await chrome.storage.sync.set(dataToWrite);
+                        this._pendingWrites = {};
                         this._lastWriteTime = Date.now();
                         this._retryCount = 0;
                     } catch (e) {
                         console.warn(`[Bookmark] Retry ${this._retryCount} failed:`, e);
+
+                        if (e?.message?.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {     // 新增：写入过频
+                            this._retryWrite(Math.max(delay * 2, 60000));                  // 强制 60 s 退避
+                            return;
+                        }
+
                         if (this._retryCount >= this._maxRetries) {
-                            console.error('[Bookmark] Max retries reached, clearing pending writes');
-                            this._clearPendingWrites();
+                            console.warn('[Bookmark] Max retries reached, will retry later with back-off');
+                            this._retryCount = 0;
+                            this._retryWrite(Math.min(delay * 2, 60000));                  // 指数退避
                         } else {
                             this._retryWrite(delay * 1.5);
                         }
@@ -304,6 +334,7 @@
         const wrapper = wrappers[0];   // 可能为 undefined
 
         // ② wrapper 已存在但挂载位置不正确 → 移动到当前 history 所在容器
+        // ② wrapper 已存在但挂载位置不正确 → 移动到当前 history 所在容器
         if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
             try {
                 hist.parentElement.insertBefore(wrapper, hist);
@@ -312,10 +343,20 @@
             }
         }
 
-        // ③ history 存在且 wrapper 不存在 → 重新初始化
+        /* 新增：history 被折叠(==null)但旧 wrapper 仍在时，先彻底清理，等待重新初始化 */
+        if (!hist && wrapper) {
+            try { wrapper.remove(); } catch {}
+            if (window.__cgptBookmarksCleanup) {
+                try { window.__cgptBookmarksCleanup(); } catch {}
+            }
+            return;            // 让下一次 observer 检测到 history 回来后再 init
+        }
+
+// ③ history 存在且 wrapper 不存在 → 重新初始化
         if (hist && !wrapper) {
             initBookmarks(hist);
         }
+
     }));
     readyObs.observe(document.body, {childList: true, subtree: true});
 
@@ -453,7 +494,6 @@
         storedOrder.forEach(fid => {
             if (storedFolders[fid]) folders[fid] = storedFolders[fid];
         });
-        // 新增：三个预设组，仅在首次使用时创建
         const presetFlag = (await storage.get('presetInitialized')) || 0;
         if (presetFlag === 0) {
             for (let i = 0; i < 3; i++) {
@@ -468,12 +508,22 @@
                     storedOrder.push(id);
                 }
             }
-            // 标记已初始化预设
-            storage.set({ presetInitialized: 1 });
+            // 首次创建：同时写入初始化标记、folders 与排序
+            storage.set({
+                presetInitialized: 1,
+                folders,
+                folderOrder: storedOrder
+            });
+        } else {
+            // 侧栏重新挂载时，确保本次内存里的 folders 与排序也同步持久化
+            storage.set({
+                folders,
+                folderOrder: storedOrder
+            });
         }
-        // 保存新的顺序和 folders（可选，如果需要持久化）
+// 同步给后台脚本（原逻辑保留）
         chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-        storage.set({folderOrder: storedOrder});
+
 
         let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
         let _migrated = false; // 标记旧版本数据迁移逻辑
@@ -611,18 +661,18 @@
                 // Clean lastActiveMap with error handling
                 try {
                     const paths = [...liveSyncMap.keys()];
-                    let lastActiveMapChanged = false;
-
-                    Object.keys(lastActiveMap).forEach(path => {
-                        if (!paths.includes(path) && path !== '__history__') {
-                            delete lastActiveMap[path];
-                            lastActiveMapChanged = true;
-                        }
-                    });
-
-                    if (lastActiveMapChanged) {
-                        storage.set({lastActiveMap});
+// liveSyncMap 为空通常是侧栏被临时卸载的窗口状态, 此时跳过修剪以免误删映射
+                    if (paths.length) {
+                        let lastActiveMapChanged = false;
+                        Object.keys(lastActiveMap).forEach(path => {
+                            if (!paths.includes(path) && path !== '__history__') {
+                                delete lastActiveMap[path];
+                                lastActiveMapChanged = true;
+                            }
+                        });
+                        if (lastActiveMapChanged) storage.set({lastActiveMap});
                     }
+
                 } catch (err) {
                     console.warn('[Bookmark] Error during lastActiveMap cleanup:', err);
                 }
@@ -778,6 +828,7 @@
             const corner = document.createElement('div');
             corner.className = 'cgpt-folder-corner';
             corner.dataset.fid = fid;
+
             corner.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;border-top:12px solid transparent;border-right:12px solid transparent';
             header.append(corner);
 
@@ -1027,11 +1078,9 @@
             ul.style.cssText = `list-style:none;padding-left:8px;margin:4px 0 0;${f.collapsed ? 'display:none' : ''}`;
             f.chats.forEach(c => renderChat(ul, fid, c));
 
-            header.onclick = async () => {
-                f.collapsed = !f.collapsed;
-                if (chrome?.runtime?.id) {
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                }
+            header.onclick = () => {
+                f.collapsed = !f.collapsed;          // 更新本地状态
+                scheduleSaveFolders();               // 通过节流函数延迟写入
                 render();
                 highlightActive();
             };
@@ -1208,15 +1257,11 @@
             mapArr.filter(({el}) => document.contains(el));
 
             let groupPrompt = '';
-            if (activeFid) {
-                const corner = document.querySelector(
-                    `.cgpt-folder-corner[data-fid="${activeFid}"]`
-                );
-                const visible = corner && corner.style.borderTopColor !== 'transparent';
-                if (visible) {
-                    groupPrompt = (folders[activeFid].prompt || '').trim();
-                }
+            if (activeFid && folders[activeFid]) {
+                // 无论侧边栏是否折叠，直接读取当前活跃分组的 prompt
+                groupPrompt = (folders[activeFid].prompt || '').trim();
             }
+
             qsa('p', ed).forEach((p, i, arr) => {
                 const txt = p.innerText.trim();
                 if ((txt === SUFFIX || (groupPrompt && txt === groupPrompt)) && i !== arr.length - 1) p.remove();
@@ -1331,15 +1376,23 @@
                     el.style.color = '#b2b2b2';
                 });
             }
-            const arr = liveSyncMap.get(path);
+
+            /* 新增：实时剔除失连节点，避免重复映射导致错选 */
+            let arr = liveSyncMap.get(path);
             if (arr && arr.length) {
-                const isHistoryView = lastActiveMap[path] === '__history__';   // ← 本次来源于 history 面板
+                const live = arr.filter(item => item.el && item.el.isConnected);
+                if (live.length !== arr.length) liveSyncMap.set(path, live);
+                arr = live;
+            }
+
+            if (arr && arr.length) {
+                const isHistoryView = lastActiveMap[path] === '__history__';
                 arr.forEach(({el}) => {
-                    const inHistory = !!el.closest('#history');                // 判断链接属于 history 还是分组
-                    if (isHistoryView && !inHistory) {                         // 来自 history 且是组内链接 → 不高亮
+                    const inHistory = !!el.closest('#history');
+                    if (isHistoryView && !inHistory) {
                         el.style.background = '';
                         el.style.color = '#b2b2b2';
-                    } else {                                                   // 其余情况正常高亮
+                    } else {
                         el.style.background = 'rgba(255,255,255,.07)';
                         el.style.color = '#fff';
                     }
@@ -1347,12 +1400,19 @@
             }
             activePath = path;
 
+            /* 新增：优先根据刚刚点击的具体链接确定选中组，彻底消除同一会话跨组错标 */
             let storedFid = lastActiveMap[path];
-            if (storedFid === '__history__') {        // 新增：来自 history，保持未选中
+            if (!storedFid && lastClickedChatEl) {
+                const hit = arr?.find(i => i.el === lastClickedChatEl);
+                storedFid = hit?.fid;
+            }
+
+            if (storedFid === '__history__') {
                 activeFid = null;
-            } else if (storedFid && arr?.some(i => i.fid === storedFid)) {
+            } else if (storedFid && (arr?.some(i => i.fid === storedFid) || !arr || !arr.length)) {
+                // 当 liveSyncMap 暂时为空时也保留 storedFid
                 activeFid = storedFid;
-            } else if (arr && arr.length && !clearActiveOnHistoryClick) { // 原有回退逻辑
+            } else if (arr && arr.length && !clearActiveOnHistoryClick) {
                 for (const [fid, folder] of Object.entries(folders)) {
                     if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
                         activeFid = fid;
@@ -1361,10 +1421,12 @@
                 }
             }
 
+
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
         };
+
 
 
         highlightActive();                                                      // 初始渲染立即同步
