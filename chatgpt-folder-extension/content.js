@@ -833,7 +833,7 @@
             header.append(corner);
 
             const arrow = document.createElement('span');
-            arrow.textContent = f.collapsed ? '▶' : '▼';
+            arrow.textContent = f.collapsed ? '∴' : '∵';
             const lbl = document.createElement('span');
             lbl.textContent = f.name;
             lbl.style.cssText = 'flex:1;white-space:normal;word-break:break-all;line-height:1.25';
