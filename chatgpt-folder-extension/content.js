@@ -465,7 +465,7 @@
             folders[fid] = {                              // 初始化分组结构
                 name: name.slice(0, 20) + (name.length > 20 ? '…' : ''),
                 chats: [],
-                collapsed: false,
+                collapsed: true,
                 prompt: ''
             };
 
@@ -502,7 +502,7 @@
                     folders[id] = {
                         name: hints[i].label,
                         chats: [],
-                        collapsed: false,
+                        collapsed: true,
                         prompt: hints[i].text
                     };
                     storedOrder.push(id);
@@ -1234,8 +1234,8 @@
             };
 
             const del = document.createElement('span');
-            del.textContent = '✖';
-            del.style.cssText = 'cursor:pointer;color:white';
+            del.textContent = '✕';
+            del.style.cssText = 'cursor:pointer;color:white;position:relative;left:-6px';
             del.dataset.url = chat.url;
             del.dataset.fid = fid;
             del.onclick = e => {
