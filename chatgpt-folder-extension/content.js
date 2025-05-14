@@ -25,6 +25,7 @@
 
     /* ===== debounced save ===== */
     let _saveFoldersTimer = null;
+
     function scheduleSaveFolders(delay = 2000) {
         clearTimeout(_saveFoldersTimer);
         _saveFoldersTimer = setTimeout(async () => {
@@ -73,8 +74,39 @@
             }
         }
     };
-    const CLS = {tip: 'cgpt-tip'};                                                      // 样式类名常量
-    const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'}; // 统一颜色常量
+    /* ===== 通用工具 ===== */
+    const CLS = {tip: 'cgpt-tip'};
+    const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'};
+
+    /* ---------- pointerEvents 失效修复 ---------- */
+    function isBlockingOverlayExist() {
+        // 任意仍在屏幕上的全屏遮罩都会令函数返回 true
+        return !!document.querySelector(
+            '[data-state="open"][role="dialog"],' +           // Radix 弹窗 / 侧边栏
+            '.fixed.inset-0[data-aria-hidden="true"],' +      // ChatGPT 本身的全屏层
+            '.immersive-translate-modal[style*="display: flex"]'
+        );
+    }
+
+    function restorePointerEvents() {
+        const b = document.body;
+        if (b && b.style.pointerEvents === 'none' && !isBlockingOverlayExist()) {
+            b.style.pointerEvents = '';
+        }
+    }
+
+// 页面初始化后立即尝试一次
+    requestAnimationFrame(restorePointerEvents);
+
+// 关键场景下再检查一次，确保后续状态同步
+    window.addEventListener('resize', restorePointerEvents, {passive: true});
+    const tryRestoreLater = () => setTimeout(restorePointerEvents, 50);
+    document.addEventListener('pointerup', tryRestoreLater, true);
+    document.addEventListener('dragend', tryRestoreLater, true);
+    new MutationObserver(restorePointerEvents)
+        .observe(document.body, {attributes: true, attributeFilter: ['style']});
+    /* ---------- 修复段结束 ---------- */
+// 统一颜色常量
     const samePath = (a, b) => new URL(a, location.origin).pathname === new URL(b, location.origin).pathname; // 比较路径
     // 增强的选择器函数
     const qs = (sel, root = document) => {
@@ -344,9 +376,15 @@
 
         /* 新增：history 被折叠(==null)但旧 wrapper 仍在时，先彻底清理，等待重新初始化 */
         if (!hist && wrapper) {
-            try { wrapper.remove(); } catch {}
+            try {
+                wrapper.remove();
+            } catch {
+            }
             if (window.__cgptBookmarksCleanup) {
-                try { window.__cgptBookmarksCleanup(); } catch {}
+                try {
+                    window.__cgptBookmarksCleanup();
+                } catch {
+                }
             }
             return;            // 让下一次 observer 检测到 history 回来后再 init
         }
@@ -365,6 +403,7 @@
         /* ---------- 辅助函数 ---------- */
         const liveSyncMap = new Map();
         let currentNewChatObserver = null;
+        let currentNewChatPopHandler = null;
 // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
         const historyClickHandler = e => {
             const a = e.target.closest('a[href*="/c/"]');
@@ -422,9 +461,7 @@
         });
 
 
-
-
-        ['inherit','SimSun','SimHei','Microsoft YaHei','Segoe UI','Arial'].forEach(f => {
+        ['inherit', 'SimSun', 'SimHei', 'Microsoft YaHei', 'Segoe UI', 'Arial'].forEach(f => {
             const o = document.createElement('option');
             o.value = f;
             o.textContent = f;
@@ -489,10 +526,16 @@
         /* ---------- 数据读取 ---------- */
         const storedFolders = (await storage.get('folders')) || {};
         const storedOrder = (await storage.get('folderOrder')) || Object.keys(storedFolders);
+
+// 若 storage 仍为空但全局 folders 已有内容(首次安装后立即缩小窗口)则回退到内存版本
+        const baseFolders = Object.keys(storedFolders).length ? storedFolders : folders;
+        const order = storedOrder.length ? storedOrder : Object.keys(baseFolders);
+
         folders = {};
-        storedOrder.forEach(fid => {
-            if (storedFolders[fid]) folders[fid] = storedFolders[fid];
+        order.forEach(fid => {
+            if (baseFolders[fid]) folders[fid] = baseFolders[fid];
         });
+
         const presetFlag = (await storage.get('presetInitialized')) || 0;
         if (presetFlag === 0) {
             for (let i = 0; i < 3; i++) {
@@ -976,44 +1019,60 @@
                     try { currentNewChatObserver.disconnect(); } catch {}
                     currentNewChatObserver = null;
                 }
+                if (currentNewChatPopHandler) {
+                    window.removeEventListener('popstate', currentNewChatPopHandler);
+                    currentNewChatPopHandler = null;
+                }
 
                 const clickedFid = fid;
                 activeFid = clickedFid;
+                window.__cgptPendingFid = clickedFid;
+                const token = Date.now().toString(36);
+                window.__cgptPendingToken = token;
+
+                // 保底：把根路径映射到当前分组，侧栏自动收起再展开仍能保持高亮
+                lastActiveMap['/'] = clickedFid;
+                if (chrome?.runtime?.id) chrome.storage.sync.set({lastActiveMap});
 
                 /* ==== 新增：窄屏兜底监听 ==== */
                 const initPath = location.pathname;
                 const popHandler = () => {
                     try {
-                        if (location.pathname !== initPath && location.pathname.startsWith('/c/')) {
+                        if (token === window.__cgptPendingToken &&
+                            location.pathname !== initPath &&
+                            location.pathname.startsWith('/c/')) {
                             window.removeEventListener('popstate', popHandler);
+                            currentNewChatPopHandler = null;
 
                             const newUrl = location.href;
-                            if (folders[clickedFid] &&
-                                !folders[clickedFid].chats.some(c => samePath(c.url, newUrl))) {
-                                const title =
-                                    qs('nav h1')?.textContent.trim() ||
-                                    '新对话';
-                                folders[clickedFid].chats.unshift({url: newUrl, title});
-                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                            }
-
                             const p = location.pathname;
                             lastActiveMap[p] = clickedFid;
-                            storage.set({lastActiveMap});
+                            if (chrome?.runtime?.id) {
+                                // 立即落盘，确保侧边栏重新挂载时能取到
+                                chrome.storage.sync.set({lastActiveMap});
+                            }
                             activeFid = clickedFid;
                             render();
                             highlightActive();
 
                             if (currentNewChatObserver) {
-                                try { currentNewChatObserver.disconnect(); } catch {}
+                                try {
+                                    currentNewChatObserver.disconnect();
+                                } catch {
+                                }
                                 currentNewChatObserver = null;
+                                if (currentNewChatPopHandler) {
+                                                            window.removeEventListener('popstate', currentNewChatPopHandler);
+                                                           currentNewChatPopHandler = null;
+                                                        }
                             }
                         }
                     } catch (err) {
                         console.warn('[Bookmark] Fallback popstate handler error:', err);
                     }
                 };
-                window.addEventListener('popstate', popHandler, {once:false});
+                window.addEventListener('popstate', popHandler, {once: false});
+                currentNewChatPopHandler = popHandler;
                 /* ==== 兜底结束 ==== */
 
                 const prevPaths = new Set(
@@ -1021,6 +1080,8 @@
                 );
                 const globalNewBtn = qs('button[aria-label="New chat"]');
                 if (globalNewBtn) {
+                    // ↓ 避免全局按钮把刚设好的组高亮清掉
+                    window.__cgptSuppressGroupClear = true;
                     globalNewBtn.click();
                 } else {
                     history.pushState({}, '', '/');
@@ -1028,10 +1089,9 @@
                 }
 
 
-
-
                 // 定义observer - 监视history区域变化以检测新聊天
                 const observer = new MutationObserver(() => {
+                    if (token !== window.__cgptPendingToken) return;
                     const anchors = qsa('div#history a[href*="/c/"]');
 
                     // 当前路径集合
@@ -1084,31 +1144,34 @@
                     const title = (newChatAnchor?.textContent || '新对话').trim();
 
                     try {
-                        // 使用保存的clickedFid而非可能会变化的activeFid
-                        if (folders[clickedFid] && Array.isArray(folders[clickedFid].chats)) {
-                            // 已存在同一路径就跳过，防止因多次点击产生重复
-                            if (!folders[clickedFid].chats.some(c => samePath(c.url, newChatUrl))) {
-                                folders[clickedFid].chats.unshift({url: newChatUrl, title});
-                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                            }
-                        } else {
-                            console.warn(`[Bookmark] Cannot add chat to folder: clickedFid=${clickedFid}, folderExists=${!!folders[clickedFid]}`);
-                        }
-
-                        // 更新lastActiveMap也使用clickedFid
                         const path = new URL(newChatUrl).pathname;
                         lastActiveMap[path] = clickedFid;
-                        storage.set({lastActiveMap});
+                        if (chrome?.runtime?.id) {
+                            chrome.storage.sync.set({lastActiveMap});
+                        }
 
-                        // 重新渲染并高亮
-                        render();
-                        highlightActive();
+                        // 把新会话写入分组；若已存在则上移到最前
+                        const folder = folders[clickedFid];
+                        if (folder) {
+                            const i = folder.chats.findIndex(c => samePath(c.url, newChatUrl));
+                            if (i >= 0) {
+                                const [chat] = folder.chats.splice(i, 1);
+                                folder.chats.unshift(chat);
+                            } else {
+                                folder.chats.unshift({url: newChatUrl, title});
+                            }
+                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            render();               // 重新渲染以建立 liveSyncMap
+                        }
+
+                        highlightActive();          // 更新高亮，保持白角标
                     } catch (err) {
-                        console.warn('[Bookmark] Error adding new chat:', err);
+                        console.warn('[Bookmark] Error processing new chat metadata:', err);
                     }
+
                 });
 
-                observer.observe(qs('div#history'), {childList:true, subtree:true});
+                observer.observe(qs('div#history'), {childList: true, subtree: true});
                 currentNewChatObserver = observer;
             };
 
@@ -1295,11 +1358,43 @@
             const mapArr = liveSyncMap.get(path) || [];                             // 映射数组（可能为空）
             mapArr.filter(({el}) => document.contains(el));
 
-            let groupPrompt = '';
-            if (activeFid && folders[activeFid]) {
-                // 无论侧边栏是否折叠，直接读取当前活跃分组的 prompt
-                groupPrompt = (folders[activeFid].prompt || '').trim();
+            const storedFid = lastActiveMap[path];
+
+            /* ① 最高优先：仍处于“New chat → 首条消息”流程时，用挂起分组 */
+            let currentFid = (window.__cgptPendingFid && folders[window.__cgptPendingFid])
+                ? window.__cgptPendingFid
+                : null;
+
+            /* ② 其次：已建立的路径→分组映射 */
+            if (!currentFid && storedFid && storedFid !== '__history__' && folders[storedFid]) {
+                currentFid = storedFid;
             }
+
+            /* ③ 再次：上一次有效的 activeFid */
+            if (!currentFid) currentFid = activeFid; // ② 再看临时/旧值
+
+            if (!currentFid || !folders[currentFid]) {                         // ③ 最后全表扫描
+                for (const [fid, folder] of Object.entries(folders)) {
+                    if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
+                        currentFid = fid;
+                        break;
+                    }
+                }
+            }
+
+            if (currentFid && currentFid !== activeFid) activeFid = currentFid;
+
+            if (!currentFid) {                                                     // ③ 最后扫描各分组
+                for (const [fid, folder] of Object.entries(folders)) {
+                    if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
+                        currentFid = fid;
+                        activeFid = fid;
+                        break;
+                    }
+                }
+            }
+
+            const groupPrompt = currentFid ? (folders[currentFid].prompt || '').trim() : '';
 
             qsa('p', ed).forEach((p, i, arr) => {
                 const txt = p.innerText.trim();
@@ -1336,8 +1431,38 @@
                 const cur = location.href;
                 // 优先从 history 里取标题，取不到就用“新对话”
                 const title = qs(`div#history a[href*="${cur}"]`)?.textContent.trim() || '新对话';
-                const folder = activeFid ? folders[activeFid] : null;
+                const curPath = new URL(cur).pathname;
+
+                let folderFid = activeFid && folders[activeFid] ? activeFid : null;
+                if (!folderFid) {                                          // 若 activeFid 失效则查映射
+                    const cand = lastActiveMap[curPath];
+                    if (cand && cand !== '__history__' && folders[cand]) {
+                        folderFid = cand;
+                        activeFid = cand;                                  // 同步回全局
+                    }
+                }
+
+                if (!folderFid && window.__cgptPendingFid &&
+                    folders[window.__cgptPendingFid]) {                    // ③′ 最后兜底：使用待归属分组
+                    folderFid = window.__cgptPendingFid;
+                    activeFid = folderFid;
+                }
+                if (!folderFid) {
+                    for (const [fid, folder] of Object.entries(folders)) {
+                        if (folder.chats.some(c => samePath(c.url, cur))) {
+                            folderFid = fid;
+                            activeFid = fid;
+                            break;
+                        }
+                    }
+                }
+
+                const folder = folderFid ? folders[folderFid] : null;
                 if (!folder) return;
+                if (folderFid && !lastActiveMap[curPath]) {
+                    lastActiveMap[curPath] = folderFid;
+                    if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                }
                 const i = folder.chats.findIndex(c => samePath(c.url, cur));
                 if (i >= 0) {
                     // 已存在则上提
@@ -1350,6 +1475,10 @@
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();
                 highlightActive();
+                if (window.__cgptPendingFid === folderFid) {       // 本次新会话已完整归档，清除挂起状态
+                    window.__cgptPendingFid = null;
+                    window.__cgptPendingToken = null;
+                }
             };
 
 
@@ -1403,11 +1532,30 @@
             setTimeout(highlightActive, 0);
         });
 
-        const globalNewBtn = qs('a[aria-label="New chat"],button[aria-label="New chat"]');
-        if (globalNewBtn) globalNewBtn.addEventListener('click', clearGroupHighlight);
+        // 全局 New chat 事件委托，兼容按钮被反复卸载/重建
+        if (!window.__cgptGlobalNewHooked) {
+            window.__cgptGlobalNewHooked = true;
+            document.addEventListener('click', e => {
+                const btn = e.target.closest('[aria-label="New chat"]');
+                if (!btn) return;
+
+                // 若由组内 newBtn 间接触发，则仅复位标志，保留组高亮
+                if (window.__cgptSuppressGroupClear) {
+                    window.__cgptSuppressGroupClear = false;
+                    return;
+                }
+                clearGroupHighlight();
+            }, true);           // 捕获阶段，先于 ChatGPT 自身逻辑执行
+        }
+
 
         const highlightActive = () => {
             const path = location.pathname;
+
+            /* 若仍在“New chat”挂起阶段，直接锁定该分组避免错跳 */
+            if (window.__cgptPendingFid && folders[window.__cgptPendingFid]) {
+                activeFid = window.__cgptPendingFid;
+            }
             if (activePath) {
                 const oldArr = liveSyncMap.get(activePath);
                 if (oldArr) oldArr.forEach(({el}) => {
@@ -1447,10 +1595,9 @@
             }
 
             if (storedFid === '__history__') {
-                activeFid = null;
-            } else if (storedFid && (arr?.some(i => i.fid === storedFid) || !arr || !arr.length)) {
-                // 当 liveSyncMap 暂时为空时也保留 storedFid
-                activeFid = storedFid;
+                activeFid = null;                                 // 历史面板点击：清除高亮
+            } else if (storedFid && folders[storedFid]) {
+                activeFid = storedFid;                            // 始终信任映射表
             } else if (arr && arr.length && !clearActiveOnHistoryClick) {
                 for (const [fid, folder] of Object.entries(folders)) {
                     if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
@@ -1465,7 +1612,6 @@
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
         };
-
 
 
         highlightActive();                                                      // 初始渲染立即同步
