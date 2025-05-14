@@ -969,18 +969,54 @@
                 });
             });
 
+            /* ===== 修改后片段 1 ===== */
             newBtn.onclick = e => {
                 e.stopPropagation();
 
-                // 断开旧的 New-chat 监视器，保证仅响应最后一次点击
                 if (currentNewChatObserver) {
                     try { currentNewChatObserver.disconnect(); } catch {}
                     currentNewChatObserver = null;
                 }
 
-
                 const clickedFid = fid;
                 activeFid = clickedFid;
+
+                /* ==== 新增：窄屏兜底监听 ==== */
+                const initPath = location.pathname;
+                const popHandler = () => {
+                    try {
+                        if (location.pathname !== initPath && location.pathname.startsWith('/c/')) {
+                            window.removeEventListener('popstate', popHandler);
+
+                            const newUrl = location.href;
+                            if (folders[clickedFid] &&
+                                !folders[clickedFid].chats.some(c => samePath(c.url, newUrl))) {
+                                const title =
+                                    qs('nav h1')?.textContent.trim() ||
+                                    '新对话';
+                                folders[clickedFid].chats.unshift({url: newUrl, title});
+                                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            }
+
+                            const p = location.pathname;
+                            lastActiveMap[p] = clickedFid;
+                            storage.set({lastActiveMap});
+                            activeFid = clickedFid;
+                            render();
+                            highlightActive();
+
+                            if (currentNewChatObserver) {
+                                try { currentNewChatObserver.disconnect(); } catch {}
+                                currentNewChatObserver = null;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('[Bookmark] Fallback popstate handler error:', err);
+                    }
+                };
+                window.addEventListener('popstate', popHandler, {once:false});
+                /* ==== 兜底结束 ==== */
+
                 const prevPaths = new Set(
                     qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
                 );
@@ -991,6 +1027,7 @@
                     history.pushState({}, '', '/');
                     window.dispatchEvent(new Event('popstate'));
                 }
+
 
 
 
@@ -1013,8 +1050,11 @@
                     const newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
                     if (!newPaths.length) return;
 
+                    /* ===== 修改后片段 2 ===== */
                     observer.disconnect();
                     currentNewChatObserver = null;
+                    window.removeEventListener('popstate', popHandler); // 防止兜底重复触发
+
 
                     /* 1. 依据侧栏顺序挑选最上面的新增会话 */
                     let newChatAnchor = anchors.find(a => {
