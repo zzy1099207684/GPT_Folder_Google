@@ -25,15 +25,13 @@
 
     /* ===== debounced save ===== */
     let _saveFoldersTimer = null;
-    /**
-     * 将 folders 变化延迟写入, 默认 8 s 后执行(可按需调整)
-     * 若在等待期间再次调用, 则重新计时
-     */
-    function scheduleSaveFolders(delay = 8000) {
+    function scheduleSaveFolders(delay = 2000) {
         clearTimeout(_saveFoldersTimer);
-        _saveFoldersTimer = setTimeout(() => {
+        _saveFoldersTimer = setTimeout(async () => {
             try {
                 if (chrome?.runtime?.id) {
+                    // 同步写入 storage.sync，保证 collapsed 状态持久化
+                    await storage.set({folders});
                     chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 }
             } catch (e) {
@@ -41,6 +39,7 @@
             }
         }, delay);
     }
+
 
     // 在observers对象中添加新方法
     const observers = {
