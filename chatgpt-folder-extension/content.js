@@ -1434,16 +1434,16 @@
                 const curPath = new URL(cur).pathname;
 
                 let folderFid = activeFid && folders[activeFid] ? activeFid : null;
-                if (!folderFid) {                                          // 若 activeFid 失效则查映射
+                if (!folderFid) {
                     const cand = lastActiveMap[curPath];
                     if (cand && cand !== '__history__' && folders[cand]) {
                         folderFid = cand;
-                        activeFid = cand;                                  // 同步回全局
+                        activeFid = cand;
                     }
                 }
 
                 if (!folderFid && window.__cgptPendingFid &&
-                    folders[window.__cgptPendingFid]) {                    // ③′ 最后兜底：使用待归属分组
+                    folders[window.__cgptPendingFid]) {
                     folderFid = window.__cgptPendingFid;
                     activeFid = folderFid;
                 }
@@ -1465,17 +1465,15 @@
                 }
                 const i = folder.chats.findIndex(c => samePath(c.url, cur));
                 if (i >= 0) {
-                    // 已存在则上提
                     const [chat] = folder.chats.splice(i, 1);
                     folder.chats.unshift(chat);
                 } else {
-                    // 不存在则插入
                     folder.chats.unshift({url: cur, title});
                 }
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();
                 highlightActive();
-                if (window.__cgptPendingFid === folderFid) {       // 本次新会话已完整归档，清除挂起状态
+                if (window.__cgptPendingFid === folderFid) {
                     window.__cgptPendingFid = null;
                     window.__cgptPendingToken = null;
                 }
