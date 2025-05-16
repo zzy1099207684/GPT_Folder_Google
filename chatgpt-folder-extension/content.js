@@ -739,7 +739,7 @@
                     });
                     return;
                 }
-                const t = (a.textContent || '新对话').trim();
+                const t = (a.textContent || 'new chat').trim();
                 arr.forEach(({fid, el}) => {
                     if (el.textContent !== t) el.textContent = t;
                     const folder = folders[fid];
@@ -1135,7 +1135,7 @@
                     /* 3. 兜底方案 */
                     const newChatUrl = newChatAnchor ? newChatAnchor.href
                         : (location.origin + newPaths[0]);
-                    const title = (newChatAnchor?.textContent || '新对话').trim();
+                    const title = (newChatAnchor?.textContent || 'new chat').trim();
 
                     try {
                         const path = new URL(newChatUrl).pathname;
@@ -1423,8 +1423,8 @@
             const bumpActiveChat = () => {
                 if (!location.pathname.startsWith('/c/')) return;
                 const cur = location.href;
-                // 优先从 history 里取标题，取不到就用“新对话”
-                const title = qs(`div#history a[href*="${cur}"]`)?.textContent.trim() || '新对话';
+                // 优先从 history 里取标题，取不到就用“new chat”
+                const title = qs(`div#history a[href*="${cur}"]`)?.textContent.trim() || 'new chat';
                 const curPath = new URL(cur).pathname;
 
                 let folderFid = activeFid && folders[activeFid] ? activeFid : null;
