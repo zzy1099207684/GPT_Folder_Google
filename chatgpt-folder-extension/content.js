@@ -1475,24 +1475,35 @@
 
 
             // —— 修改后，排除“停止生成”状态 ——
+            // 新增：判断编辑器内是否仍有待上传的附件
+            function hasPendingUpload(edNode) {
+                return !!edNode && edNode.querySelector(
+                    'img,figure,video,[data-testid="file-attachment"],[data-testid="image-attachment"]'
+                );
+            }
+
+// ① 发送按钮点击（修改）
             send.addEventListener('click', e => {
-                // 如果当前按钮已变为“停止生成”，则不插入提示
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
+                if (hasPendingUpload(ed)) return;          // <—— 附件未发完时跳过尾缀
                 appendSuffix();
                 bumpActiveChat();
             }, {capture: true});
 
+// ② 回车快捷发送（修改）
             ed.addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     const btn = qs('#composer-submit-button');
                     if (!btn) return;
                     const label = btn.getAttribute('aria-label') || btn.innerText;
                     if (label.toLowerCase().includes('stop')) return;
+                    if (hasPendingUpload(ed)) return;      // <—— 同上
                     appendSuffix();
                     bumpActiveChat();
                 }
             }, {capture: true});
+
 
         }
 
