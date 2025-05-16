@@ -352,11 +352,9 @@
     /* ===== 全局数据 ===== */
     let folders = {};                                                                         // 收藏夹数据
 
-    // 修复窗口尺寸变化后侧边栏重复插入的问题
     const readyObs = observers.add(new MutationObserver(() => {
         const hist = qs('div#history');
 
-        // ① 若出现多个 wrapper，仅保留第一个
         const wrappers = qsa('#cgpt-bookmarks-wrapper');
         if (wrappers.length > 1) {
             wrappers.slice(1).forEach(w => w.remove());
@@ -364,8 +362,6 @@
 
         const wrapper = wrappers[0];   // 可能为 undefined
 
-        // ② wrapper 已存在但挂载位置不正确 → 移动到当前 history 所在容器
-        // ② wrapper 已存在但挂载位置不正确 → 移动到当前 history 所在容器
         if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
             try {
                 hist.parentElement.insertBefore(wrapper, hist);
@@ -1805,10 +1801,10 @@
             }
         };
 
-// 页面卸载时清理资源
+        // 页面卸载时清理资源
         window.addEventListener('beforeunload', cleanup);
 
-// 在动态内容页面可能发生的导航事件上添加清理
+        // 在动态内容页面可能发生的导航事件上添加清理
         document.addEventListener('spa:navigation', cleanup);
     }
 })();
