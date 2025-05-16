@@ -918,13 +918,11 @@
         position:fixed;z-index:2147483647;
         min-width:140px;padding:8px 0;border-radius:10px;
         background:#2b2521;color:#e7d8c5;
-        box-shadow:0 4px 10px rgba(0,0,0,.2);font-size:14px
-    `;
+        box-shadow:0 4px 10px rgba(0,0,0,.2);font-size:14px`;
                 menu.innerHTML = `
         <div class="f-item" data-act="prompt" style="padding:6px 16px;cursor:pointer">Prompt</div>
         <div class="f-item" data-act="rename" style="padding:6px 16px;cursor:pointer">Rename</div>
-        <div class="f-item" data-act="delete" style="padding:6px 16px;cursor:pointer;color:#e66">Delete</div>
-    `;
+        <div class="f-item" data-act="delete" style="padding:6px 16px;cursor:pointer;color:#e66">Delete</div>`;
                 document.body.appendChild(menu);
                 menu.style.left = rect.right - menu.offsetWidth + 'px';
                 menu.style.top = rect.bottom + 6 + 'px';
@@ -1611,8 +1609,6 @@
         highlightActive();                                                      // 初始渲染立即同步
         window.addEventListener('popstate', highlightActive);
 
-        // 在 initBookmarks 方法内部添加
-        // Improve memory checker safety - replace existing function
         function checkMemoryUsage() {
             try {
 
@@ -1722,7 +1718,7 @@
             }
         }
 
-// 每2分钟检查一次内存状态
+        // 每2分钟检查一次内存状态
         if (window.__memoryCheckerId) clearInterval(window.__memoryCheckerId);
         window.__memoryCheckerId = setInterval(checkMemoryUsage, 120000);
         // 正确创建cleanup函数
