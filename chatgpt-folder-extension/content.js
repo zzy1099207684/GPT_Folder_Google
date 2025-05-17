@@ -1010,7 +1010,10 @@
                 e.stopPropagation();
 
                 if (currentNewChatObserver) {
-                    try { currentNewChatObserver.disconnect(); } catch {}
+                    try {
+                        currentNewChatObserver.disconnect();
+                    } catch {
+                    }
                     currentNewChatObserver = null;
                 }
                 if (currentNewChatPopHandler) {
@@ -1037,8 +1040,6 @@
                             location.pathname.startsWith('/c/')) {
                             window.removeEventListener('popstate', popHandler);
                             currentNewChatPopHandler = null;
-
-                            const newUrl = location.href;
                             const p = location.pathname;
                             lastActiveMap[p] = clickedFid;
                             if (chrome?.runtime?.id) {
@@ -1056,9 +1057,9 @@
                                 }
                                 currentNewChatObserver = null;
                                 if (currentNewChatPopHandler) {
-                                                            window.removeEventListener('popstate', currentNewChatPopHandler);
-                                                           currentNewChatPopHandler = null;
-                                                        }
+                                    window.removeEventListener('popstate', currentNewChatPopHandler);
+                                    currentNewChatPopHandler = null;
+                                }
                             }
                         }
                     } catch (err) {
@@ -1265,10 +1266,11 @@
                 link.style.color = '#fff';                                          // 文字改为白色
             }
             link.onclick = e => {
+                window.__cgptPendingFid = null;
+                window.__cgptPendingToken = null;
                 clearActiveOnHistoryClick = false;
                 if (!chat.url) return;
                 e.preventDefault();
-                // 仅保存临时引用，在处理完后清除
                 lastClickedChatEl = link;
                 const path = new URL(chat.url, location.origin).pathname;
                 lastActiveMap[path] = fid;
@@ -1281,13 +1283,13 @@
                 }
                 history.pushState({}, '', chat.url);
                 window.dispatchEvent(new Event('popstate'));
-                // 使用一次性定时器在下一个事件循环中清除引用
                 setTimeout(() => {
                     if (lastClickedChatEl === link) {
                         lastClickedChatEl = null;
                     }
                 }, 100);
             };
+
 
             const del = document.createElement('span');
             del.textContent = '✕';
@@ -1345,6 +1347,12 @@
 
         /* ---------- 输入尾部提示 ---------- */
         function appendSuffix() {
+            // 若是从 history 面板点击进入，清除本次标记，不插入任何提示
+            if (clearActiveOnHistoryClick) {
+                clearActiveOnHistoryClick = false;
+                return;
+            }
+
             const ed = qs('.ProseMirror');
             if (!ed) return;
             const SUFFIX = ''; // 定义尾缀常量
@@ -1412,6 +1420,7 @@
             }                                                   // 追加到编辑器
             ed.dispatchEvent(new Event('input', {bubbles: true}));               // 触发输入事件
         }
+
 
         function bindSend() {
             const ed = qs('.ProseMirror');
@@ -1483,7 +1492,7 @@
             }
 
 // ① 发送按钮点击（修改）
-            send.addEventListener('click', e => {
+            send.addEventListener('click', () => {
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
                 if (hasPendingUpload(ed)) return;          // <—— 附件未发完时跳过尾缀
@@ -1625,7 +1634,7 @@
             try {
 
                 // 检测已知的内存泄漏指标
-                const preCleaned = cleanupLiveSyncMap();
+                cleanupLiveSyncMap();
                 const mapSize = liveSyncMap.size;
                 const observerCount = observers.list.length;
 
