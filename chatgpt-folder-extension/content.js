@@ -1538,8 +1538,9 @@
         // 全局 New chat 事件委托，兼容按钮被反复卸载/重建
         if (!window.__cgptGlobalNewHooked) {
             window.__cgptGlobalNewHooked = true;
+            const selector = '[data-testid="create-new-chat-button"]';
             document.addEventListener('click', e => {
-                const btn = e.target.closest('[aria-label="New chat"]');
+                const btn = e.target.closest(selector);
                 if (!btn) return;
 
                 // 若由组内 newBtn 间接触发，则仅复位标志，保留组高亮
