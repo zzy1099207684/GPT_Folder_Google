@@ -889,7 +889,7 @@
             let hideTip;                                                             // 保存提示关闭函数
             newBtn.onmouseenter = () => {                                            // 鼠标进入时
                 hideTip = tip(newBtn, 'New chat');                                   // 显示提示
-                newBtn.style.background = 'rgba(255,255,255,.07)';                   // 背景改深色，呈图二效果
+                newBtn.style.background = 'rgba(255,255,255,.07)';
             };
             newBtn.onmouseleave = () => {                                            // 鼠标离开时
                 hideTip && hideTip();                                                // 关闭提示
@@ -1036,33 +1036,25 @@
                 const initPath = location.pathname;
                 const popHandler = () => {
                     try {
+                        // newBtn.onclick → popHandler 内
                         if (token === window.__cgptPendingToken &&
                             location.pathname !== initPath &&
                             location.pathname.startsWith('/c/')) {
+                            // 只移除自身的 popstate 监听，保留历史观察器等待真正的 <a> 节点出现
                             window.removeEventListener('popstate', popHandler);
                             currentNewChatPopHandler = null;
+
                             const p = location.pathname;
                             lastActiveMap[p] = clickedFid;
-                            if (chrome?.runtime?.id) {
-                                // 立即落盘，确保侧边栏重新挂载时能取到
-                                chrome.storage.sync.set({lastActiveMap});
-                            }
+                            if (chrome?.runtime?.id) chrome.storage.sync.set({lastActiveMap});
                             activeFid = clickedFid;
                             render();
                             highlightActive();
 
-                            if (currentNewChatObserver) {
-                                try {
-                                    currentNewChatObserver.disconnect();
-                                } catch {
-                                }
-                                currentNewChatObserver = null;
-                                if (currentNewChatPopHandler) {
-                                    window.removeEventListener('popstate', currentNewChatPopHandler);
-                                    currentNewChatPopHandler = null;
-                                }
-                            }
+                            // ⚠️ 不再提前 disconnect currentNewChatObserver
+                            // 等到 observer 在捕捉到 history 变动后自行断开
                         }
+
                     } catch (err) {
                         console.warn('[Bookmark] Fallback popstate handler error:', err);
                     }
@@ -1314,7 +1306,7 @@
 
             parentUl.appendChild(li);
 
-            /* —— 建立多对一同步映射 —— */
+
             if (chat.url) {                                              // URL 字符串存在才继续
                 let path;                                                // 用于保存解析后的 pathname
                 try {                                                    // 兼容相对路径或含空格等情况
