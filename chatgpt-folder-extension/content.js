@@ -1516,11 +1516,28 @@
         render();
         let clearActiveOnHistoryClick = false;
 
+        // clearGroupHighlight 修正版
         const clearGroupHighlight = () => {
             clearActiveOnHistoryClick = true;
             activeFid = null;
+
+            // 移除根路径与分组的映射，阻止伪高亮复活
+            if (lastActiveMap && lastActiveMap['/']) {
+                delete lastActiveMap['/'];
+                try {
+                    if (chrome?.runtime?.id) storage.set({ lastActiveMap });
+                } catch (err) {
+                    console.warn('[Bookmark] Error clearing root mapping:', err);
+                }
+            }
+
+            // 清空挂起标记，防止后续误判
+            window.__cgptPendingFid = null;
+            window.__cgptPendingToken = null;
+
             setTimeout(highlightActive, 0);
         };
+
 
         historyNode.addEventListener('click', e => {
             const a = e.target.closest('a[href*="/c/"]');
