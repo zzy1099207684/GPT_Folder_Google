@@ -457,7 +457,7 @@
         });
 
 
-        ['inherit', 'SimSun', 'SimHei', 'Microsoft YaHei', 'Segoe UI', 'Arial'].forEach(f => {
+        ['inherit','serif', 'SimSun', 'SimHei', 'Microsoft YaHei', 'Segoe UI', 'Arial'].forEach(f => {
             const o = document.createElement('option');
             o.value = f;
             o.textContent = f;
