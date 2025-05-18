@@ -1376,7 +1376,10 @@
             /* ③ 再次：上一次有效的 activeFid */
             if (!currentFid) currentFid = activeFid; // ② 再看临时/旧值
 
-            if (!currentFid || !folders[currentFid]) {                         // ③ 最后全表扫描
+            // 若该会话明确来自 History 视图，则不做兜底扫描
+            const clickedFromHistory = storedFid === '__history__';
+
+            if (!currentFid && !clickedFromHistory) {                          // ③ 最后全表扫描
                 for (const [fid, folder] of Object.entries(folders)) {
                     if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
                         currentFid = fid;
@@ -1385,9 +1388,10 @@
                 }
             }
 
+
             if (currentFid && currentFid !== activeFid) activeFid = currentFid;
 
-            if (!currentFid) {                                                     // ③ 最后扫描各分组
+            if (!currentFid && !clickedFromHistory) {                          // ③ 最后扫描各分组
                 for (const [fid, folder] of Object.entries(folders)) {
                     if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
                         currentFid = fid;
