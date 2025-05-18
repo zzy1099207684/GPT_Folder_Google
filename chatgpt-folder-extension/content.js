@@ -1050,9 +1050,6 @@
                             activeFid = clickedFid;
                             render();
                             highlightActive();
-
-                            // ⚠️ 不再提前 disconnect currentNewChatObserver
-                            // 等到 observer 在捕捉到 history 变动后自行断开
                         }
 
                     } catch (err) {
