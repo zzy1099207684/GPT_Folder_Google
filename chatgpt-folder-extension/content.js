@@ -1,3 +1,4 @@
+// content.js
 (() => { // 立即执行函数隔离作用域
     // 单实例哨兵：若已存在则直接退出，防止重复执行
     if (window.__cgptBookmarksInstance) {
