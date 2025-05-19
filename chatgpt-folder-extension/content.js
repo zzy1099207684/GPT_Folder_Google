@@ -1453,6 +1453,14 @@
                         }
                     }
                 }
+                if (hasPendingUpload(ed)) {
+                    const id = setInterval(() => {
+                        if (!hasPendingUpload(ed)) {
+                            clearInterval(id);
+                            appendSuffix();
+                        }
+                    }, 500);
+                }
 
                 const folder = folderFid ? folders[folderFid] : null;
                 if (!folder) return;
@@ -1489,8 +1497,8 @@
             send.addEventListener('click', () => {
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
-                if (hasPendingUpload(ed)) return;          // <—— 附件未发完时跳过尾缀
-                appendSuffix();
+                const pending = hasPendingUpload(ed);
+                if (!pending) appendSuffix();
                 bumpActiveChat();
             }, {capture: true});
 
@@ -1501,8 +1509,8 @@
                     if (!btn) return;
                     const label = btn.getAttribute('aria-label') || btn.innerText;
                     if (label.toLowerCase().includes('stop')) return;
-                    if (hasPendingUpload(ed)) return;      // <—— 同上
-                    appendSuffix();
+                    const pending = hasPendingUpload(ed);
+                    if (!pending) appendSuffix();
                     bumpActiveChat();
                 }
             }, {capture: true});
