@@ -1,5 +1,13 @@
 // content.js
+
 (() => { // 立即执行函数隔离作用域
+    function nanoid(size = 21) {
+        let id = ''
+        const chars = 'ModuleSymbhasOwnPr-0123456789ABCDEFGHIJKLNQRTUVWXYZ_cfgijkpqtvxz'
+        let i = size
+        while (i--) id += chars[Math.random() * 64 | 0]
+        return id
+    }
     // 单实例哨兵：若已存在则直接退出，防止重复执行
     if (window.__cgptBookmarksInstance) {
         console.warn('[Bookmark] Duplicate instance detected, aborting.');
@@ -351,7 +359,8 @@
 
 
     /* ===== 全局数据 ===== */
-    let folders = {};                                                                         // 收藏夹数据
+    let folders = {};
+    window.__cgptPromptGapCounters = {};
 
     const readyObs = observers.add(new MutationObserver(() => {
         const hist = qs('div#history');
@@ -487,15 +496,14 @@
         });
         bar.appendChild(addBtn);
 
-// 新增：点击“+”创建分组
         addBtn.addEventListener('click', () => {
             const raw = prompt('Group name', '');
-            if (!raw) return;                      // 取消或空输入
+            if (!raw) return;
             const name = raw.trim();
             if (!name) return;
 
-            const fid = 'grp_' + Date.now().toString(36); // 生成简单唯一 ID
-            folders[fid] = {                              // 初始化分组结构
+            const fid = 'grp_' + nanoid()
+            folders[fid] = {
                 name: name.slice(0, 20) + (name.length > 20 ? '…' : ''),
                 chats: [],
                 collapsed: true,
@@ -983,22 +991,38 @@
                         box.append(ta, hintBar);            // ② 把快捷栏放在 textarea 下
 
                         const ok = document.createElement('button');
-                        ok.textContent = '确定';
+                        ok.textContent = 'ok';
                         ok.style.cssText = 'margin-right:8px';
                         const cancel = document.createElement('button');
-                        cancel.textContent = '取消';
+                        cancel.textContent = 'cancel';
                         const wrap = document.createElement('div');
                         wrap.style.cssText = 'text-align:right;margin-top:10px';
                         wrap.append(ok, cancel);
-                        box.append(ta, wrap);
+
+                        /* 新增：间隔轮数输入框 —— 仅正整数，默认 3 */
+                        const gapWrap = document.createElement('div');
+                        gapWrap.style.cssText = 'margin-top:8px;font-size:12px;display:flex;align-items:center;gap:6px';
+                        gapWrap.innerHTML = '<span>How many times does it appear?</span>';
+                        const gapInput = Object.assign(document.createElement('input'), {
+                            type: 'number',
+                            min: 1,
+                            step: 1,
+                            value: folders[fid].gap ?? 3,
+                            style: 'flex:0 0 80px;height:24px;border-radius:4px;border:1px solid #555;background:#1e1815;color:#e7d8c5;padding:0 6px'
+                        });
+                        gapWrap.appendChild(gapInput);
+
+                        box.append(ta, gapWrap, wrap);                  // gapWrap 插入 textarea 与按钮之间
                         modal.appendChild(box);
                         document.body.appendChild(modal);
 
                         ok.onclick = () => {
                             folders[fid].prompt = ta.value.trim();
+                            folders[fid].gap = Math.max(1, parseInt(gapInput.value) || 1); // 保存间隔
                             chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                             render();
                             document.body.removeChild(modal);
+                            location.reload(); // 立即刷新页面，使新设置立刻生效
                         };
                         cancel.onclick = () => document.body.removeChild(modal);
                         close();
@@ -1392,33 +1416,59 @@
 
             const groupPrompt = currentFid ? (folders[currentFid].prompt || '').trim() : '';
 
+            const gapCounters = window.__cgptPromptGapCounters;
+            const gap = currentFid && folders[currentFid] ? (folders[currentFid].gap || 3) : 3;
+            const counterKey = currentFid || path;
+            let cnt = gapCounters[counterKey];
+            let injectNow = false;
+
+            if (cnt === undefined) { // 第一次，强制追加，并将cnt设为1
+                injectNow = true;
+                cnt = 1;
+            }else if (gap < 1) {
+                injectNow = true;
+                cnt = 0;
+            } else if (cnt > gap) {          // 满足间隔
+                injectNow = true;
+                cnt = 1;                          // 重置计数
+            } else {
+                cnt += 1;                         // 未到间隔，仅累加
+            }
+            gapCounters[counterKey] = cnt;
+            /* ==== 逻辑结束 ==== */
+
             qsa('p', ed).forEach((p, i, arr) => {
                 const txt = p.innerText.trim();
                 if ((txt === SUFFIX || (groupPrompt && txt === groupPrompt)) && i !== arr.length - 1) p.remove();
             });
             let last = ed.lastElementChild;
-            if (groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {
-                const blank = document.createElement('p');       // 创建空段落
-                blank.innerHTML = '<br>';                        // 使用换行填充
-                ed.appendChild(blank);                           // 插入空行
 
-                const gp = document.createElement('p');          // 创建提示词段落
-                gp.textContent = groupPrompt;                    // 设置内容
-                ed.appendChild(gp);                              // 插入提示词
+            /* 仅在 injectNow 为真时插入 prompt */
+            if (injectNow && groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {
+                const blank = document.createElement('p');
+                blank.innerHTML = '<br>';
+                ed.appendChild(blank);
+
+                const gp = document.createElement('p');
+                gp.textContent = groupPrompt;
+                ed.appendChild(gp);
                 last = gp;
             }
-            if (!(last && last.innerText.trim() === SUFFIX)) {                      // 追加全局尾缀
+
+            if (!(last && last.innerText.trim() === SUFFIX)) {
                 const p = document.createElement('p');
                 p.textContent = SUFFIX;
                 ed.appendChild(p);
-            }                                                   // 追加到编辑器
-            ed.dispatchEvent(new Event('input', {bubbles: true}));               // 触发输入事件
+            }
+            ed.dispatchEvent(new Event('input', {bubbles: true}));
         }
 
 
         function bindSend() {
             const ed = qs('.ProseMirror');
-            const send = qs('#composer-submit-button');
+            // 兼容新版界面多种发送按钮写法
+            const send = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]');
+
             if (!ed || !send || send.dataset.hooked) return;
             send.dataset.hooked = 1;                                                   // 标记已挂钩避免重复
 
