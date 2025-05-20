@@ -1020,7 +1020,7 @@
                         gapWrap.innerHTML = '<span>How many times does it appear?</span>';
                         const gapInput = Object.assign(document.createElement('input'), {
                             type: 'number',
-                            min: 1,
+                            min: 0,
                             step: 1,
                             value: folders[fid].gap ?? 3,
                             style: 'flex:0 0 80px;height:24px;border-radius:4px;border:1px solid #555;background:#1e1815;color:#e7d8c5;padding:0 6px'
@@ -1033,7 +1033,7 @@
 
                         ok.onclick = () => {
                             folders[fid].prompt = ta.value.trim();
-                            folders[fid].gap = Math.max(1, parseInt(gapInput.value) || 1); // 保存间隔
+                            folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0); // 保存间隔
                             chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                             render();
                             document.body.removeChild(modal);
@@ -1432,7 +1432,9 @@
             const groupPrompt = currentFid ? (folders[currentFid].prompt || '').trim() : '';
 
             const gapCounters = window.__cgptPromptGapCounters;
-            const gap = currentFid && folders[currentFid] ? (folders[currentFid].gap || 3) : 3;
+            // 用 nullish 合并运算符，允许有效的 0 被保留
+            const gap = currentFid && folders[currentFid] ? (folders[currentFid].gap ?? 3) : 3;
+
             const counterKey = currentFid || path;
             let cnt = gapCounters[counterKey];
             let injectNow = false;
@@ -1452,10 +1454,20 @@
             gapCounters[counterKey] = cnt;
             /* ==== 逻辑结束 ==== */
 
+            // 先始终清理多余的空 SUFFIX 行
             qsa('p', ed).forEach((p, i, arr) => {
                 const txt = p.innerText.trim();
-                if ((txt === SUFFIX || (groupPrompt && txt === groupPrompt)) && i !== arr.length - 1) p.remove();
+                if (txt === SUFFIX && i !== arr.length - 1) p.remove();
             });
+
+// 仅在这次准备注入新 prompt 时才移除旧 prompt
+            if (injectNow && groupPrompt) {
+                qsa('p', ed).forEach((p, i, arr) => {
+                    const txt = p.innerText.trim();
+                    if (txt === groupPrompt && i !== arr.length - 1) p.remove();
+                });
+            }
+
             let last = ed.lastElementChild;
 
             /* 仅在 injectNow 为真时插入 prompt */
