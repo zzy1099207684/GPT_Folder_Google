@@ -736,8 +736,15 @@
         let lastClickedChatEl = null;
         const syncTitles = () => {
             let updated = false;
+            // const a = qs(`a[href*="${path}"]`, historyNode);
             liveSyncMap.forEach((arr, path) => {
-                const a = qs(`a[href*="${path}"]`, historyNode);
+                const a = qsa('a[href*="/c/"]', historyNode).find(link => {
+                    try {
+                        return samePath(link.href, location.origin + path);
+                    } catch {
+                        return false;        // href 异常时安全退出
+                    }
+                });
                 if (!a) {
                     arr.forEach(({fid}) => {
                         const folder = folders[fid];
