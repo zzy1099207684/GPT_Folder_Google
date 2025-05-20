@@ -360,7 +360,15 @@
 
     /* ===== 全局数据 ===== */
     let folders = {};
-    window.__cgptPromptGapCounters = {};
+
+// 从 sessionStorage 读取旧值, 若无或解析失败则回落为空对象
+    window.__cgptPromptGapCounters = (() => {
+        try {
+            return JSON.parse(sessionStorage.getItem('cgptPromptGapCounters') || '{}');
+        } catch {
+            return {};
+        }
+    })();
 
     const readyObs = observers.add(new MutationObserver(() => {
         const hist = qs('div#history');
