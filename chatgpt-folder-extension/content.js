@@ -1454,13 +1454,11 @@
             gapCounters[counterKey] = cnt;
             /* ==== 逻辑结束 ==== */
 
-            // 先始终清理多余的空 SUFFIX 行
             qsa('p', ed).forEach((p, i, arr) => {
                 const txt = p.innerText.trim();
                 if (txt === SUFFIX && i !== arr.length - 1) p.remove();
             });
 
-// 仅在这次准备注入新 prompt 时才移除旧 prompt
             if (injectNow && groupPrompt) {
                 qsa('p', ed).forEach((p, i, arr) => {
                     const txt = p.innerText.trim();
