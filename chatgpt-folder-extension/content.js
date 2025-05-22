@@ -537,8 +537,6 @@
 
 
         const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
-// …原 folderZone 事件监听保持不变…
-
         /* 关键：调整插入顺序——先字体块，再 Groups 标题，再分组列表 */
         inner.append(fontBlock, bar, folderZone);
         wrap.appendChild(inner);
@@ -702,8 +700,6 @@
             }
         }
 
-// 增加更全面的清理策略 - 新增
-        // Improve safety for deep memory cleaning - replace existing function
         function deepCleanMemory() {
             if (window.__deepCleanRunning) return;      // 防重入
             window.__deepCleanRunning = true;
@@ -727,7 +723,6 @@
                 // Clean lastActiveMap with error handling
                 try {
                     const paths = [...liveSyncMap.keys()];
-// liveSyncMap 为空通常是侧栏被临时卸载的窗口状态, 此时跳过修剪以免误删映射
                     if (paths.length) {
                         let lastActiveMapChanged = false;
                         Object.keys(lastActiveMap).forEach(path => {
