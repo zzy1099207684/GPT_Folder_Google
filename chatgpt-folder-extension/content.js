@@ -8,6 +8,7 @@
         while (i--) id += chars[Math.random() * 64 | 0]
         return id
     }
+
     // 单实例哨兵：若已存在则直接退出，防止重复执行
     if (window.__cgptBookmarksInstance) {
         console.warn('[Bookmark] Duplicate instance detected, aborting.');
@@ -84,10 +85,10 @@
         }
     };
 
-    function enqueueIdleTask(fn, timeout = 1000){
-        if (typeof requestIdleCallback === 'function'){
+    function enqueueIdleTask(fn, timeout = 1000) {
+        if (typeof requestIdleCallback === 'function') {
             requestIdleCallback(fn, {timeout});
-        }else{
+        } else {
             setTimeout(fn, 0);
         }
     }
@@ -144,7 +145,6 @@
             return [];
         }
     };
-    /* ===== 高效封装 storage ===== */
     // ① preset prompt and group
     const hints = [
         {
@@ -745,7 +745,7 @@
         }
 
         if (window.__deepCleanerId) clearInterval(window.__deepCleanerId);
-        window.__deepCleanerId = setInterval(()=>enqueueIdleTask(deepCleanMemory), 180000);
+        window.__deepCleanerId = setInterval(() => enqueueIdleTask(deepCleanMemory), 180000);
         let activePath = null;
         let activeFid = null;
         let lastClickedChatEl = null;
@@ -1449,7 +1449,7 @@
             if (cnt === undefined) { // 第一次，强制追加，并将cnt设为1
                 injectNow = true;
                 cnt = 1;
-            }else if (gap < 1) {
+            } else if (gap < 1) {
                 injectNow = true;
                 cnt = 0;
             } else if (cnt > gap) {          // 满足间隔
@@ -1623,7 +1623,7 @@
             if (lastActiveMap && lastActiveMap['/']) {
                 delete lastActiveMap['/'];
                 try {
-                    if (chrome?.runtime?.id) storage.set({ lastActiveMap });
+                    if (chrome?.runtime?.id) storage.set({lastActiveMap});
                 } catch (err) {
                     console.warn('[Bookmark] Error clearing root mapping:', err);
                 }
@@ -1935,19 +1935,19 @@
     }
 })();
 // ==== event-loop stall monitor (NEW) ====
-(function monitorEventLoop(interval = 10000, threshold = 200){
+(function monitorEventLoop(interval = 10000, threshold = 200) {
     let last = performance.now();
-    setInterval(()=>{
+    setInterval(() => {
         const now = performance.now();
         const drift = now - last - interval;
         last = now;
-        if (drift > threshold){
+        if (drift > threshold) {
             console.warn('[Bookmark] Main thread stall:', drift);
             // 卸载旧侧边栏与观察器，稍后由 readyObs 重新挂载
             document.getElementById('cgpt-bookmarks-wrapper')?.remove();
             observers.disconnectAll();
             const hist = document.querySelector('div#history');
-            if (hist) enqueueIdleTask(()=>initBookmarks(hist));
+            if (hist) enqueueIdleTask(() => initBookmarks(hist));
         }
     }, interval);
 })();
