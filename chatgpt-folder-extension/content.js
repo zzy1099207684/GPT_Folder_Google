@@ -1040,7 +1040,7 @@
                         });
                         gapWrap.appendChild(gapInput);
 
-                        box.append(ta, gapWrap, wrap);                  // gapWrap 插入 textarea 与按钮之间
+                        box.append(ta, gapWrap, wrap);
                         modal.appendChild(box);
                         document.body.appendChild(modal);
 
