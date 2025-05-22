@@ -749,7 +749,6 @@
             }
         }
 
-// 每3分钟做一次深度清理
         if (window.__deepCleanerId) clearInterval(window.__deepCleanerId);
         window.__deepCleanerId = setInterval(()=>enqueueIdleTask(deepCleanMemory), 180000);
         let activePath = null;
