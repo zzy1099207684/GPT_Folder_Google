@@ -83,6 +83,15 @@
             }
         }
     };
+
+    function enqueueIdleTask(fn, timeout = 1000){
+        if (typeof requestIdleCallback === 'function'){
+            requestIdleCallback(fn, {timeout});
+        }else{
+            setTimeout(fn, 0);
+        }
+    }
+
     /* ===== 通用工具 ===== */
     const CLS = {tip: 'cgpt-tip'};
     const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'};
@@ -496,11 +505,11 @@
         /* ---------- 字体选择块结束 ---------- */
 
         const bar = Object.assign(document.createElement('div'), {
-            textContent: 'Groups', style: 'display:flex;align-items:center;font:bold 14px/1 white;padding:4px 12px'
+            textContent: 'Groups', style: 'display:flex;align-items:center;font:350 13px/1 white;padding:4px 12px'
         });
         // 保留原有两行
         const addBtn = Object.assign(document.createElement('span'), {
-            textContent: '+', style: 'cursor:pointer;margin-left:auto;font-weight:bold'
+            textContent: '十', style: 'cursor:pointer;margin-left:auto;font-size:10px'
         });
         bar.appendChild(addBtn);
 
@@ -696,6 +705,8 @@
 // 增加更全面的清理策略 - 新增
         // Improve safety for deep memory cleaning - replace existing function
         function deepCleanMemory() {
+            if (window.__deepCleanRunning) return;      // 防重入
+            window.__deepCleanRunning = true;
             try {
                 console.log('[Bookmark] Running deep memory cleanup');
 
@@ -733,12 +744,14 @@
                 }
             } catch (err) {
                 console.error('[Bookmark] Critical error in deepCleanMemory:', err);
+            } finally {
+                window.__deepCleanRunning = false;
             }
         }
 
 // 每3分钟做一次深度清理
         if (window.__deepCleanerId) clearInterval(window.__deepCleanerId);
-        window.__deepCleanerId = setInterval(deepCleanMemory, 180000);
+        window.__deepCleanerId = setInterval(()=>enqueueIdleTask(deepCleanMemory), 180000);
         let activePath = null;
         let activeFid = null;
         let lastClickedChatEl = null;
@@ -1017,7 +1030,7 @@
                         /* 新增：间隔轮数输入框 —— 仅正整数，默认 3 */
                         const gapWrap = document.createElement('div');
                         gapWrap.style.cssText = 'margin-top:8px;font-size:12px;display:flex;align-items:center;gap:6px';
-                        gapWrap.innerHTML = '<span>How many times does it appear?</span>';
+                        gapWrap.innerHTML = '<span>How often does this happen?</span>';
                         const gapInput = Object.assign(document.createElement('input'), {
                             type: 'number',
                             min: 0,
@@ -1455,6 +1468,7 @@
             /* ==== 逻辑结束 ==== */
 
             qsa('p', ed).forEach((p, i, arr) => {
+                if (p.dataset.cgptBlank) return;          // 新增
                 const txt = p.innerText.trim();
                 if (txt === SUFFIX && i !== arr.length - 1) p.remove();
             });
@@ -1470,7 +1484,11 @@
 
             /* 仅在 injectNow 为真时插入 prompt */
             if (injectNow && groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {
+                qsa('p[data-cgpt-blank]', ed).forEach(p => p.remove());   // 新增
+
+// 插入带标记的占位行
                 const blank = document.createElement('p');
+                blank.dataset.cgptBlank = '1';            // 新增
                 blank.innerHTML = '<br>';
                 ed.appendChild(blank);
 
@@ -1578,18 +1596,21 @@
             }, {capture: true});
 
 // ② 回车快捷发送（修改）
-            ed.addEventListener('keydown', e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    const btn = qs('#composer-submit-button');
-                    if (!btn) return;
-                    const label = btn.getAttribute('aria-label') || btn.innerText;
-                    if (label.toLowerCase().includes('stop')) return;
-                    const pending = hasPendingUpload(ed);
-                    if (!pending) appendSuffix();
-                    bumpActiveChat();
-                }
-            }, {capture: true});
-
+            // ② 回车快捷发送（修改、去重监听）
+            if (!ed.dataset.keyhooked) {          // 防止重复绑定
+                ed.dataset.keyhooked = '1';
+                ed.addEventListener('keydown', e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        const btn = qs('#composer-submit-button');
+                        if (!btn) return;
+                        const label = btn.getAttribute('aria-label') || btn.innerText;
+                        if (label.toLowerCase().includes('stop')) return;
+                        const pending = hasPendingUpload(ed);
+                        if (!pending) appendSuffix();
+                        bumpActiveChat();
+                    }
+                }, {capture: true});
+            }
 
         }
 
@@ -1835,7 +1856,7 @@
 
         // 每2分钟检查一次内存状态
         if (window.__memoryCheckerId) clearInterval(window.__memoryCheckerId);
-        window.__memoryCheckerId = setInterval(checkMemoryUsage, 120000);
+        window.__memoryCheckerId = setInterval(checkMemoryUsage, 10000);
         // 正确创建cleanup函数
         // Enhanced cleanup function - replace existing cleanup function
         const cleanup = () => {
@@ -1918,4 +1939,21 @@
         // 在动态内容页面可能发生的导航事件上添加清理
         document.addEventListener('spa:navigation', cleanup);
     }
+})();
+// ==== event-loop stall monitor (NEW) ====
+(function monitorEventLoop(interval = 10000, threshold = 200){
+    let last = performance.now();
+    setInterval(()=>{
+        const now = performance.now();
+        const drift = now - last - interval;
+        last = now;
+        if (drift > threshold){
+            console.warn('[Bookmark] Main thread stall:', drift);
+            // 卸载旧侧边栏与观察器，稍后由 readyObs 重新挂载
+            document.getElementById('cgpt-bookmarks-wrapper')?.remove();
+            observers.disconnectAll();
+            const hist = document.querySelector('div#history');
+            if (hist) enqueueIdleTask(()=>initBookmarks(hist));
+        }
+    }, interval);
 })();
