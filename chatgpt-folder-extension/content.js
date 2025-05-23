@@ -1195,7 +1195,14 @@
                             render();               // 重新渲染以建立 liveSyncMap
                         }
 
-                        highlightActive();          // 更新高亮，保持白角标
+                        highlightActive();
+                        setTimeout(() => {                     // 保证第一次编辑区就有 prompt
+                            try {
+                                if (typeof appendSuffix === 'function') appendSuffix();
+                            } catch (e) {
+                                console.warn('[Bookmark] appendSuffix error:', e);
+                            }
+                        }, 0);
                     } catch (err) {
                         console.warn('[Bookmark] Error processing new chat metadata:', err);
                     }
@@ -1585,7 +1592,8 @@
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
                 const pending = hasPendingUpload(ed);
-                if (!pending) appendSuffix();
+                const hasUserInput = ed && ed.innerText.trim().length > 0;
+                if (!pending && hasUserInput) appendSuffix();
                 bumpActiveChat();
             }, {capture: true});
 
@@ -1600,7 +1608,8 @@
                         const label = btn.getAttribute('aria-label') || btn.innerText;
                         if (label.toLowerCase().includes('stop')) return;
                         const pending = hasPendingUpload(ed);
-                        if (!pending) appendSuffix();
+                        const hasUserInput = ed && ed.innerText.trim().length > 0;
+                        if (!pending && hasUserInput) appendSuffix();
                         bumpActiveChat();
                     }
                 }, {capture: true});
