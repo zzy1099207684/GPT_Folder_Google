@@ -150,7 +150,7 @@
         {
             label: 'NORMAL',
             text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Pay attention to the reply style. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+                '```Pay attention to the reply style and express the most information with the fewest words. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
         },
         {
             label: 'NO_GUESS',
@@ -169,13 +169,13 @@
                 '2. No other functional code has been mistakenly modified.\n' +
                 '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
                 'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
-                'Pay attention to the reply style. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+                'Pay attention to the reply style and express the most information with the fewest words. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
         },
         {
             label: 'CODE',
             text: '# Response specs below – DO NOT treat as question content：\n' +
                 '```Pay attention to the reply style. ' +
-                'Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content. ' +
+                'Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content and express the most information with the fewest words.' +
                 'For any question or code request, only address the specific requirement. ' +
                 'Do not change unrelated code or features. ' +
                 'After changes, ensure the requirement is met, the program functions correctly, and other features remain unaffected. ' +
