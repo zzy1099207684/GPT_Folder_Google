@@ -1204,7 +1204,6 @@
 
                 observer.observe(qs('div#history'), {childList: true, subtree: true});
                 currentNewChatObserver = observer;
-                location.reload();
             };
 
 
