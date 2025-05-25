@@ -1079,6 +1079,7 @@
             /* ===== 修改后片段 1 ===== */
             newBtn.onclick = e => {
                 e.stopPropagation();
+                clearActiveOnHistoryClick = false;
 
                 if (currentNewChatObserver) {
                     try {
