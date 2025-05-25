@@ -1612,18 +1612,31 @@
             const timeout = 3000;
             function scheduleHistoryRefresh() {
                 if (location.pathname.startsWith('/c/')) {
-                    // 已经在会话路径，按既定延迟执行
-                    setTimeout(refreshHistoryOrder, timeout);
+                    let attempts = 0;
+                    const maxAttempts = 10;
+                    // 每 300ms 尝试一次刷新，最多尝试 10 次
+                    const intervalId = setInterval(() => {
+                        refreshHistoryOrder();
+                        attempts++;
+                        if (attempts >= maxAttempts) clearInterval(intervalId);
+                    }, timeout / maxAttempts);
                 } else {
-                    // 仍在 / 根路径，等跳转完成后再刷新
                     const once = () => {
                         if (!location.pathname.startsWith('/c/')) return;
                         window.removeEventListener('popstate', once);
-                        setTimeout(refreshHistoryOrder, 500);      // 再给侧栏一些渲染时间
+                        let attempts = 0;
+                        const maxAttempts = 10;
+                        // 初次进 /c/ 后每 500ms 尝试刷新，最多 10 次
+                        const intervalId = setInterval(() => {
+                            refreshHistoryOrder();
+                            attempts++;
+                            if (attempts >= maxAttempts) clearInterval(intervalId);
+                        }, 500);
                     };
                     window.addEventListener('popstate', once);
                 }
             }
+
 
 // ① 发送按钮点击（修改）
             send.addEventListener('click', () => {
