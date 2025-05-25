@@ -1601,7 +1601,6 @@
 
             window.bumpActiveChat = bumpActiveChat;
             // —— 修改后，排除“停止生成”状态 ——
-            // 新增：判断编辑器内是否仍有待上传的附件
             function hasPendingUpload(edNode) {
                 return !!edNode && edNode.querySelector(
                     'img,figure,video,[data-testid="file-attachment"],[data-testid="image-attachment"]'
