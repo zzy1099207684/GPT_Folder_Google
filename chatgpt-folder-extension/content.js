@@ -150,7 +150,7 @@
         {
             label: 'NORMAL',
             text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Pay attention to the reply style and express the most information with the fewest words. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
+                '```Pay attention to the reply style and Adjust the level of detail and length of your answers flexibly based on the complexity of the question. Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content.```'
         },
         {
             label: 'NO_GUESS',
