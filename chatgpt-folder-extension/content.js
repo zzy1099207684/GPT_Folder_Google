@@ -1608,34 +1608,63 @@
             };
 
             window.bumpActiveChat = bumpActiveChat;
-            // —— 修改后，排除“停止生成”状态 ——
-            const timeout = 3000;
+            // 等待窗口改为 15 s，刷新间隔固定 500 ms
             function scheduleHistoryRefresh() {
+                // 1. 立即插入一个“新会话”条目（仅在 History 面板还没该条时）
+                const insertHistoryEntry = () => {
+                    const hist = qs('div#history');
+                    if (!hist) return;
+                    const target = location.pathname;
+                    if (qs(`div#history a[href*="${target}"]`)) return;  // 已存在则跳过
+                    const first = hist.firstElementChild;
+                    if (!first) return;
+                    // 克隆首条以保留样式
+                    const clone = first.cloneNode(true);
+                    const anchor = clone.querySelector('a[href]');
+                    if (anchor) {
+                        anchor.href = target;
+                        anchor.textContent = 'new chat';
+                        anchor.dataset.url = target;
+                    }
+                    hist.insertBefore(clone, first);
+                };
+
+                // 2. 原 MutationObserver 逻辑，用于后续刷新顺序
+                const watch = () => {
+                    insertHistoryEntry();      // 先插入
+                    const hist = qs('div#history');
+                    if (!hist) return;
+                    const target = location.pathname;
+                    const moveIfReady = () => {
+                        const ok = qs(`div#history a[href*="${target}"]`);
+                        if (ok) {
+                            refreshHistoryOrder();
+                            return true;
+                        }
+                        return false;
+                    };
+                    if (moveIfReady()) return;
+                    const ob = new MutationObserver(() => {
+                        if (moveIfReady()) ob.disconnect();
+                    });
+                    ob.observe(hist, {childList: true, subtree: true});
+                    setTimeout(() => ob.disconnect(), 60000);  // 60 s 超时自动清理
+                };
+
+                // 3. 根据当前路径决定立即监听或延迟到 popstate
                 if (location.pathname.startsWith('/c/')) {
-                    let attempts = 0;
-                    const maxAttempts = 10;
-                    // 每 300ms 尝试一次刷新，最多尝试 10 次
-                    const intervalId = setInterval(() => {
-                        refreshHistoryOrder();
-                        attempts++;
-                        if (attempts >= maxAttempts) clearInterval(intervalId);
-                    }, timeout / maxAttempts);
+                    watch();
                 } else {
                     const once = () => {
                         if (!location.pathname.startsWith('/c/')) return;
                         window.removeEventListener('popstate', once);
-                        let attempts = 0;
-                        const maxAttempts = 10;
-                        // 初次进 /c/ 后每 500ms 尝试刷新，最多 10 次
-                        const intervalId = setInterval(() => {
-                            refreshHistoryOrder();
-                            attempts++;
-                            if (attempts >= maxAttempts) clearInterval(intervalId);
-                        }, 500);
+                        watch();
                     };
                     window.addEventListener('popstate', once);
                 }
             }
+
+
 
 
 // ① 发送按钮点击（修改）
