@@ -700,6 +700,27 @@
             }
         }
 
+        function refreshHistoryOrder() {
+            try {
+                const hist = qs('div#history');
+                if (!hist) return;
+
+                const currPath = location.pathname;                          // 当前会话路径
+                const anchors = qsa('a[href*="/c/"]', hist);                  // 侧栏所有会话链接
+                const currAnchor = anchors.find(a => samePath(a.href, currPath));
+                if (!currAnchor) return;
+
+                // 将当前会话所在行移动到列表顶部，实现局部“刷新”
+                const row = currAnchor.closest('li') || currAnchor.parentElement;
+                if (row && row.parentElement) {
+                    row.parentElement.prepend(row);
+                }
+            } catch (e) {
+                console.warn('[Bookmark] refreshHistoryOrder error:', e);
+            }
+        }
+
+
         function deepCleanMemory() {
             if (window.__deepCleanRunning) return;      // 防重入
             window.__deepCleanRunning = true;
@@ -1587,6 +1608,22 @@
                 );
             }
 
+            const timeout = 3000;
+            function scheduleHistoryRefresh() {
+                if (location.pathname.startsWith('/c/')) {
+                    // 已经在会话路径，按既定延迟执行
+                    setTimeout(refreshHistoryOrder, timeout);
+                } else {
+                    // 仍在 / 根路径，等跳转完成后再刷新
+                    const once = () => {
+                        if (!location.pathname.startsWith('/c/')) return;
+                        window.removeEventListener('popstate', once);
+                        setTimeout(refreshHistoryOrder, 500);      // 再给侧栏一些渲染时间
+                    };
+                    window.addEventListener('popstate', once);
+                }
+            }
+
 // ① 发送按钮点击（修改）
             send.addEventListener('click', () => {
                 const label = send.getAttribute('aria-label') || send.innerText;
@@ -1594,10 +1631,10 @@
                 const hasUserInput = ed && ed.innerText.trim().length > 0;
                 if (hasUserInput) appendSuffix();       // 始终先写入尾缀
                 bumpActiveChat();
+                scheduleHistoryRefresh();
                 ensureChatRegistered();
             }, {capture: true});
 
-// ② 回车快捷发送（修改）
             // ② 回车快捷发送（修改、去重监听）
             if (!ed.dataset.keyhooked) {          // 防止重复绑定
                 ed.dataset.keyhooked = '1';
@@ -1610,6 +1647,7 @@
                         const hasUserInput = ed && ed.innerText.trim().length > 0;
                         if (hasUserInput) appendSuffix();       // 始终先写入尾缀
                         bumpActiveChat();
+                        scheduleHistoryRefresh();
                         ensureChatRegistered();
                     }
                 }, {capture: true});
