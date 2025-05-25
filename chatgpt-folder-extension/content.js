@@ -1507,7 +1507,15 @@
             ed.dispatchEvent(new Event('input', {bubbles: true}));
         }
 
-
+        function ensureChatRegistered() {
+            if (location.pathname.startsWith('/c/')) return;     // 已是 /c/ 直接结束
+            const watcher = setInterval(() => {
+                if (location.pathname.startsWith('/c/')) {
+                    clearInterval(watcher);
+                    window.bumpActiveChat?.();
+                }
+            }, 120);                        // 120 ms 轮询，成本极低
+        }
         function bindSend() {
             const ed = qs('.ProseMirror');
             // 兼容新版界面多种发送按钮写法
@@ -1547,14 +1555,6 @@
                         }
                     }
                 }
-                if (hasPendingUpload(ed)) {
-                    const id = setInterval(() => {
-                        if (!hasPendingUpload(ed)) {
-                            clearInterval(id);
-                            appendSuffix();
-                        }
-                    }, 500);
-                }
 
                 const folder = folderFid ? folders[folderFid] : null;
                 if (!folder) return;
@@ -1578,7 +1578,7 @@
                 }
             };
 
-
+            window.bumpActiveChat = bumpActiveChat;
             // —— 修改后，排除“停止生成”状态 ——
             // 新增：判断编辑器内是否仍有待上传的附件
             function hasPendingUpload(edNode) {
@@ -1591,10 +1591,10 @@
             send.addEventListener('click', () => {
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
-                const pending = hasPendingUpload(ed);
                 const hasUserInput = ed && ed.innerText.trim().length > 0;
-                if (!pending && hasUserInput) appendSuffix();
+                if (hasUserInput) appendSuffix();       // 始终先写入尾缀
                 bumpActiveChat();
+                ensureChatRegistered();
             }, {capture: true});
 
 // ② 回车快捷发送（修改）
@@ -1607,10 +1607,10 @@
                         if (!btn) return;
                         const label = btn.getAttribute('aria-label') || btn.innerText;
                         if (label.toLowerCase().includes('stop')) return;
-                        const pending = hasPendingUpload(ed);
                         const hasUserInput = ed && ed.innerText.trim().length > 0;
-                        if (!pending && hasUserInput) appendSuffix();
+                        if (hasUserInput) appendSuffix();       // 始终先写入尾缀
                         bumpActiveChat();
+                        ensureChatRegistered();
                     }
                 }, {capture: true});
             }
