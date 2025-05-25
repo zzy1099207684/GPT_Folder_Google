@@ -864,7 +864,10 @@
                             }
                         }
                     }
-                    if (changed) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    if (changed) {                                   // 删除会话后分组已刷新
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                        highlightActive();                           // 立刻重新计算高亮状态
+                    }
                     prevHistoryPaths = currentPaths;
                 } catch (err) {
                     console.warn('[Bookmark] History cleanup error:', err);
@@ -1773,6 +1776,13 @@
                 }
             }
 
+
+            if (!window.__cgptPendingFid &&               // ← 新增条件
+                activeFid &&
+                (!folders[activeFid] ||
+                    !folders[activeFid].chats.some(c => samePath(c.url, location.origin + path)))) {
+                activeFid = null;
+            }
 
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
