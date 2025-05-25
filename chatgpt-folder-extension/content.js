@@ -1094,6 +1094,7 @@
                 window.__cgptPendingFid = clickedFid;
                 const token = Date.now().toString(36);
                 window.__cgptPendingToken = token;
+                delete window.__cgptPromptGapCounters['/'];
 
                 // 保底：把根路径映射到当前分组，侧栏自动收起再展开仍能保持高亮
                 lastActiveMap['/'] = clickedFid;
@@ -1470,7 +1471,10 @@
             // 用 nullish 合并运算符，允许有效的 0 被保留
             const gap = currentFid && folders[currentFid] ? (folders[currentFid].gap ?? 3) : 3;
 
-            const counterKey = currentFid || path;
+            const counterKey =
+                (path === '/' && window.__cgptPendingToken)       // 根路径阶段按 token 区分
+                    ? `/${window.__cgptPendingToken}`
+                    : path;
             let cnt = gapCounters[counterKey];
             let injectNow = false;
 
