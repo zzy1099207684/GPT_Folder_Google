@@ -1601,12 +1601,6 @@
 
             window.bumpActiveChat = bumpActiveChat;
             // —— 修改后，排除“停止生成”状态 ——
-            function hasPendingUpload(edNode) {
-                return !!edNode && edNode.querySelector(
-                    'img,figure,video,[data-testid="file-attachment"],[data-testid="image-attachment"]'
-                );
-            }
-
             const timeout = 3000;
             function scheduleHistoryRefresh() {
                 if (location.pathname.startsWith('/c/')) {
