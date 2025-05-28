@@ -16,6 +16,8 @@
     }
     window.__cgptBookmarksInstance = true;
 
+    const liveSyncMap = new Map();
+
     /* ===== 通用工具 ===== */
     function getDebugInfo() {
         return {
@@ -84,6 +86,7 @@
             }
         }
     };
+    window.observers = observers;
 
     function enqueueIdleTask(fn, timeout = 1000) {
         if (typeof requestIdleCallback === 'function') {
@@ -92,6 +95,35 @@
             setTimeout(fn, 0);
         }
     }
+
+    function debounce(fn, wait = 200) {
+        let t;
+        return (...args) => {
+            clearTimeout(t);
+            t = setTimeout(() => fn.apply(this, args), wait);
+        };
+    }
+
+    /* ===== 动态帧率监控 ===== */
+    let CHUNK_BUDGET_MS = 8;                     // 默认单帧预算
+    (() => {
+        const samples = [];
+        let last = performance.now();
+        function loop(now) {
+            const dt = now - last;
+            last = now;
+            samples.push(dt);
+            if (samples.length > 60) samples.shift();        // 最近 60 帧
+            if (samples.length === 60) {
+                const fps = 1000 / (samples.reduce((a, b) => a + b, 0) / 60);
+                if (fps < 55 && CHUNK_BUDGET_MS > 4) CHUNK_BUDGET_MS = 4;
+                else if (fps > 58 && CHUNK_BUDGET_MS < 12) CHUNK_BUDGET_MS = 8;
+            }
+            requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+    })();
+
 
     /* ===== 通用工具 ===== */
     const CLS = {tip: 'cgpt-tip'};
@@ -189,7 +221,7 @@
         _writeTimer: null,
         _writeDelay: 1000,
         _lastWriteTime: 0,
-        _minInterval: 2000, // 最小写入间隔
+        _minInterval: 5000, // 最小写入间隔
         _retryCount: 0,
         _maxRetries: 3,
         _isRecovering: false,
@@ -412,9 +444,11 @@
             return;            // 让下一次 observer 检测到 history 回来后再 init
         }
 
-// ③ history 存在且 wrapper 不存在 → 重新初始化
+        // ③ history 存在且 wrapper 不存在 → 重新初始化
         if (hist && !wrapper) {
-            initBookmarks(hist);
+            initBookmarks(hist).catch(err => {
+                console.error('initBookmarks error:', err);
+            });
         }
 
     }));
@@ -424,7 +458,7 @@
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {
         /* ---------- 辅助函数 ---------- */
-        const liveSyncMap = new Map();
+
         let currentNewChatObserver = null;
         let currentNewChatPopHandler = null;
 // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
@@ -571,14 +605,14 @@
                 }
             }
             // 首次创建：同时写入初始化标记、folders 与排序
-            storage.set({
+            await storage.set({
                 presetInitialized: 1,
                 folders,
                 folderOrder: storedOrder
             });
         } else {
             // 侧栏重新挂载时，确保本次内存里的 folders 与排序也同步持久化
-            storage.set({
+            await storage.set({
                 folders,
                 folderOrder: storedOrder
             });
@@ -770,6 +804,7 @@
         let activePath = null;
         let activeFid = null;
         let lastClickedChatEl = null;
+        let clearActiveOnHistoryClick = false;
         const syncTitles = () => {
             let updated = false;
             // const a = qs(`a[href*="${path}"]`, historyNode);
@@ -811,7 +846,8 @@
         };
 
 
-        observers.add(new MutationObserver(syncTitles)).observe(historyNode, {
+        const syncTitlesDebounced = debounce(syncTitles, 200);
+        observers.add(new MutationObserver(syncTitlesDebounced)).observe(historyNode, {
             childList: true,
             subtree: true,
             characterData: true
@@ -878,37 +914,64 @@
 
         historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
 
-        // ========= 新增：监听节点移除事件 =========
-        const linkDetachObs = observers.add(new MutationObserver(muts => {
+        // 辅助：赋予 <a> 拖拽能力
+        function markDraggable(a) {
+            if (a.dataset.drag) return;
+            a.dataset.drag = "1";
+            a.draggable = true;
+            a.ondragstart = e => e.dataTransfer.setData('text/plain', a.href);
+        }
+
+        const unifiedObsCallback = debounce(muts => {
             muts.forEach(m => {
+                // 新增节点：赋拖拽
+                m.addedNodes.forEach(n => {
+                    if (n.nodeType !== 1) return;
+                    if (n.matches?.('a[href*="/c/"]')) markDraggable(n);
+                    n.querySelectorAll?.('a[href*="/c/"]').forEach(markDraggable);
+                });
+                // 移除节点：同步清理 liveSyncMap
                 m.removedNodes.forEach(n => {
                     if (n.nodeType !== 1) return;
                     if (n.matches?.('a[data-url]')) detachLink(n);
                     n.querySelectorAll?.('a[data-url]').forEach(detachLink);
                 });
             });
-        }));
-        linkDetachObs.observe(document.body, {childList: true, subtree: true});
+        }, 100);
+
+        const unifiedObs = observers.add(new MutationObserver(unifiedObsCallback));
+        unifiedObs.observe(document.body, {childList:true,subtree:true});
 
 
         /* ---------- 渲染 ---------- */
 
-        // Add after renderChat function, in the render() function
         function render() {
-            // —— 新增：对所有路径剔除已断开节点 ——
+            // 清理失连映射（保持原逻辑）
             for (const [path, arr] of liveSyncMap) {
                 const live = arr.filter(item => item.el.isConnected);
                 live.length ? liveSyncMap.set(path, live) : liveSyncMap.delete(path);
             }
 
-            folderZone.replaceChildren();
-            Object.entries(folders)
-                .forEach(([id, f]) => folderZone.appendChild(renderFolder(id, f)));
+            const entries = Object.entries(folders);       // 需要渲染的分组
+            folderZone.replaceChildren();                  // 先清空容器
+            let i = 0;                                     // 当前渲染进度指针
+            const chunk = () => {
+                const start = Date.now();
+                while (i < entries.length && Date.now() - start < CHUNK_BUDGET_MS) {
+                    const [id, f] = entries[i++];
+                    folderZone.appendChild(renderFolder(id, f));
+                }
+                if (i < entries.length) {                  // 还有未完成任务
+                    enqueueIdleTask(chunk);                // 递归闲时继续
+                } else {                                   // 全部渲染完成
+                    highlightActive();                     // 立即刷新选中标记
+                    if (Math.random() < 0.2) {             // 按原逻辑偶尔清理
+                        enqueueIdleTask(cleanupLiveSyncMap);
+                    }
+                }
+            };
 
-            // 添加定期清理，避免引用堆积
-            if (Math.random() < 0.2) {
-                setTimeout(cleanupLiveSyncMap, 0);
-            }
+            enqueueIdleTask(chunk);                        // 启动首次渲染
         }
 
 
@@ -993,8 +1056,7 @@
                     if (act === 'rename') {                       // 重命名
                         const n = prompt('rename group', folders[fid].name);
                         if (n && n.trim()) {
-                            const t = n.trim().slice(0, 20) + (n.trim().length > 20 ? '…' : '');
-                            folders[fid].name = t;
+                            folders[fid].name = n.trim().slice(0, 20) + (n.trim().length > 20 ? '…' : '');
                             chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                             render();
                         }
@@ -1151,12 +1213,13 @@
                     if (token !== window.__cgptPendingToken) return;
                     const anchors = qsa('div#history a[href*="/c/"]');
 
-                    // 当前路径集合
-                    // 当前路径集合
                     const currentPaths = new Set(
                         anchors.map(a => {
-                            try { return new URL(a.href, location.origin).pathname; }
-                            catch { return ''; }
+                            try {
+                                return new URL(a.href, location.origin).pathname;
+                            } catch {
+                                return '';
+                            }
                         }).filter(Boolean)
                     );
 
@@ -1170,7 +1233,8 @@
                         try {
                             const topPath = new URL(anchors[0].href, location.origin).pathname;
                             if (!prevPaths.has(topPath)) newPaths = [topPath];
-                        } catch {}
+                        } catch {
+                        }
                     }
 
                     if (!newPaths.length) return;
@@ -1245,14 +1309,25 @@
 
                 });
 
-                observer.observe(qs('div#history'), {childList: true, subtree: true});
+                observer.observe(qs('div#history'), {childList: true});
                 currentNewChatObserver = observer;
             };
 
 
             const ul = document.createElement('ul');
             ul.style.cssText = `list-style:none;padding-left:8px;margin:4px 0 0;${f.collapsed ? 'display:none' : ''}`;
-            f.chats.forEach(c => renderChat(ul, fid, c));
+            // 折叠时不渲染子项
+            if (!f.collapsed && f.chats.length) {
+                let ci = 0;
+                const chatChunk = () => {
+                    const start = Date.now();
+                    while (ci < f.chats.length && Date.now() - start < CHUNK_BUDGET_MS) {
+                        renderChat(ul, fid, f.chats[ci++]);
+                    }
+                    if (ci < f.chats.length) enqueueIdleTask(chatChunk);
+                };
+                enqueueIdleTask(chatChunk);
+            }
 
             header.onclick = () => {
                 f.collapsed = !f.collapsed;          // 更新本地状态
@@ -1291,7 +1366,7 @@
             const keys = Object.keys(folders);
             const idx = keys.indexOf(fid);
             // 把拖拽事件绑到 header 上
-            header.dataset.idx = idx;
+            header.dataset.idx = String(idx);
             header.draggable = true;
             header.ondragstart = e => {
                 e.dataTransfer.effectAllowed = 'move';
@@ -1409,16 +1484,7 @@
             }
         }
 
-        /* ---------- 拖拽源委托 ---------- */
-        const dragSrcObs = observers.add(new MutationObserver(() => {
-            qsa('a[href*="/c/"]').forEach(a => {
-                if (a.dataset.drag) return;
-                a.dataset.drag = 1;
-                a.draggable = true;
-                a.ondragstart = e => e.dataTransfer.setData('text/plain', a.href);
-            });
-        }));
-        dragSrcObs.observe(historyNode, {childList: true, subtree: true});
+
 
         /* ---------- 移除压缩按钮 ---------- */
         observers.add(new MutationObserver(() => qsa('path[d^="M316.9 18"]').forEach(p => p.closest('button')?.remove())))
@@ -1555,13 +1621,14 @@
                 }
             }, 120);                        // 120 ms 轮询，成本极低
         }
+
         function bindSend() {
             const ed = qs('.ProseMirror');
             // 兼容新版界面多种发送按钮写法
             const send = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]');
 
             if (!ed || !send || send.dataset.hooked) return;
-            send.dataset.hooked = 1;                                                   // 标记已挂钩避免重复
+            send.dataset.hooked = "1";                                                   // 标记已挂钩避免重复
 
             // 修改后版本：新增 i === -1 时插入逻辑，只对 activeFid 生效
             const bumpActiveChat = () => {
@@ -1618,6 +1685,7 @@
             };
 
             window.bumpActiveChat = bumpActiveChat;
+
             // 等待窗口改为 15 s，刷新间隔固定 500 ms
             function scheduleHistoryRefresh() {
                 // 1. 立即插入一个“新会话”条目（仅在 History 面板还没该条时）
@@ -1675,8 +1743,6 @@
             }
 
 
-
-
 // ① 发送按钮点击（修改）
             send.addEventListener('click', () => {
                 const label = send.getAttribute('aria-label') || send.innerText;
@@ -1712,7 +1778,7 @@
         bindSend();
 
         render();
-        let clearActiveOnHistoryClick = false;
+        clearActiveOnHistoryClick = false;
 
         // clearGroupHighlight 修正版
         const clearGroupHighlight = () => {
@@ -1955,9 +2021,14 @@
             }
         }
 
-        // 每2分钟检查一次内存状态
+        // 每2分钟检查一次内存状态（idle 调度，避免阻塞） ★修改
         if (window.__memoryCheckerId) clearInterval(window.__memoryCheckerId);
-        window.__memoryCheckerId = setInterval(checkMemoryUsage, 10000);
+
+        const _MEM_CHECK_INTERVAL = 120_000;   // 120 000 ms = 2 min
+        window.__memoryCheckerId = setInterval(() => {
+            // 800 ms 超时保证即使空闲不足也会尽快执行
+            enqueueIdleTask(checkMemoryUsage, 800);
+        }, _MEM_CHECK_INTERVAL);
         // 正确创建cleanup函数
         // Enhanced cleanup function - replace existing cleanup function
         const cleanup = () => {
