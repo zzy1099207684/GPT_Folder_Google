@@ -95,7 +95,9 @@
             setTimeout(fn, 0);
         }
     }
+
     window.enqueueIdleTask = enqueueIdleTask;
+
     function debounce(fn, wait = 200) {
         let t;
         return (...args) => {
@@ -109,6 +111,7 @@
     (() => {
         const samples = [];
         let last = performance.now();
+
         function loop(now) {
             const dt = now - last;
             last = now;
@@ -121,6 +124,7 @@
             }
             requestAnimationFrame(loop);
         }
+
         requestAnimationFrame(loop);
     })();
 
@@ -940,7 +944,7 @@
         }, 100);
 
         const unifiedObs = observers.add(new MutationObserver(unifiedObsCallback));
-        unifiedObs.observe(document.body, {childList:true,subtree:true});
+        unifiedObs.observe(document.body, {childList: true, subtree: true});
 
 
         /* ---------- 渲染 ---------- */
@@ -1483,7 +1487,6 @@
                 }
             }
         }
-
 
 
         /* ---------- 移除压缩按钮 ---------- */
@@ -2111,6 +2114,7 @@
         // 在动态内容页面可能发生的导航事件上添加清理
         document.addEventListener('spa:navigation', cleanup);
     }
+
     window.initBookmarks = initBookmarks;
 })();
 // ==== event-loop stall monitor (NEW) ====
