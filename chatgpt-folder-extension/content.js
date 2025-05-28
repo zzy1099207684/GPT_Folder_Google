@@ -1152,19 +1152,29 @@
                     const anchors = qsa('div#history a[href*="/c/"]');
 
                     // 当前路径集合
+                    // 当前路径集合
                     const currentPaths = new Set(
                         anchors.map(a => {
-                            try {
-                                return new URL(a.href, location.origin).pathname;
-                            } catch {
-                                return '';
-                            }
+                            try { return new URL(a.href, location.origin).pathname; }
+                            catch { return ''; }
                         }).filter(Boolean)
                     );
 
-                    // 仅保留本次真正新增的路径
-                    const newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
+// 仅保留本次真正新增的路径
+                    let newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
+
+                    /* 兼容批量删除脚本在 <a> 节点上插入复选框造成的
+                       MutationObserver 次序提前，导致 newPaths 判空。
+                       若判空，则以侧栏当前首行作为兜底，确保能落到点击的分组 */
+                    if (!newPaths.length && anchors[0]) {
+                        try {
+                            const topPath = new URL(anchors[0].href, location.origin).pathname;
+                            if (!prevPaths.has(topPath)) newPaths = [topPath];
+                        } catch {}
+                    }
+
                     if (!newPaths.length) return;
+
 
                     /* ===== 修改后片段 2 ===== */
                     observer.disconnect();
