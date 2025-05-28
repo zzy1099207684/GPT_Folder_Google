@@ -95,7 +95,7 @@
             setTimeout(fn, 0);
         }
     }
-
+    window.enqueueIdleTask = enqueueIdleTask;
     function debounce(fn, wait = 200) {
         let t;
         return (...args) => {
@@ -2111,21 +2111,29 @@
         // 在动态内容页面可能发生的导航事件上添加清理
         document.addEventListener('spa:navigation', cleanup);
     }
+    window.initBookmarks = initBookmarks;
 })();
 // ==== event-loop stall monitor (NEW) ====
-(function monitorEventLoop(interval = 10000, threshold = 200) {
+(function monitorEventLoop(interval = 10_000, threshold = 500) {
+    if (window.__cgptEventLoopMonitor) return;          // ★ 单实例哨兵
+    window.__cgptEventLoopMonitor = true;               // ★ 标记已创建
+
     let last = performance.now();
     setInterval(() => {
+
         const now = performance.now();
         const drift = now - last - interval;
         last = now;
+
         if (drift > threshold) {
             console.warn('[Bookmark] Main thread stall:', drift);
-            // 卸载旧侧边栏与观察器，稍后由 readyObs 重新挂载
+            // 卸载旧侧栏与观察器，稍后由 readyObs 重新挂载
             document.getElementById('cgpt-bookmarks-wrapper')?.remove();
-            observers.disconnectAll();
+            window.observers?.disconnectAll?.();
+
             const hist = document.querySelector('div#history');
-            if (hist) enqueueIdleTask(() => initBookmarks(hist));
+            const idle = window.enqueueIdleTask ?? (fn => setTimeout(fn, 0));
+            if (hist) idle(() => window.initBookmarks?.(hist));
         }
     }, interval);
 })();
