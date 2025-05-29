@@ -1427,13 +1427,18 @@
                 const stillExists = qsa('div#history a[href*="/c/"]')
                     .some(a => samePath(a.href, chat.url));
 
-                if (!stillExists) {                                   // 已失效→立即自清
-                    const arr = folders[fid].chats;
-                    const idx = arr.findIndex(c => samePath(c.url, chat.url));
-                    if (idx !== -1) {
-                        arr.splice(idx, 1);                           // 从数组移除
+                if (!stillExists) {                                   // 已失效→同时清理全部分组
+                    let changed = false;
+                    for (const [gfid, folder] of Object.entries(folders)) {
+                        const i = folder.chats.findIndex(c => samePath(c.url, chat.url));
+                        if (i !== -1) {
+                            folder.chats.splice(i, 1);                // 移除同路径项
+                            changed = true;
+                        }
+                    }
+                    if (changed) {                                    // 至少删到一处才保存并重渲染
                         chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                        render();                                     // 刷新 UI
+                        render();
                     }
                     return;                                           // 阻止无意义跳转
                 }
