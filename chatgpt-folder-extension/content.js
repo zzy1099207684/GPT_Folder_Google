@@ -2167,26 +2167,32 @@
     window.initBookmarks = initBookmarks;
 })();
 // ==== event-loop stall monitor (NEW) ====
-(function monitorEventLoop(interval = 10_000, threshold = 500) {
-    if (window.__cgptEventLoopMonitor) return;          // ★ 单实例哨兵
-    window.__cgptEventLoopMonitor = true;               // ★ 标记已创建
+(function monitorEventLoop(interval = 10_000, threshold = 500, cooldown = 30_000) {
+    if (window.__cgptEventLoopMonitor) return;
+    window.__cgptEventLoopMonitor = true;
 
     let last = performance.now();
-    setInterval(() => {
+    let lastReset = 0;                                  // 新增：记录上次自愈时间
 
+    setInterval(() => {
         const now = performance.now();
         const drift = now - last - interval;
         last = now;
 
         if (drift > threshold) {
+            if (now - lastReset < cooldown) {           // 冷却期内仅记录一次
+                console.warn('[Bookmark] Main thread stall (cooldown):', drift);
+                return;
+            }
+            lastReset = now;
+
             console.warn('[Bookmark] Main thread stall:', drift);
-            // 卸载旧侧栏与观察器，稍后由 readyObs 重新挂载
             document.getElementById('cgpt-bookmarks-wrapper')?.remove();
             window.observers?.disconnectAll?.();
-
             const hist = document.querySelector('div#history');
             const idle = window.enqueueIdleTask ?? (fn => setTimeout(fn, 0));
             if (hist) idle(() => window.initBookmarks?.(hist));
         }
     }, interval);
 })();
+
