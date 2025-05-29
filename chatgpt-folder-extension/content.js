@@ -1779,17 +1779,11 @@
                         if (!hist) return;
                         const target = location.pathname;
                         if (!qs(`div#history a[href*="${target}"]`, hist)) {
-                            console.warn('[Bookmark] History entry missing – refreshing sidebar');
-                            const curr = location.pathname;                 // 记下当前路径
-                            history.pushState({}, '', '/');                 // 临时跳到根路径
-                            window.dispatchEvent(new Event('popstate'));    // 触发渲染 → 拉取会话列表
-                            setTimeout(() => {                              // 50 ms 后跳回当前会话
-                                history.replaceState({}, '', curr);
-                                window.dispatchEvent(new Event('popstate'));
-                            }, 50);
+                            scheduleHistoryRefresh();
+                            refreshHistoryOrder();
                         }
                     } catch (e) {
-                        console.warn('[Bookmark] Fallback sidebar refresh error:', e);
+                        console.warn('[Bookmark] Fallback reload error:', e);
                     }
                 }, 1500);
             }
