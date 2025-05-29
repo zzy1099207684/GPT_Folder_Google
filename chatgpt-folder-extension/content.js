@@ -1772,23 +1772,19 @@
                     window.addEventListener('popstate', once);
                 }
 
-                /* 4. 兜底：1.5 秒后如果仍未出现则仅刷新 History 面板 */
+                /* 4. 兜底：1.5 秒后仍无条目则整页刷新 */
                 setTimeout(() => {
                     try {
                         const hist = qs('div#history');
                         if (!hist) return;
                         const target = location.pathname;
-
-                        /* 若缺失目标会话，将占位条目插入到顶部并重新排序 */
                         if (!qs(`div#history a[href*="${target}"]`, hist)) {
-                            insertHistoryEntry();          // 复用步骤 1 的逻辑
-                            refreshHistoryOrder();         // 只移动列表顺序，不整页刷新
+                            location.reload();
                         }
                     } catch (e) {
-                        console.warn('[Bookmark] Fallback history refresh error:', e);
+                        console.warn('[Bookmark] Fallback reload error:', e);
                     }
                 }, 1500);
-
             }
 
 
