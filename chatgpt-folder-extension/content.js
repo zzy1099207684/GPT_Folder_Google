@@ -821,13 +821,13 @@
                     }
                 });
                 if (!a) {
-                    arr.forEach(({fid}) => {
-                        const folder = folders[fid];
-                        if (!folder) return;
-                        const before = folder.chats.length;
-                        folder.chats = folder.chats.filter(c => !samePath(c.url, location.origin + path));
-                        if (folder.chats.length !== before) updated = true;
-                    });
+                    // arr.forEach(({fid}) => {
+                    //     const folder = folders[fid];
+                    //     if (!folder) return;
+                    //     const before = folder.chats.length;
+                    //     folder.chats = folder.chats.filter(c => !samePath(c.url, location.origin + path));
+                    //     if (folder.chats.length !== before) updated = true;
+                    // });
                     return;
                 }
                 const t = (a.textContent || 'new chat').trim();
@@ -885,14 +885,7 @@
                     const fidList = Object.keys(folders);
                     for (const [fid, folder] of Object.entries(folders)) {
                         const oldChats = folder.chats;
-                        const newChats = oldChats.filter(c => {
-                            if (!c.url) return true;
-                            try {
-                                return activePaths.has(new URL(c.url).pathname);
-                            } catch {
-                                return true;
-                            }
-                        });
+                        const newChats = oldChats;
                         if (newChats.length !== oldChats.length) {
                             folder.chats = newChats;
                             changed = true;
@@ -1429,22 +1422,35 @@
                 clearActiveOnHistoryClick = false;
                 if (!chat.url) return;
                 e.preventDefault();
+
+                // ① 判断这条会话是否仍出现在 History 侧栏
+                const stillExists = qsa('div#history a[href*="/c/"]')
+                    .some(a => samePath(a.href, chat.url));
+
+                if (!stillExists) {                                   // 已失效→立即自清
+                    const arr = folders[fid].chats;
+                    const idx = arr.findIndex(c => samePath(c.url, chat.url));
+                    if (idx !== -1) {
+                        arr.splice(idx, 1);                           // 从数组移除
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                        render();                                     // 刷新 UI
+                    }
+                    return;                                           // 阻止无意义跳转
+                }
+
+                // ② 正常导航分支（原逻辑保持不变）
                 lastClickedChatEl = link;
                 const path = new URL(chat.url, location.origin).pathname;
                 lastActiveMap[path] = fid;
                 try {
-                    if (chrome?.runtime?.id) {
-                        storage.set({lastActiveMap});
-                    }
+                    if (chrome?.runtime?.id) storage.set({lastActiveMap});
                 } catch (err) {
                     console.warn('[Bookmark] Error saving lastActiveMap:', err);
                 }
                 history.pushState({}, '', chat.url);
                 window.dispatchEvent(new Event('popstate'));
                 setTimeout(() => {
-                    if (lastClickedChatEl === link) {
-                        lastClickedChatEl = null;
-                    }
+                    if (lastClickedChatEl === link) lastClickedChatEl = null;
                 }, 100);
             };
 
