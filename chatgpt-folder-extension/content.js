@@ -1436,11 +1436,20 @@
                             changed = true;
                         }
                     }
-                    if (changed) {                                    // 至少删到一处才保存并重渲染
+                    if (changed) {
+                        // 同步清除路径映射，彻底断开关联
+                        try {
+                            const p = new URL(chat.url, location.origin).pathname;
+                            if (lastActiveMap[p]) {
+                                delete lastActiveMap[p];
+                                if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                            }
+                        } catch {}
+
                         chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                         render();
                     }
-                    return;                                           // 阻止无意义跳转
+                    return;                                       // 阻止无意义跳转
                 }
 
                 // ② 正常导航分支（原逻辑保持不变）
@@ -1472,7 +1481,15 @@
                 const index = arr.findIndex(c => samePath(c.url, chat.url));
                 if (index !== -1) {
                     arr.splice(index, 1);
-                    // 同步存储并重新渲染
+
+                    try {
+                        const p = new URL(chat.url, location.origin).pathname;
+                        if (lastActiveMap[p]) {
+                            delete lastActiveMap[p];
+                            if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                        }
+                    } catch {}
+
                     chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                     render();
                 }
