@@ -1644,7 +1644,7 @@
                 if (!location.pathname.startsWith('/c/')) return;
                 const cur = location.href;
                 // 优先从 history 里取标题，取不到就用“new chat”
-                const title = qs(`div#history a[href*="${cur}"]`)?.textContent.trim() || 'new chat';
+                const title = qs(`div#history a[href*="${cur}"]`)?.textContent.trim() || 'New chat';
                 const curPath = new URL(cur).pathname;
 
                 let folderFid = activeFid && folders[activeFid] ? activeFid : null;
