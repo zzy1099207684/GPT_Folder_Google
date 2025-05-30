@@ -1578,7 +1578,9 @@
                     .some(a => samePath(a.href, chat.url));
 
                 if (!stillExists) {
-                    tip(link, 'The conversation has been hidden because it is too old, or it might have been deleted. Please refresh your history to check and try again');
+                    tip(link, 'The conversation has been hidden because it is too old, ' +
+                        '           or it might have been deleted. ' +
+                        '           Please refresh your history to check or click ✕ to delete it.',);
                     return;
                 }
 
