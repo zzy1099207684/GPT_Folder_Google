@@ -830,7 +830,7 @@
                     // });
                     return;
                 }
-                const t = (a.textContent || 'new chat').trim();
+                const t = (a.textContent || 'New chat').trim();
                 arr.forEach(({fid, el}) => {
                     if (el.textContent !== t) el.textContent = t;
                     const folder = folders[fid];
@@ -1269,7 +1269,7 @@
                     /* 3. 兜底方案 */
                     const newChatUrl = newChatAnchor ? newChatAnchor.href
                         : (location.origin + newPaths[0]);
-                    const title = (newChatAnchor?.textContent || 'new chat').trim();
+                    const title = (newChatAnchor?.textContent || 'New chat').trim();
 
                     try {
                         const path = new URL(newChatUrl).pathname;
@@ -1732,7 +1732,7 @@
                     const anchor = clone.querySelector('a[href]');
                     if (anchor) {
                         anchor.href = target;
-                        anchor.textContent = 'new chat';
+                        anchor.textContent = 'New chat';
                         anchor.dataset.url = target;
                     }
                     hist.insertBefore(clone, first);
