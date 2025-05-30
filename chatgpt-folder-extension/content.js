@@ -1345,7 +1345,7 @@
                     history.pushState({}, '', '/');
                     window.dispatchEvent(new Event('popstate'));
                 }
-                setTimeout(highlightActive, 0);
+                highlightActive();
 
 
                 // 定义observer - 监视history区域变化以检测新聊天
