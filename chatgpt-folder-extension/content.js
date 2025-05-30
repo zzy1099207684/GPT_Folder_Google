@@ -430,7 +430,7 @@
         }
     })();
 
-    const readyObs = observers.add(new MutationObserver(() => {
+    const readyObs = observers.add(new MutationObserver(debounce(() => {
         const hist = qs('div#history');
 
         const wrappers = qsa('#cgpt-bookmarks-wrapper');
@@ -438,7 +438,7 @@
             wrappers.slice(1).forEach(w => w.remove());
         }
 
-        const wrapper = wrappers[0];   // 可能为 undefined
+        const wrapper = wrappers[0];
 
         if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
             try {
@@ -448,30 +448,22 @@
             }
         }
 
-        /* 新增：history 被折叠(==null)但旧 wrapper 仍在时，先彻底清理，等待重新初始化 */
         if (!hist && wrapper) {
-            try {
-                wrapper.remove();
-            } catch {
-            }
+            try { wrapper.remove() } catch {}
             if (window.__cgptBookmarksCleanup) {
-                try {
-                    window.__cgptBookmarksCleanup();
-                } catch {
-                }
+                try { window.__cgptBookmarksCleanup() } catch {}
             }
-            return;            // 让下一次 observer 检测到 history 回来后再 init
+            return;
         }
 
-        // ③ history 存在且 wrapper 不存在 → 重新初始化
         if (hist && !wrapper) {
             initBookmarks(hist).catch(err => {
                 console.error('initBookmarks error:', err);
             });
         }
-
-    }));
+    }, 200)));
     readyObs.observe(document.body, {childList: true, subtree: true});
+
 
 
     /* ===== 初始化收藏夹 ===== */
