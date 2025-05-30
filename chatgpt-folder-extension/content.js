@@ -392,7 +392,14 @@
     const tip = (el, txt) => {
         // 先清除页面上所有可能残留的气泡，避免重复或卡死
         document.querySelectorAll(`.${CLS.tip}`).forEach(node => node.remove());
-        const d = Object.assign(document.createElement('div'), {className: CLS.tip, textContent: txt});
+        const d = Object.assign(document.createElement('div'), {
+            className: CLS.tip,
+            innerText: txt      // 改为 innerText，配合下面样式可保留换行
+        });
+// 以下三行用于开启自动换行，并限制最大宽度
+        d.style.whiteSpace = 'pre-wrap';
+        d.style.wordBreak = 'break-word';
+        d.style.maxWidth = '200px';
         document.body.appendChild(d);
         const r = el.getBoundingClientRect();
         d.style.left = r.left + r.width / 2 - d.offsetWidth / 2 + 'px';
