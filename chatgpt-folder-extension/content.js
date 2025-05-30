@@ -1345,6 +1345,7 @@
                     history.pushState({}, '', '/');
                     window.dispatchEvent(new Event('popstate'));
                 }
+                setTimeout(highlightActive, 0);
 
 
                 // 定义observer - 监视history区域变化以检测新聊天
@@ -1569,31 +1570,11 @@
                 const stillExists = qsa('div#history a[href*="/c/"]')
                     .some(a => samePath(a.href, chat.url));
 
-                if (!stillExists) {                                   // 已失效→同时清理全部分组
-                    let changed = false;
-                    for (const [gfid, folder] of Object.entries(folders)) {
-                        const i = folder.chats.findIndex(c => samePath(c.url, chat.url));
-                        if (i !== -1) {
-                            folder.chats.splice(i, 1);                // 移除同路径项
-                            changed = true;
-                        }
-                    }
-                    if (changed) {
-                        // 同步清除路径映射，彻底断开关联
-                        try {
-                            const p = new URL(chat.url, location.origin).pathname;
-                            if (lastActiveMap[p]) {
-                                delete lastActiveMap[p];
-                                if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                            }
-                        } catch {
-                        }
-
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                        render();
-                    }
-                    return;                                       // 阻止无意义跳转
+                if (!stillExists) {
+                    tip(link, 'The conversation has been hidden because it is too old, or it might have been deleted. Please refresh your history to check and try again');
+                    return;
                 }
+
 
                 // ② 正常导航分支（原逻辑保持不变）
                 lastClickedChatEl = link;
@@ -1946,7 +1927,7 @@
             }, {capture: true});
 
             // ② 回车快捷发送（修改、去重监听）
-            if (!ed.dataset.keyhooked) {          // 防止重复绑定
+            if (!ed.dataset.keyhooked) {
                 ed.dataset.keyhooked = '1';
                 ed.addEventListener('keydown', e => {
                     if (e.key === 'Enter' && !e.shiftKey) {
