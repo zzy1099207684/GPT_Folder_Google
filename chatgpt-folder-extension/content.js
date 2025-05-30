@@ -1606,6 +1606,7 @@
                 }
                 history.pushState({}, '', chat.url);
                 window.dispatchEvent(new Event('popstate'));
+                highlightActive();                        // 同一路径重复点击时立即刷新选中组
                 setTimeout(() => {
                     if (lastClickedChatEl === link) lastClickedChatEl = null;
                 }, 100);
