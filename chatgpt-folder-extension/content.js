@@ -461,6 +461,131 @@
 
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {
+        function insertMultiSelectHeader(root){
+            /* 若块已存在就搬到 div#history 之上，避免重复创建 */
+            const exist = document.getElementById('cgpt-select-header');
+            if (exist){
+                const parent = root.parentElement;
+                if (exist.parentElement !== parent || exist.nextSibling !== root){
+                    parent.insertBefore(exist, root);      // 确保永远位于 history 前
+                }
+                return;                                    // 已处理完直接退出
+            }
+
+            // 外层 aside
+            const aside = document.createElement('aside');
+            aside.id = 'cgpt-select-header';
+            aside.className = 'mx-[3px] mt-5';
+
+            // 内层工具条
+            const bar = document.createElement('div');
+            bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:rgba(255,255,255,.05)';
+
+            // 全选复选框
+            const toggle = document.createElement('input');
+            toggle.type = 'checkbox';
+            toggle.style.cssText = 'accent-color:#10a37f;cursor:pointer';
+            bar.appendChild(toggle);
+
+            // 右侧省略号
+            const menuBtn = document.createElement('span');
+            menuBtn.textContent = '⋯';
+            menuBtn.style.cssText = 'margin-left:auto;font-size:18px;cursor:pointer;line-height:1';
+            bar.appendChild(menuBtn);
+
+            aside.appendChild(bar);
+            root.parentElement.insertBefore(aside, root);
+
+            /* === 交互 === */
+
+            // ① 全选 / 取消全选
+            toggle.addEventListener('change', () => {
+                const boxes = root.querySelectorAll('input.history-checkbox');
+                boxes.forEach(cb => {
+                    cb.checked = toggle.checked;
+                    cb.dispatchEvent(new Event('change'));       // 触发 batch_delete.js 内的存储同步
+                });
+            });
+
+            // ② 弹出菜单
+            const pop = document.createElement('div');
+            pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:120px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:9999';
+            document.body.appendChild(pop);
+
+            function hide() {
+                pop.style.display = 'none';
+            }
+
+            window.addEventListener('click', e => {
+                if (!menuBtn.contains(e.target) && !pop.contains(e.target)) hide();
+            }, true);
+
+            menuBtn.addEventListener('click', () => {
+                if (pop.style.display === 'block') {
+                    hide();
+                    return;
+                }
+                pop.innerHTML = '';
+                const entry = document.createElement('div');
+                entry.textContent = '分组';
+                entry.style.cssText = 'padding:4px 12px;cursor:pointer;white-space:nowrap';
+                pop.appendChild(entry);
+
+                const r = menuBtn.getBoundingClientRect();
+                pop.style.left = `${r.right - 120}px`;
+                pop.style.top = `${r.bottom + 4}px`;
+                pop.style.display = 'block';
+
+                entry.onclick = () => {
+                    showGroupList(r);
+                    hide();
+                };
+            });
+
+            // ③ 选择目标分组
+            function showGroupList(bRect) {
+                const list = document.createElement('div');
+                list.style.cssText = 'position:fixed;display:flex;flex-direction:column;min-width:140px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:10000';
+                document.body.appendChild(list);
+
+                const r = bRect || menuBtn.getBoundingClientRect();
+                list.style.left = `${r.right - 140}px`;
+                list.style.top = `${r.bottom + 4}px`;
+
+                Object.entries(folders).forEach(([fid, f]) => {
+                    const row = document.createElement('div');
+                    row.textContent = f.name || 'Group';
+                    row.style.cssText = 'padding:4px 12px;cursor:pointer;white-space:nowrap';
+                    row.onclick = () => {
+                        const chosen = [...root.querySelectorAll('a.__menu-item[href*="/c/"]')]
+                            .filter(a => a.querySelector('input.history-checkbox')?.checked);
+
+                        chosen.forEach(a => {
+                            const url = a.href;
+                            const title = (a.textContent || 'Chat').trim();
+                            if (!f.chats.some(c => samePath(c.url, url))) {
+                                f.chats.unshift({url, title});
+                            }
+                        });
+
+                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                        render();                     // 复用原有渲染逻辑
+                        list.remove();
+                    };
+                    list.appendChild(row);
+                });
+
+                /* 延后一帧再注册“点击空白处关闭”监听，防止刚打开就被同一次点击关掉 */
+                setTimeout(() => {
+                    window.addEventListener('click', () => {
+                        if (document.body.contains(list)) list.remove();
+                    }, {once: true});
+                }, 0);
+
+            }
+        }
+
+
         /* ---------- 辅助函数 ---------- */
 
         let currentNewChatObserver = null;
@@ -488,6 +613,9 @@
 
         historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
         historyNode.addEventListener('click', historyClickHandler);
+
+        // 多选头部块 ─ 初始化
+        insertMultiSelectHeader(historyNode);        // ← 新增
 
         if (qs('#cgpt-bookmarks-wrapper')) return;               // 防重复
 
@@ -579,7 +707,15 @@
         inner.append(fontBlock, bar, folderZone);
         wrap.appendChild(inner);
 
-        historyNode.parentElement.insertBefore(wrap, historyNode);                            // 插入侧栏顶部
+        // 插入 bookmarks wrapper 于最顶
+        historyNode.parentElement.insertBefore(wrap, historyNode);
+
+        // 重新定位多选头部块到 history 与 bookmarks wrapper 之间
+        const selHeader = document.getElementById('cgpt-select-header');
+        if (selHeader) {
+            historyNode.parentElement.insertBefore(selHeader, historyNode);
+        }
+        // 插入侧栏顶部
 
         /* ---------- 数据读取 ---------- */
         const storedFolders = (await storage.get('folders')) || {};
@@ -1444,7 +1580,8 @@
                                 delete lastActiveMap[p];
                                 if (chrome?.runtime?.id) storage.set({lastActiveMap});
                             }
-                        } catch {}
+                        } catch {
+                        }
 
                         chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                         render();
@@ -1488,7 +1625,8 @@
                             delete lastActiveMap[p];
                             if (chrome?.runtime?.id) storage.set({lastActiveMap});
                         }
-                    } catch {}
+                    } catch {
+                    }
 
                     chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                     render();

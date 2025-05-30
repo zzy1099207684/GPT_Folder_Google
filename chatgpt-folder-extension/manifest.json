@@ -15,7 +15,7 @@
   "content_scripts": [
     {
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
-      "js": ["content.js"],
+      "js": ["content.js", "batch_delete.js"],
       "css": ["style.css"]
     }
   ]
