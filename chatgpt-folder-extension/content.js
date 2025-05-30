@@ -568,6 +568,12 @@
                             }
                         });
 
+                        // 新增：分组后立即清空多选状态
+                        if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
+                        root.querySelectorAll('input.history-checkbox').forEach(cb => cb.checked = false);
+                        const toggleAll = document.querySelector('#cgpt-select-header input[type="checkbox"]');
+                        if (toggleAll) toggleAll.checked = false;
+
                         chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                         render();                     // 复用原有渲染逻辑
                         list.remove();
