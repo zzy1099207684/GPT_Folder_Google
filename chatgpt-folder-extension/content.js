@@ -396,7 +396,7 @@
             className: CLS.tip,
             innerText: txt      // 改为 innerText，配合下面样式可保留换行
         });
-// 以下三行用于开启自动换行，并限制最大宽度
+        // 以下三行用于开启自动换行，并限制最大宽度
         d.style.whiteSpace = 'pre-wrap';
         d.style.wordBreak = 'break-word';
         d.style.maxWidth = '200px';
@@ -405,8 +405,16 @@
         d.style.left = r.left + r.width / 2 - d.offsetWidth / 2 + 'px';
         d.style.top = r.top - d.offsetHeight - 6 + 'px';
         // 安全保险：3 秒后自动销毁，防止意外卡死
-        setTimeout(() => d.remove(), 3000);
-        return () => d.remove();
+        const timer = setTimeout(() => d.remove(), 3000);
+        // 鼠标移出目标元素时立即销毁
+        el.addEventListener('mouseleave', () => {
+            clearTimeout(timer);
+            d.remove();
+        }, {once: true});
+        return () => {
+            clearTimeout(timer);
+            d.remove();
+        };
     };
 
 
@@ -468,12 +476,12 @@
 
     /* ===== 初始化收藏夹 ===== */
     async function initBookmarks(historyNode) {
-        function insertMultiSelectHeader(root){
+        function insertMultiSelectHeader(root) {
             /* 若块已存在就搬到 div#history 之上，避免重复创建 */
             const exist = document.getElementById('cgpt-select-header');
-            if (exist){
+            if (exist) {
                 const parent = root.parentElement;
-                if (exist.parentElement !== parent || exist.nextSibling !== root){
+                if (exist.parentElement !== parent || exist.nextSibling !== root) {
                     parent.insertBefore(exist, root);      // 确保永远位于 history 前
                 }
                 return;                                    // 已处理完直接退出
