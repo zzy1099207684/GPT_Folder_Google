@@ -479,15 +479,14 @@
                 return;                                    // 已处理完直接退出
             }
 
-            // 外层 aside
+            // 外层 aside（宽度缩减，与分组列表项对齐）
             const aside = document.createElement('aside');
             aside.id = 'cgpt-select-header';
-            aside.className = 'mx-[3px] mt-5';
+            aside.style.cssText = 'margin:4px 12px 0;width:calc(100% - 24px)';
 
             // 内层工具条
             const bar = document.createElement('div');
             bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:rgba(255,255,255,.05)';
-
             // 全选复选框
             const toggle = document.createElement('input');
             toggle.type = 'checkbox';
@@ -501,7 +500,8 @@
             bar.appendChild(menuBtn);
 
             aside.appendChild(bar);
-            root.parentElement.insertBefore(aside, root);
+            root.parentElement.insertBefore(aside, root.nextSibling);
+
 
             /* === 交互 === */
 
