@@ -600,7 +600,10 @@
 
 
         /* ---------- 辅助函数 ---------- */
-
+        let activePath = null;
+        let activeFid = null;
+        let lastClickedChatEl = null;
+        let clearActiveOnHistoryClick = false;
         let currentNewChatObserver = null;
         let currentNewChatPopHandler = null;
 // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
@@ -967,10 +970,7 @@
 
         if (window.__deepCleanerId) clearInterval(window.__deepCleanerId);
         window.__deepCleanerId = setInterval(() => enqueueIdleTask(deepCleanMemory), 180000);
-        let activePath = null;
-        let activeFid = null;
-        let lastClickedChatEl = null;
-        let clearActiveOnHistoryClick = false;
+
         const syncTitles = () => {
             let updated = false;
             // const a = qs(`a[href*="${path}"]`, historyNode);
