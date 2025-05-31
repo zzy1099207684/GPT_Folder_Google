@@ -630,13 +630,26 @@
         // 多选头部块 ─ 初始化
         insertMultiSelectHeader(historyNode);        // ← 新增
 
-        if (qs('#cgpt-bookmarks-wrapper')) return;               // 防重复
+        // 检查是否已有书签容器
+        const existingWrapper = qs('#cgpt-bookmarks-wrapper');
+        if (existingWrapper) {
+            // 若已有容器且位置不在 historyNode 同一父节点，则移动到正确位置
+            if (existingWrapper.parentElement !== historyNode.parentElement) {
+                try {
+                    historyNode.parentElement.insertBefore(existingWrapper, historyNode);
+                } catch (e) {
+                    console.warn('[Bookmark] Failed to relocate existing wrapper:', e);
+                }
+            }
+            return;
+        }
 
         /* ---------- DOM 构建 ---------- */
         const wrap = Object.assign(document.createElement('div'), {
             id: 'cgpt-bookmarks-wrapper', style: 'width:100%;margin-bottom:4px'
         });
         const inner = Object.assign(document.createElement('div'), {style: 'padding:4px 0'});
+        // …（后续创建 fontBlock、bar、folderZone 等）…
 
         /* ---------- 新增：页面字体选择块 ---------- */
         const fontBlock = Object.assign(document.createElement('div'), {
