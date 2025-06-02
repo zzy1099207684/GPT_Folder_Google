@@ -918,19 +918,16 @@
 
         function refreshHistoryOrder() {
             try {
-                const hist = qs('div#history');
+                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                 if (!hist) return;
 
-                const currPath = location.pathname;                          // 当前会话路径
-                const anchors = qsa('a[href*="/c/"]', hist);                  // 侧栏所有会话链接
+                const currPath = location.pathname;
+                const anchors = qsa('a[href*="/c/"]', hist);
                 const currAnchor = anchors.find(a => samePath(a.href, currPath));
                 if (!currAnchor) return;
 
-                // 将当前会话所在行移动到列表顶部，实现局部“刷新”
                 const row = currAnchor.closest('li') || currAnchor.parentElement;
-                if (row && row.parentElement) {
-                    row.parentElement.prepend(row);
-                }
+                if (row && row.parentElement) row.parentElement.prepend(row);
             } catch (e) {
                 console.warn('[Bookmark] refreshHistoryOrder error:', e);
             }
@@ -1880,23 +1877,29 @@
 
             // 等待窗口改为 15 s，刷新间隔固定 500 ms
             function scheduleHistoryRefresh() {
-                // 1. 立即插入一个“新会话”条目（仅在 History 面板还没该条时）
+                // 统一获取侧栏根节点，兼容旧版 div#history 与新版 nav[aria-label="Chat history"]
+                const getHist = () => qs('div#history') || qs('nav[aria-label="Chat history"]');
+
+                // 1. 若侧栏尚未出现目标路径，则手动插入占位条目
                 const insertHistoryEntry = () => {
-                    const hist = qs('div#history');
+                    const hist = getHist();
                     if (!hist) return;
+
                     const target = location.pathname;
-                    if (qs(`div#history a[href*="${target}"]`)) return;  // 已存在则跳过
-                    const first = hist.firstElementChild;
-                    if (!first) return;
-                    // 克隆首条以保留样式
-                    const clone = first.cloneNode(true);
-                    const anchor = clone.querySelector('a[href]');
-                    if (anchor) {
-                        anchor.href = target;
-                        anchor.textContent = 'New chat';
-                        anchor.dataset.url = target;
-                    }
-                    hist.insertBefore(clone, first);
+                    if (hist.querySelector(`a[href*="${target}"]`)) return;   // 已有条目
+
+                    // 直接生成结构，避免克隆失效
+                    const a = document.createElement('a');
+                    a.href = target;
+                    a.dataset.url = target;
+                    a.textContent = 'New chat';
+                    a.style.cssText =
+                        'display:block;padding:6px 12px;font-size:13px;line-height:1.25;' +
+                        'border-radius:6px;color:#b2b2b2;text-decoration:none;';
+
+                    const li = document.createElement('li');
+                    li.appendChild(a);
+                    hist.insertBefore(li, hist.firstChild);
                 };
 
                 // 2. 原 MutationObserver 逻辑，用于后续刷新顺序
