@@ -456,11 +456,24 @@
             return;
         }
 
-        if (hist && !wrapper) {
-            initBookmarks(hist).catch(err => {
-                console.error('initBookmarks error:', err);
-            });
+        // 仅当未在创建过程中且确实不存在 wrapper 时才初始化
+        if (hist && !wrapper && !window.__cgptCreatingBookmarks) {
+            window.__cgptCreatingBookmarks = true;               // 哨兵启动
+            initBookmarks(hist)
+                .catch(err => console.error('initBookmarks error:', err))
+                .finally(() => {
+                    window.__cgptCreatingBookmarks = false;      // 释放哨兵
+
+                    // 再次去重，防止并发情况下残留多余 wrapper
+                    const all = qsa('#cgpt-bookmarks-wrapper');
+                    if (all.length > 1) {
+                        all.slice(1).forEach(w => {              // 仅保留第一个
+                            try { w.remove(); } catch {}
+                        });
+                    }
+                });
         }
+
     }, 200)));
     readyObs.observe(document.body, {childList: true, subtree: true});
 
