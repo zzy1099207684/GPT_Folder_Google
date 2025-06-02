@@ -981,53 +981,59 @@
         if (window.__deepCleanerId) clearInterval(window.__deepCleanerId);
         window.__deepCleanerId = setInterval(() => enqueueIdleTask(deepCleanMemory), 180000);
 
+        // 统一版本 —— 自动选根节点，兼容旧/新版侧栏
         const syncTitles = () => {
             let updated = false;
-            // const a = qs(`a[href*="${path}"]`, historyNode);
+
+            const histRoot =
+                qs('div#history') ||
+                qs('nav[aria-label="Chat history"]') ||
+                document;                        // 理论兜底
+
             liveSyncMap.forEach((arr, path) => {
-                const a = qsa('a[href*="/c/"]', historyNode).find(link => {
-                    try {
-                        return samePath(link.href, location.origin + path);
-                    } catch {
-                        return false;        // href 异常时安全退出
-                    }
+                const a = qsa('a[href*="/c/"]', histRoot).find(link => {
+                    try { return samePath(link.href, location.origin + path); }
+                    catch { return false; }
                 });
-                if (!a) {
-                    // arr.forEach(({fid}) => {
-                    //     const folder = folders[fid];
-                    //     if (!folder) return;
-                    //     const before = folder.chats.length;
-                    //     folder.chats = folder.chats.filter(c => !samePath(c.url, location.origin + path));
-                    //     if (folder.chats.length !== before) updated = true;
-                    // });
-                    return;
-                }
-                const t = (a.textContent || 'New chat').trim();
-                arr.forEach(({fid, el}) => {
-                    if (el.textContent !== t) el.textContent = t;
+                if (!a) return;
+
+                const text = (a.textContent || 'New chat').trim();
+                arr.forEach(({ fid, el }) => {
+                    if (el.textContent !== text) el.textContent = text;
                     const folder = folders[fid];
                     if (!folder) return;
                     const chat = folder.chats.find(c => samePath(c.url, location.origin + path));
-                    if (chat && chat.title !== t) {
-                        chat.title = t;
+                    if (chat && chat.title !== text) {
+                        chat.title = text;
                         updated = true;
                     }
                 });
             });
-            if (updated) {                                               // 如果有标题或删除变更
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders}); // 同步存储最新数据
-                render();                                                // 重新渲染所有分组及其会话列表
-                highlightActive();                                       // 保持当前会话高亮状态不变
+
+            if (updated) {
+                chrome.runtime.sendMessage({ type: 'save-folders', data: folders });
+                render();
+                highlightActive();
             }
         };
 
-
         const syncTitlesDebounced = debounce(syncTitles, 200);
-        observers.add(new MutationObserver(syncTitlesDebounced)).observe(historyNode, {
-            childList: true,
-            subtree: true,
-            characterData: true
+
+        const syncObserver = observers.add(new MutationObserver(syncTitlesDebounced));
+        [
+            historyNode,
+            qs('nav[aria-label="Chat history"]')
+        ].filter(Boolean).forEach(node => {
+            syncObserver.observe(node, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
         });
+
+// 页面初次挂载即同步一次，避免首屏显示“New chat”
+        syncTitles();
+
 
         let prevHistoryPaths = new Set(qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname));
         /* —— 检测 history 会话被删除后同步移除收藏夹中对应条目 —— */
