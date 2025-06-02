@@ -449,9 +449,15 @@
         }
 
         if (!hist && wrapper) {
-            try { wrapper.remove() } catch {}
+            try {
+                wrapper.remove()
+            } catch {
+            }
             if (window.__cgptBookmarksCleanup) {
-                try { window.__cgptBookmarksCleanup() } catch {}
+                try {
+                    window.__cgptBookmarksCleanup()
+                } catch {
+                }
             }
             return;
         }
@@ -468,7 +474,10 @@
                     const all = qsa('#cgpt-bookmarks-wrapper');
                     if (all.length > 1) {
                         all.slice(1).forEach(w => {              // 仅保留第一个
-                            try { w.remove(); } catch {}
+                            try {
+                                w.remove();
+                            } catch {
+                            }
                         });
                     }
                 });
@@ -476,7 +485,6 @@
 
     }, 200)));
     readyObs.observe(document.body, {childList: true, subtree: true});
-
 
 
     /* ===== 初始化收藏夹 ===== */
@@ -992,13 +1000,16 @@
 
             liveSyncMap.forEach((arr, path) => {
                 const a = qsa('a[href*="/c/"]', histRoot).find(link => {
-                    try { return samePath(link.href, location.origin + path); }
-                    catch { return false; }
+                    try {
+                        return samePath(link.href, location.origin + path);
+                    } catch {
+                        return false;
+                    }
                 });
                 if (!a) return;
 
                 const text = (a.textContent || 'New chat').trim();
-                arr.forEach(({ fid, el }) => {
+                arr.forEach(({fid, el}) => {
                     if (el.textContent !== text) el.textContent = text;
                     const folder = folders[fid];
                     if (!folder) return;
@@ -1011,7 +1022,7 @@
             });
 
             if (updated) {
-                chrome.runtime.sendMessage({ type: 'save-folders', data: folders });
+                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 render();
                 highlightActive();
             }
