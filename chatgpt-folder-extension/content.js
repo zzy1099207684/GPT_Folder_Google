@@ -1223,10 +1223,21 @@
         min-width:140px;padding:8px 0;border-radius:10px;
         background:#2b2521;color:#e7d8c5;
         box-shadow:0 4px 10px rgba(0,0,0,.2);font-size:14px`;
-                menu.innerHTML = `
+                const curPath   = location.pathname;
+                const curChat   = f.chats.find(c => samePath(c.url, location.origin + curPath));
+                const pinState  = curChat ? (curChat.pinned ? 'unpin' : 'pin') : null;
+
+                let html = `
         <div class="f-item" data-act="prompt" style="padding:6px 16px;cursor:pointer">Prompt</div>
-        <div class="f-item" data-act="rename" style="padding:6px 16px;cursor:pointer">Rename</div>
-        <div class="f-item" data-act="delete" style="padding:6px 16px;cursor:pointer;color:#e66">Delete</div>`;
+        <div class="f-item" data-act="rename" style="padding:6px 16px;cursor:pointer">Rename</div>`;
+                if (pinState) {
+                    html += `<div class="f-item" data-act="${pinState}" style="padding:6px 16px;cursor:pointer">
+                 ${pinState === 'pin' ? 'pin' : 'unpin'}
+             </div>`;
+                }
+                html += `<div class="f-item" data-act="delete" style="padding:6px 16px;cursor:pointer;color:#e66">Delete</div>`;
+                menu.innerHTML = html;
+
                 document.body.appendChild(menu);
                 menu.style.left = rect.right - menu.offsetWidth + 'px';
                 menu.style.top = rect.bottom + 6 + 'px';
@@ -1321,6 +1332,26 @@
                         cancel.onclick = () => document.body.removeChild(modal);
                         close();
                     }
+
+                    if (act === 'pin' || act === 'unpin') {
+                        const pIdx = f.chats.findIndex(c => samePath(c.url, location.origin + location.pathname));
+                        if (pIdx > -1) {
+                            const chat  = f.chats[pIdx];
+                            chat.pinned = (act === 'pin');
+
+                            // 重新排位：所有 pinned 在最前，其余保持原顺序
+                            f.chats.splice(pIdx, 1);
+                            const firstUnPinned = f.chats.findIndex(c => !c.pinned);
+                            const insertAt = chat.pinned ? 0 : (firstUnPinned === -1 ? f.chats.length : firstUnPinned);
+                            f.chats.splice(insertAt, 0, chat);
+
+                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            render();
+                            highlightActive();
+                        }
+                        close();
+                    }
+
                 });
             });
 
@@ -1505,16 +1536,21 @@
             ul.style.cssText = `list-style:none;padding-left:8px;margin:4px 0 0;${f.collapsed ? 'display:none' : ''}`;
             // 折叠时不渲染子项
             if (!f.collapsed && f.chats.length) {
+                const chatsForRender = [...f.chats].sort((a, b) =>
+                    (a.pinned === b.pinned) ? 0 : (a.pinned ? -1 : 1)
+                );
+
                 let ci = 0;
                 const chatChunk = () => {
                     const start = Date.now();
-                    while (ci < f.chats.length && Date.now() - start < CHUNK_BUDGET_MS) {
-                        renderChat(ul, fid, f.chats[ci++]);
+                    while (ci < chatsForRender.length && Date.now() - start < CHUNK_BUDGET_MS) {
+                        renderChat(ul, fid, chatsForRender[ci++]);
                     }
-                    if (ci < f.chats.length) enqueueIdleTask(chatChunk);
+                    if (ci < chatsForRender.length) enqueueIdleTask(chatChunk);
                 };
                 enqueueIdleTask(chatChunk);
             }
+
 
             header.onclick = () => {
                 f.collapsed = !f.collapsed;          // 更新本地状态
@@ -1593,10 +1629,18 @@
 
         /* ---------- 聊天渲染 ---------- */
         function renderChat(parentUl, fid, chat) {
-            const li = document.createElement('li');
+            const li   = document.createElement('li');
             li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin:2px 0';
 
-            const link = document.createElement('a');                               // 创建超链接节点
+            if (chat.pinned) {
+                const pin = document.createElement('span');
+                pin.textContent = '📌';
+                pin.style.cssText = 'margin-right:4px;font-size:12px;line-height:1';
+                li.appendChild(pin);
+            }
+
+            const link = document.createElement('a');
+            // 创建超链接节点
             link.href = chat.url || 'javascript:void 0';                            // 设定目标地址
             link.textContent = chat.title;                                          // 填入标题文本
             link.dataset.url = chat.url || '';                                      // 记录 URL 备用，以便后续统一高亮
