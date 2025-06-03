@@ -2315,6 +2315,14 @@
         // 正确创建cleanup函数
         // Enhanced cleanup function - replace existing cleanup function
         const cleanup = () => {
+            // 移除自身的事件监听，避免重复绑定
+            try {
+                window.removeEventListener('beforeunload', cleanup);
+                document.removeEventListener('spa:navigation', cleanup);
+            } catch (e) {
+                console.warn('[Bookmark] Error removing cleanup listeners:', e);
+            }
+
             // 清理所有观察器
             try {
                 observers.disconnectAll();
@@ -2385,6 +2393,13 @@
                 liveSyncMap.clear();
             } catch (e) {
                 console.warn('[Bookmark] Error clearing liveSyncMap:', e);
+            }
+
+            // Optional: allow re-initialization by resetting sentinel
+            try {
+                window.__cgptBookmarksInstance = false;
+            } catch (e) {
+                console.warn('[Bookmark] Error resetting instance sentinel:', e);
             }
         };
 
