@@ -1,5 +1,9 @@
 // multiSelectHistory.js
 (() => {
+    if (window.__cgptBatchDelete) {
+        return;
+    }
+    window.__cgptBatchDelete = {};
     const STORAGE_KEY = 'historyMultiSelected';
     const rawSaved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     const selected = new Set(
@@ -59,6 +63,8 @@
         // 监听整页而不是单个节点，解决侧栏被 React 重建后观察器失效的问题
         const mo = new MutationObserver(apply);
         mo.observe(document.body, { childList: true, subtree: true });
+        window.__cgptBatchDelete.cleanup = () => mo.disconnect();
+        window.addEventListener('beforeunload', window.__cgptBatchDelete.cleanup);
     }
 
 
