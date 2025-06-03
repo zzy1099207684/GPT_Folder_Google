@@ -2324,7 +2324,6 @@
 
             // 清理定时器
             try {
-                if (typeof liveSyncCleanerId !== 'undefined') clearInterval(liveSyncCleanerId);
                 if (window.__memoryCheckerId) {
                     clearInterval(window.__memoryCheckerId);
                     window.__memoryCheckerId = null;
