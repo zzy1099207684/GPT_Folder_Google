@@ -1573,7 +1573,7 @@
                 header.style.background = COLOR.bgLight;
                 const url = e.dataTransfer.getData('text/plain');
                 if (!url || f.chats.some(c => samePath(c.url, url))) return;
-                const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || '会话';
+                const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || 'chat';
                 f.chats.unshift({url, title: t}); // 插入到数组开头
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
@@ -1970,13 +1970,25 @@
                     if (!hist) return;
                     const target = location.pathname;
                     const moveIfReady = () => {
-                        const ok = qs(`div#history a[href*="${target}"]`);
+                        // 仅把没有 data-url 的视为“真·聊天”节点
+                        const ok = qs(`div#history a[href*="${target}"]:not([data-url])`);
                         if (ok) {
+                            // 若仍存在占位条目，安全移除
+                            const placeholder = qs(`div#history a[data-url="${target}"]`);
+                            if (placeholder && placeholder !== ok) {
+                                try {                     // 解除 liveSyncMap 绑定，避免脏引用
+                                    (typeof detachLink === 'function') && detachLink(placeholder);
+                                } catch (e) {
+                                    console.warn('[Bookmark] detachLink error:', e);
+                                }
+                                placeholder.closest('li')?.remove();
+                            }
                             refreshHistoryOrder();
                             return true;
                         }
                         return false;
                     };
+
                     if (moveIfReady()) return;
                     const ob = new MutationObserver(() => {
                         if (moveIfReady()) ob.disconnect();
