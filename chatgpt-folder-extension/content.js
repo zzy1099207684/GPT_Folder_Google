@@ -555,7 +555,7 @@
                 }
                 pop.innerHTML = '';
                 const entry = document.createElement('div');
-                entry.textContent = '分组';
+                entry.textContent = 'groups';
                 entry.style.cssText = 'padding:4px 12px;cursor:pointer;white-space:nowrap';
                 pop.appendChild(entry);
 
