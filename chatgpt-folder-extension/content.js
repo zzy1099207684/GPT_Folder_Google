@@ -560,7 +560,8 @@
                 pop.appendChild(entry);
 
                 const r = menuBtn.getBoundingClientRect();
-                pop.style.left = `${r.right - 120}px`;
+                const pLeft = Math.max(0, Math.min(r.right - 120, window.innerWidth - 120));
+                pop.style.left = `${pLeft}px`;
                 pop.style.top = `${r.bottom + 4}px`;
                 pop.style.display = 'block';
 
@@ -577,7 +578,8 @@
                 document.body.appendChild(list);
 
                 const r = bRect || menuBtn.getBoundingClientRect();
-                list.style.left = `${r.right - 140}px`;
+                const gLeft = Math.max(0, Math.min(r.right - 140, window.innerWidth - 140));
+                list.style.left = `${gLeft}px`;
                 list.style.top = `${r.bottom + 4}px`;
 
                 Object.entries(folders).forEach(([fid, f]) => {
