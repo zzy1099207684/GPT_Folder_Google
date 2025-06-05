@@ -246,7 +246,7 @@
         async set(obj) {
             try {
                 if (!chrome?.runtime?.id) {
-                    console.warn('[Bookmark] storage.set skipped: invalid context');
+                    // console.warn('[Bookmark] storage.set skipped: invalid context');
                     this._clearPendingWrites();
                     return;
                 }
@@ -2428,7 +2428,7 @@
 
         if (drift > threshold) {
             if (now - lastReset < cooldown) {           // 冷却期内仅记录一次
-                console.warn('[Bookmark] Main thread stall (cooldown):', drift);
+                // console.warn('[Bookmark] Main thread stall (cooldown):', drift);
                 return;
             }
             lastReset = now;
