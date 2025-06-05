@@ -1017,8 +1017,9 @@
                     if (!folder) return;
                     const chat = folder.chats.find(c => samePath(c.url, location.origin + path));
                     if (chat && chat.title !== text) {
-                        chat.title = text;
-                        updated = true;
+                        const firstTime = !chat.title || chat.title === 'New chat'; // 仅第一次
+                        chat.title = text;                                          // 持续同步文本
+                        if (firstTime) updated = true;                              // 只有首次触发刷新
                     }
                 });
             });
@@ -1921,19 +1922,27 @@
                     if (chrome?.runtime?.id) storage.set({lastActiveMap});
                 }
                 const i = folder.chats.findIndex(c => samePath(c.url, cur));
-                if (i >= 0) {
+                let needRender = false;                 // 新增：是否真的需要刷新侧边栏
+
+                if (i >= 0) {                           // 已在当前分组
                     const [chat] = folder.chats.splice(i, 1);
-                    folder.chats.unshift(chat);
-                } else {
+                    folder.chats.unshift(chat);         // 挪到最前
+                    needRender = i > 0;                 // 只有顺序发生变化才刷新
+                } else {                                // 第一次写入该分组
                     folder.chats.unshift({url: cur, title});
+                    needRender = true;                  // 需要立即渲染生成条目
                 }
+
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                render();
-                highlightActive();
+
+                if (needRender) render();               // 根据标志决定是否重绘
+                highlightActive();                      // 始终保持高亮状态
+
                 if (window.__cgptPendingFid === folderFid) {
                     window.__cgptPendingFid = null;
                     window.__cgptPendingToken = null;
                 }
+
             };
 
             window.bumpActiveChat = bumpActiveChat;
