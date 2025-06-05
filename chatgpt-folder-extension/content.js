@@ -1203,6 +1203,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
             const newBtn = Object.assign(document.createElement('button'), {
                 type: 'button',
+                // 唯一 ID，用于区别组内 New chat 按钮
+                id: `cgpt-group-new-chat-${fid}`,
             });
             newBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;color:#e7d8c5;cursor:pointer;transition:background .15s'; // 基础外观同前
             newBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' + // 引入图一完整 SVG
