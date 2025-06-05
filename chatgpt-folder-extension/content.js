@@ -1,5 +1,5 @@
 // content.js
-
+const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]';
 (() => { // 立即执行函数隔离作用域
     function nanoid(size = 21) {
         let id = ''
@@ -26,7 +26,7 @@
             folderCount: Object.keys(folders).length,
             totalChats: Object.values(folders).reduce((sum, f) => sum + f.chats.length, 0),
             wrapperExists: !!qs('#cgpt-bookmarks-wrapper'),
-            historyExists: !!qs('div#history')
+            historyExists: !!qs('div#history') || !!qs('nav[aria-label="Chat history"]')
         };
     }
 
@@ -432,7 +432,7 @@
     })();
 
     const readyObs = observers.add(new MutationObserver(debounce(() => {
-        const hist = qs('div#history');
+         const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
 
         const wrappers = qsa('#cgpt-bookmarks-wrapper');
         if (wrappers.length > 1) {
@@ -858,7 +858,7 @@
                 // 收集当前在DOM中的路径以提高性能
                 const activePaths = new Set();
                 try {
-                    qsa('div#history a[href*="/c/"]').forEach(a => {
+                    qsa(HIST_ANCHOR).forEach(a => {
                         try {
                             activePaths.add(new URL(a.href, location.origin).pathname);
                         } catch (e) {
@@ -929,7 +929,7 @@
 
         function refreshHistoryOrder() {
             try {
-                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                 const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                 if (!hist) return;
 
                 const currPath = location.pathname;
@@ -1064,7 +1064,7 @@
         syncTitles();
 
 
-        let prevHistoryPaths = new Set(qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname));
+        let prevHistoryPaths = new Set(qsa(HIST_ANCHOR).map(a => new URL(a.href).pathname));
         /* —— 检测 history 会话被删除后同步移除收藏夹中对应条目 —— */
         // 修改后的代码
         let historyCleanupDebouncer = null;
@@ -1073,7 +1073,7 @@
             clearTimeout(historyCleanupDebouncer);
             historyCleanupDebouncer = setTimeout(() => {
                 try {
-                    const anchors = qsa('div#history a[href*="/c/"]');
+                    const anchors = qsa('div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]')
                     const currentPaths = new Set(anchors.map(a => new URL(a.href).pathname));
 
                     // 如果路径集合没有变化，跳过处理
@@ -1430,7 +1430,7 @@
                 /* ==== 兜底结束 ==== */
 
                 const prevPaths = new Set(
-                    qsa('div#history a[href*="/c/"]').map(a => new URL(a.href).pathname)
+                    qsa(HIST_ANCHOR).map(a => new URL(a.href).pathname)
                 );
                 const globalNewBtn = qs('button[aria-label="New chat"]');
                 if (globalNewBtn) {
@@ -1447,7 +1447,7 @@
                 // 定义observer - 监视history区域变化以检测新聊天
                 const observer = new MutationObserver(() => {
                     if (token !== window.__cgptPendingToken) return;
-                    const anchors = qsa('div#history a[href*="/c/"]');
+                    const anchors = qsa(HIST_ANCHOR);
 
                     const currentPaths = new Set(
                         anchors.map(a => {
@@ -1545,7 +1545,7 @@
 
                 });
 
-                observer.observe(qs('div#history'), {childList: true});
+                observer.observe(qs('div#history') || qs('nav[aria-label="Chat history"]'), {childList: true});
                 currentNewChatObserver = observer;
             };
 
@@ -1676,13 +1676,11 @@
                 e.preventDefault();
 
                 // ① 判断这条会话是否仍出现在 History 侧栏
-                const stillExists = qsa('div#history a[href*="/c/"]')
+                const stillExists = qsa(HIST_ANCHOR)
                     .some(a => samePath(a.href, chat.url));
 
                 if (!stillExists) {
-                    tip(link, 'The conversation has been hidden because it is too old, ' +
-                        '           or it might have been deleted. ' +
-                        '           Please refresh your history to check or click ✕ to delete it.',);
+                    tip(link, 'The conversation has been hidden because it is too old, Please refresh your history to check');
                     return;
                 }
 
@@ -1992,7 +1990,7 @@
                 // 2. 原 MutationObserver 逻辑，用于后续刷新顺序
                 const watch = () => {
                     insertHistoryEntry();      // 先插入
-                    const hist = qs('div#history');
+                    const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                     if (!hist) return;
                     const target = location.pathname;
                     const moveIfReady = () => {
@@ -2000,7 +1998,7 @@
                         const ok = qs(`div#history a[href*="${target}"]:not([data-url])`);
                         if (ok) {
                             // 若仍存在占位条目，安全移除
-                            const placeholder = qs(`div#history a[data-url="${target}"]`);
+                            const placeholder = qs(`div#history a[data-url="${target}"], nav[aria-label="Chat history"] a[href*="${target}"]`);
                             if (placeholder && placeholder !== ok) {
                                 try {                     // 解除 liveSyncMap 绑定，避免脏引用
                                     (typeof detachLink === 'function') && detachLink(placeholder);
@@ -2038,7 +2036,7 @@
                 /* 4. 兜底：1.5 秒后仍无条目则整页刷新 */
                 setTimeout(() => {
                     try {
-                        const hist = qs('div#history');
+                        const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                         if (!hist) return;
                         const target = location.pathname;
                         if (!qs(`div#history a[href*="${target}"]`, hist)) {
@@ -2151,14 +2149,14 @@
                 });
 
                 if (changed) {
-                    // 同步 lastActiveMap，防止残留高亮
                     if (lastActiveMap[delPath]) {
                         delete lastActiveMap[delPath];
                         try { storage.set({lastActiveMap}); } catch {}
                     }
                     chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                    render();                                  // 立即刷新侧栏
                 }
+                /* 无论是否找到匹配条目，都强制刷新 Groups DOM，避免残留 */
+                render();
             }, true);
         }
 
@@ -2249,7 +2247,7 @@
 
                 // 检查DOM是否存在异常
                 const wrapperExists = !!qs('#cgpt-bookmarks-wrapper');
-                const historyExists = !!qs('div#history');
+                const historyExists = !!(qs('div#history') || qs('nav[aria-label="Chat history"]'));
 
                 // 计算liveSyncMap中无效引用比例
                 let invalidRefs = 0;
@@ -2330,7 +2328,7 @@
                         }
 
                         // 重新初始化
-                        const hist = qs('div#history');
+                        const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                         if (hist) {
                             setTimeout(() => {
                                 try {
@@ -2397,7 +2395,7 @@
 
             // 清理历史记录节点上的事件监听器
             try {
-                const hist = qs('div#history');
+                 const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                 if (hist) {
                     if (hist._folderClickHandler) {
                         hist.removeEventListener('click', hist._folderClickHandler);
@@ -2478,7 +2476,7 @@
             // console.warn('[Bookmark] Main thread stall:', drift);
             document.getElementById('cgpt-bookmarks-wrapper')?.remove();
             window.observers?.disconnectAll?.();
-            const hist = document.querySelector('div#history');
+            const hist = document.querySelector('div#history') || document.querySelector('nav[aria-label="Chat history"]');
             const idle = window.enqueueIdleTask ?? (fn => setTimeout(fn, 0));
             if (hist) idle(() => window.initBookmarks?.(hist));
         }
