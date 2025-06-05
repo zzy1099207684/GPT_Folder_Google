@@ -162,7 +162,15 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         .observe(document.body, {attributes: true, attributeFilter: ['style']});
     /* ---------- 修复段结束 ---------- */
 // 统一颜色常量
-    const samePath = (a, b) => new URL(a, location.origin).pathname === new URL(b, location.origin).pathname; // 比较路径
+    const samePath = (a, b) => {
+        try {
+            if (!a || !b) return false;            // 处理空值
+            return new URL(a, location.origin).pathname === new URL(b, location.origin).pathname;
+        } catch {
+            return false;                          // 出现解析错误时默认不相同
+        }
+    };                                             // 比较路径
+
     // 增强的选择器函数
     const qs = (sel, root = document) => {
         try {
@@ -1004,8 +1012,11 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             }
         }
 
-        if (window.__deepCleanerId) clearInterval(window.__deepCleanerId);
-        window.__deepCleanerId = setInterval(() => enqueueIdleTask(deepCleanMemory), 180000);
+        // 页面离开时释放资源，防止泄漏
+        window.addEventListener('beforeunload', () => {
+            try { observers.disconnectAll(); } catch {}
+            try { window.__deepCleanerId && clearInterval(window.__deepCleanerId); } catch {}
+        });
 
         // 统一版本 —— 自动选根节点，兼容旧/新版侧栏
         const syncTitles = () => {
@@ -1992,7 +2003,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
                 // 2. 原 MutationObserver 逻辑，用于后续刷新顺序
                 const watch = () => {
-                    insertHistoryEntry();      // 先插入
+                    // 移除临时占位插入，避免重复产生 “New chat” 条目
                     const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                     if (!hist) return;
                     const target = location.pathname;
