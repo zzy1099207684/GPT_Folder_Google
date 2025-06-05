@@ -1563,8 +1563,24 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             };
 
 
+            // 单组最多直接展示的会话条数
+            const MAX_VISIBLE_CHATS = 8;
+
             const ul = document.createElement('ul');
-            ul.style.cssText = `list-style:none;padding-left:8px;margin:4px 0 0;${f.collapsed ? 'display:none' : ''}`;
+
+// 基础样式
+            let ulCss = 'list-style:none;padding-left:8px;margin:4px 0 0;';
+
+// 折叠状态隐藏
+            if (f.collapsed) ulCss += 'display:none;';
+
+// 超出阈值时启用滚动容器，假设单行≈32 px 高度
+            if (f.chats.length > MAX_VISIBLE_CHATS) {
+                ulCss += `max-height:${MAX_VISIBLE_CHATS * 32}px;overflow-y:auto;-webkit-overflow-scrolling:touch;`;
+            }
+
+            ul.style.cssText = ulCss;
+
             // 折叠时不渲染子项
             if (!f.collapsed && f.chats.length) {
                 const chatsForRender = [...f.chats].sort((a, b) =>
