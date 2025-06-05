@@ -2003,7 +2003,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
                 // 2. 原 MutationObserver 逻辑，用于后续刷新顺序
                 const watch = () => {
-                    // 移除临时占位插入，避免重复产生 “New chat” 条目
+                    insertHistoryEntry();      // 先插入
                     const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                     if (!hist) return;
                     const target = location.pathname;
