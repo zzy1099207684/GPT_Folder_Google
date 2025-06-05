@@ -420,6 +420,7 @@
 
     /* ===== 全局数据 ===== */
     let folders = {};
+    let lastActiveMap = {};
 
 // 从 sessionStorage 读取旧值, 若无或解析失败则回落为空对象
     window.__cgptPromptGapCounters = (() => {
@@ -813,7 +814,7 @@
         chrome.runtime.sendMessage({type: 'save-folders', data: folders});
 
 
-        let lastActiveMap = (await storage.get('lastActiveMap')) || {}; // 从 storage 读取路径到分组的映射，如果没有则初始化为空对象
+        lastActiveMap = (await storage.get('lastActiveMap')) || {};
         let _migrated = false; // 标记旧版本数据迁移逻辑
         Object.values(folders).forEach(f => {
             if (!('prompt' in f)) {
@@ -936,8 +937,23 @@
                 const currAnchor = anchors.find(a => samePath(a.href, currPath));
                 if (!currAnchor) return;
 
-                const row = currAnchor.closest('li') || currAnchor.parentElement;
-                if (row && row.parentElement) row.parentElement.prepend(row);
+                const row = currAnchor.closest('li') || currAnchor;   // 只移动条目本身
+                if (row && row.parentElement) {
+                    const parent = row.parentElement;                 // <aside> 或 <ul>
+                    const label = parent.querySelector('h2.__menu-label');
+                    const firstAfterLabel = label ? label.nextElementSibling : parent.firstChild;
+
+                    // 计算目标插入点
+                    let target = firstAfterLabel;
+                    // 若目标节点已被移走或并非 parent 的子节点，则兜底用列表首个有效子节点
+                    if (!target || target.parentElement !== parent) target = parent.firstChild;
+
+                    // 只有条目确实需要移动且目标安全时才执行插入
+                    if (target && target !== row) {
+                        parent.insertBefore(row, target);             // 永远在同一父节点内移动，避免 DOMException
+                    }
+                }
+
             } catch (e) {
                 console.warn('[Bookmark] refreshHistoryOrder error:', e);
             }
@@ -1017,9 +1033,8 @@
                     if (!folder) return;
                     const chat = folder.chats.find(c => samePath(c.url, location.origin + path));
                     if (chat && chat.title !== text) {
-                        const firstTime = !chat.title || chat.title === 'New chat'; // 仅第一次
-                        chat.title = text;                                          // 持续同步文本
-                        if (firstTime) updated = true;                              // 只有首次触发刷新
+                        chat.title = text;
+                        updated = true;
                     }
                 });
             });
@@ -2113,22 +2128,40 @@
             setTimeout(highlightActive, 0);
         });
 
-        // 全局 New chat 事件委托，兼容按钮被反复卸载/重建
-        if (!window.__cgptGlobalNewHooked) {
-            window.__cgptGlobalNewHooked = true;
-            const selector = '[data-testid="create-new-chat-button"]';
-            document.addEventListener('click', e => {
-                const btn = e.target.closest(selector);
-                if (!btn) return;
+        // ===== 全局 Delete chat 监听：点击确认删除按钮后，自动移除组内对应条目 =====
+        if (!window.__cgptDeleteHooked) {
+            window.__cgptDeleteHooked = true;
 
-                // 若由组内 newBtn 间接触发，则仅复位标志，保留组高亮
-                if (window.__cgptSuppressGroupClear) {
-                    window.__cgptSuppressGroupClear = false;
-                    return;
+            // 捕获阶段先于 ChatGPT 内部逻辑执行，可在导航前拿到被删会话的 pathname
+            document.addEventListener('click', ev => {
+                const btn = ev.target.closest('button[data-testid="delete-conversation-confirm-button"]');
+                if (!btn) return;                              // 非确认删除按钮
+
+                const delPath = location.pathname;             // /c/xxxxxxxx
+                if (!delPath.startsWith('/c/')) return;
+
+                let changed = false;
+                // 遍历所有分组，剔除匹配 url 的会话
+                Object.entries(folders).forEach(([fid, f]) => {
+                    const idx = f.chats.findIndex(c => samePath(c.url, location.origin + delPath));
+                    if (idx !== -1) {
+                        f.chats.splice(idx, 1);
+                        changed = true;
+                    }
+                });
+
+                if (changed) {
+                    // 同步 lastActiveMap，防止残留高亮
+                    if (lastActiveMap[delPath]) {
+                        delete lastActiveMap[delPath];
+                        try { storage.set({lastActiveMap}); } catch {}
+                    }
+                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    render();                                  // 立即刷新侧栏
                 }
-                clearGroupHighlight();
-            }, true);           // 捕获阶段，先于 ChatGPT 自身逻辑执行
+            }, true);
         }
+
 
 
         const highlightActive = () => {
