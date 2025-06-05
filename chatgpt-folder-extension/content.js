@@ -2093,29 +2093,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         render();
         clearActiveOnHistoryClick = false;
 
-        // clearGroupHighlight 修正版
-        const clearGroupHighlight = () => {
-            clearActiveOnHistoryClick = true;
-            activeFid = null;
-
-            // 移除根路径与分组的映射，阻止伪高亮复活
-            if (lastActiveMap && lastActiveMap['/']) {
-                delete lastActiveMap['/'];
-                try {
-                    if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                } catch (err) {
-                    console.warn('[Bookmark] Error clearing root mapping:', err);
-                }
-            }
-
-            // 清空挂起标记，防止后续误判
-            window.__cgptPendingFid = null;
-            window.__cgptPendingToken = null;
-
-            setTimeout(highlightActive, 0);
-        };
-
-
         historyNode.addEventListener('click', e => {
             const a = e.target.closest('a[href*="/c/"]');
             if (!a) return;
@@ -2242,8 +2219,36 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         };
 
 
-        highlightActive();                                                      // 初始渲染立即同步
+        highlightActive();                              // 初始渲染立即同步
         window.addEventListener('popstate', highlightActive);
+
+        /* ===== 清除组高亮：原生 New chat ===== */
+        if (!window.__cgptNativeNewChatHooked) {
+            window.__cgptNativeNewChatHooked = true;
+            document.addEventListener('click', ev => {
+                const btn = ev.target.closest(
+                    'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
+                );
+                if (!btn) return;
+
+                // 若由组内“New chat”间接触发，则跳过本次清除并重置标志
+                if (window.__cgptSuppressGroupClear) {
+                    delete window.__cgptSuppressGroupClear;
+                    return;
+                }
+
+                activeFid = null;                               // 标记需清除
+                delete window.__cgptPendingFid;                 // 关键：同时清掉挂起分组
+                window.__cgptPendingToken = null;
+                delete lastActiveMap['/'];                      // 移除根路径到组的旧映射
+                try {                                           // 同步写回 storage
+                    if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                } catch {}
+                setTimeout(highlightActive, 0);                 // 等导航完成再刷新
+
+            }, true);                           // 捕获阶段确保最高优先级
+        }
+
 
         function checkMemoryUsage() {
             try {
