@@ -2433,7 +2433,7 @@
             }
             lastReset = now;
 
-            console.warn('[Bookmark] Main thread stall:', drift);
+            // console.warn('[Bookmark] Main thread stall:', drift);
             document.getElementById('cgpt-bookmarks-wrapper')?.remove();
             window.observers?.disconnectAll?.();
             const hist = document.querySelector('div#history');
