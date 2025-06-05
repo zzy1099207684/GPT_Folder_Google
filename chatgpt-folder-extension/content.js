@@ -432,7 +432,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     })();
 
     const readyObs = observers.add(new MutationObserver(debounce(() => {
-         const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+        const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
 
         const wrappers = qsa('#cgpt-bookmarks-wrapper');
         if (wrappers.length > 1) {
@@ -929,7 +929,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
         function refreshHistoryOrder() {
             try {
-                 const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                 if (!hist) return;
 
                 const currPath = location.pathname;
@@ -1241,9 +1241,9 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         min-width:140px;padding:8px 0;border-radius:10px;
         background:#2b2521;color:#e7d8c5;
         box-shadow:0 4px 10px rgba(0,0,0,.2);font-size:14px`;
-                const curPath   = location.pathname;
-                const curChat   = f.chats.find(c => samePath(c.url, location.origin + curPath));
-                const pinState  = curChat ? (curChat.pinned ? 'unpin' : 'pin') : null;
+                const curPath = location.pathname;
+                const curChat = f.chats.find(c => samePath(c.url, location.origin + curPath));
+                const pinState = curChat ? (curChat.pinned ? 'unpin' : 'pin') : null;
 
                 let html = `
         <div class="f-item" data-act="prompt" style="padding:6px 16px;cursor:pointer">Prompt</div>
@@ -1354,7 +1354,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     if (act === 'pin' || act === 'unpin') {
                         const pIdx = f.chats.findIndex(c => samePath(c.url, location.origin + location.pathname));
                         if (pIdx > -1) {
-                            const chat  = f.chats[pIdx];
+                            const chat = f.chats[pIdx];
                             chat.pinned = (act === 'pin');
 
                             // 重新排位：所有 pinned 在最前，其余保持原顺序
@@ -1647,7 +1647,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
         /* ---------- 聊天渲染 ---------- */
         function renderChat(parentUl, fid, chat) {
-            const li   = document.createElement('li');
+            const li = document.createElement('li');
             li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin:2px 0';
 
             if (chat.pinned) {
@@ -1901,7 +1901,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 if (!location.pathname.startsWith('/c/')) return;
                 const cur = location.href;
                 // 优先从 history 里取标题，取不到就用“new chat”
-                const title = qs(`div#history a[href*="${cur}"]`)?.textContent.trim() || 'New chat';
+                const histRoot = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                const title = histRoot?.querySelector(`a[href*="${location.pathname}"]`)?.textContent.trim() || 'New chat';
                 const curPath = new URL(cur).pathname;
 
                 let folderFid = activeFid && folders[activeFid] ? activeFid : null;
@@ -1995,10 +1996,13 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     const target = location.pathname;
                     const moveIfReady = () => {
                         // 仅把没有 data-url 的视为“真·聊天”节点
-                        const ok = qs(`div#history a[href*="${target}"]:not([data-url])`);
+                        const ok =
+                            qs(`div#history a[href*="${target}"]:not([data-url])`)
+                            || qs(`nav[aria-label="Chat history"] a[href*="${target}"]:not([data-url])`);
                         if (ok) {
                             // 若仍存在占位条目，安全移除
-                            const placeholder = qs(`div#history a[data-url="${target}"], nav[aria-label="Chat history"] a[href*="${target}"]`);
+                            const placeholder = qs(`div#history a[data-url="${target}"]`)
+                                || qs(`nav[aria-label="Chat history"] a[data-url="${target}"]`);
                             if (placeholder && placeholder !== ok) {
                                 try {                     // 解除 liveSyncMap 绑定，避免脏引用
                                     (typeof detachLink === 'function') && detachLink(placeholder);
@@ -2151,7 +2155,10 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 if (changed) {
                     if (lastActiveMap[delPath]) {
                         delete lastActiveMap[delPath];
-                        try { storage.set({lastActiveMap}); } catch {}
+                        try {
+                            storage.set({lastActiveMap});
+                        } catch {
+                        }
                     }
                     chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 }
@@ -2159,7 +2166,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 render();
             }, true);
         }
-
 
 
         const highlightActive = () => {
@@ -2395,7 +2401,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
             // 清理历史记录节点上的事件监听器
             try {
-                 const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                 if (hist) {
                     if (hist._folderClickHandler) {
                         hist.removeEventListener('click', hist._folderClickHandler);
