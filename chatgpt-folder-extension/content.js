@@ -1014,8 +1014,14 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
         // 页面离开时释放资源，防止泄漏
         window.addEventListener('beforeunload', () => {
-            try { observers.disconnectAll(); } catch {}
-            try { window.__deepCleanerId && clearInterval(window.__deepCleanerId); } catch {}
+            try {
+                observers.disconnectAll();
+            } catch {
+            }
+            try {
+                window.__deepCleanerId && clearInterval(window.__deepCleanerId);
+            } catch {
+            }
         });
 
         // 统一版本 —— 自动选根节点，兼容旧/新版侧栏
@@ -2260,7 +2266,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 delete lastActiveMap['/'];                      // 移除根路径到组的旧映射
                 try {                                           // 同步写回 storage
                     if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                } catch {}
+                } catch {
+                }
                 setTimeout(highlightActive, 0);                 // 等导航完成再刷新
 
             }, true);                           // 捕获阶段确保最高优先级
