@@ -949,10 +949,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 if (row && row.parentElement) {
                     const parent = row.parentElement;                 // <aside> 或 <ul>
                     const label = parent.querySelector('h2.__menu-label');
-                    const firstAfterLabel = label ? label.nextElementSibling : parent.firstChild;
-
                     // 计算目标插入点
-                    let target = firstAfterLabel;
+                    let target = label ? label.nextElementSibling : parent.firstChild;
                     // 若目标节点已被移走或并非 parent 的子节点，则兜底用列表首个有效子节点
                     if (!target || target.parentElement !== parent) target = parent.firstChild;
 
