@@ -1876,13 +1876,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 cnt += 1;                         // 未到间隔，仅累加
             }
             gapCounters[counterKey] = cnt;
-            /* ==== 逻辑结束 ==== */
-
-            qsa('p', ed).forEach((p, i, arr) => {
-                if (p.dataset.cgptBlank) return;          // 新增
-                const txt = p.innerText.trim();
-                if (txt === SUFFIX && i !== arr.length - 1) p.remove();
-            });
 
             if (injectNow && groupPrompt) {
                 qsa('p', ed).forEach((p, i, arr) => {
