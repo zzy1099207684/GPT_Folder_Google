@@ -771,32 +771,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         // 插入 bookmarks wrapper 于最顶
         historyNode.parentElement.insertBefore(wrap, historyNode);
 
-        // 【新增】监听 history 列表中新出现的“New chat”占位标签，一旦检测到则移除当前侧栏并重新初始化
-        const histList = historyNode.querySelector('ul');
-        if (histList) {
-            const newChatObserver = new MutationObserver(mutations => {
-                for (const m of mutations) {
-                    m.addedNodes.forEach(node => {
-                        if (node.nodeType === 1) {
-                            const a = node.querySelector('a');
-                            if (a && a.textContent.trim() === 'New chat') {
-                                // 移除现有侧栏
-                                const wrapperEl = document.getElementById('cgpt-bookmarks-wrapper');
-                                if (wrapperEl) {
-                                    wrapperEl.remove();
-                                }
-                                // 重新初始化侧栏
-                                initBookmarks(historyNode);
-                                return;
-                            }
-                        }
-                    });
-                }
-            });
-            newChatObserver.observe(histList, { childList: true, subtree: true });
-            observers.add(newChatObserver);
-        }
-
         // 重新定位多选头部块到 history 与 bookmarks wrapper 之间
         const selHeader = document.getElementById('cgpt-select-header');
         if (selHeader) {
@@ -806,7 +780,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
         /* ---------- 数据读取 ---------- */
         const storedFolders = (await storage.get('folders')) || {};
-
         const storedOrder = (await storage.get('folderOrder')) || Object.keys(storedFolders);
 
 // 若 storage 仍为空但全局 folders 已有内容(首次安装后立即缩小窗口)则回退到内存版本
