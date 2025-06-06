@@ -1592,32 +1592,48 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 observer.observe(qs('div#history') || qs('nav[aria-label="Chat history"]'), {childList: true});
                 currentNewChatObserver = observer;
             };
-            const MAX_VISIBLE_CHATS = 8;
             const ul = document.createElement('ul');
-            let ulCss = 'list-style:none;padding-left:8px;margin:4px 0 0;';
-            if (f.collapsed) ulCss += 'display:none;';
-            if (f.chats.length > MAX_VISIBLE_CHATS) {
-                ulCss += `max-height:${MAX_VISIBLE_CHATS * 32}px;overflow-y:auto;-webkit-overflow-scrolling:touch;`;
-            }
+            ul.style.cssText = `list-style:none;padding-left:8px;margin:4px 0 0;${f.collapsed ? 'display:none' : ''}`;
 
-            ul.style.cssText = ulCss;
-
-            // 折叠时不渲染子项
             if (!f.collapsed && f.chats.length) {
+                const MAX_VISIBLE = 10;                                       // 超出条数触发折叠
                 const chatsForRender = [...f.chats].sort((a, b) =>
                     (a.pinned === b.pinned) ? 0 : (a.pinned ? -1 : 1)
                 );
 
+                // “显示全部” 状态保存在内存字段 __showAll，默认折叠
+                const showAll = !!f.__showAll;
+                const visibleList = showAll ? chatsForRender
+                    : chatsForRender.slice(0, MAX_VISIBLE);
+
+                // 分帧渲染可见列表
                 let ci = 0;
                 const chatChunk = () => {
                     const start = Date.now();
-                    while (ci < chatsForRender.length && Date.now() - start < CHUNK_BUDGET_MS) {
-                        renderChat(ul, fid, chatsForRender[ci++]);
+                    while (ci < visibleList.length && Date.now() - start < CHUNK_BUDGET_MS) {
+                        renderChat(ul, fid, visibleList[ci++]);
                     }
-                    if (ci < chatsForRender.length) enqueueIdleTask(chatChunk);
+                    if (ci < visibleList.length) enqueueIdleTask(chatChunk);
                 };
                 enqueueIdleTask(chatChunk);
+
+                // 如果超出阈值，添加“显示更多 / 收起” 控制项
+                if (chatsForRender.length > MAX_VISIBLE) {
+                    const toggleLi = document.createElement('li');
+                    toggleLi.textContent = showAll
+                        ? '▲ close'
+                        : `▼ more (${chatsForRender.length - MAX_VISIBLE})`;
+                    toggleLi.style.cssText =
+                        'cursor:pointer;font-size:12px;color:#888;margin:2px 0;padding:2px 4px;text-align:center';
+                    toggleLi.onclick = e => {
+                        e.stopPropagation();                // 不影响组折叠点击
+                        f.__showAll = !showAll;             // 切换展开状态
+                        render();                           // 重新渲染当前侧栏
+                    };
+                    ul.appendChild(toggleLi);
+                }
             }
+
 
 
             header.onclick = () => {
