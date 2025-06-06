@@ -1392,7 +1392,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 });
             });
 
-            /* ===== 修改后片段 1 ===== */
             newBtn.onclick = e => {
                 e.stopPropagation();
                 clearActiveOnHistoryClick = false;
@@ -1495,7 +1494,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     if (!newPaths.length) return;
 
 
-                    /* ===== 修改后片段 2 ===== */
                     observer.disconnect();
                     currentNewChatObserver = null;
                     window.removeEventListener('popstate', popHandler); // 防止兜底重复触发
