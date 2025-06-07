@@ -1592,7 +1592,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 if (chatsForRender.length > MAX_VISIBLE) {
                     const toggleLi = document.createElement('li');
                     toggleLi.textContent = showAll
-                        ? '▲ close'
+                        ? '▲ close all'
                         : `▼ more (${chatsForRender.length - MAX_VISIBLE})`;
                     toggleLi.style.cssText =
                         'cursor:pointer;font-size:12px;color:#888;margin:2px 0;padding:2px 4px;text-align:center';
