@@ -161,15 +161,19 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     new MutationObserver(restorePointerEvents)
         .observe(document.body, {attributes: true, attributeFilter: ['style']});
     /* ---------- 修复段结束 ---------- */
-// 统一颜色常量
-    const samePath = (a, b) => {
-        try {
-            if (!a || !b) return false;            // 处理空值
-            return new URL(a, location.origin).pathname === new URL(b, location.origin).pathname;
-        } catch {
-            return false;                          // 出现解析错误时默认不相同
+    // 抽取 pathname，尽量避免 new URL
+    function _path(u) {
+        if (!u) return '';
+        if (typeof u === 'string') {
+            if (u.startsWith('/')) return u.split('?')[0];         // 绝对内部路径
+            try { return new URL(u, location.origin).pathname; } catch { return ''; }
         }
-    };                                             // 比较路径
+        // Anchor 元素或带 pathname 属性的对象
+        if (u.pathname) return u.pathname.split('?')[0];
+        try { return new URL(String(u), location.origin).pathname; } catch { return ''; }
+    }
+
+    const samePath = (a, b) => _path(a) === _path(b);
 
     // 增强的选择器函数
     const qs = (sel, root = document) => {
@@ -1029,16 +1033,17 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             const histRoot =
                 qs('div#history') ||
                 qs('nav[aria-label="Chat history"]') ||
-                document;                        // 理论兜底
+                document;
+
+            const anchorMap = new Map();
+            qsa('a[href*="/c/"]', histRoot).forEach(link => {
+                const p = link.pathname;            // 直接取现成 pathname
+                if (p) anchorMap.set(p.split('?')[0], link);
+            });
+
 
             liveSyncMap.forEach((arr, path) => {
-                const a = qsa('a[href*="/c/"]', histRoot).find(link => {
-                    try {
-                        return samePath(link.href, location.origin + path);
-                    } catch {
-                        return false;
-                    }
-                });
+                const a = anchorMap.get(path);
                 if (!a) return;
 
                 const text = (a.textContent || 'New chat').trim();
@@ -1141,22 +1146,38 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             a.ondragstart = e => e.dataTransfer.setData('text/plain', a.href);
         }
 
-        const unifiedObsCallback = debounce(muts => {
-            muts.forEach(m => {
-                // 新增节点：赋拖拽
-                m.addedNodes.forEach(n => {
-                    if (n.nodeType !== 1) return;
-                    if (n.matches?.('a[href*="/c/"]')) markDraggable(n);
-                    n.querySelectorAll?.('a[href*="/c/"]').forEach(markDraggable);
-                });
-                // 移除节点：同步清理 liveSyncMap
-                m.removedNodes.forEach(n => {
-                    if (n.nodeType !== 1) return;
-                    if (n.matches?.('a[data-url]')) detachLink(n);
-                    n.querySelectorAll?.('a[data-url]').forEach(detachLink);
+        // ======= 修改后代码 =======
+        const unifiedObsCallback = muts => {
+            // ① 若本批次完全不含 <a> 相关节点，直接返回
+            let needProcess = false;
+            for (const m of muts) {
+                if (!m.addedNodes.length && !m.removedNodes.length) continue;
+                const nodes = [...m.addedNodes, ...m.removedNodes];
+                if (nodes.some(n => n.nodeType === 1 &&
+                    (n.tagName === 'A' || n.querySelector?.('a')))) {
+                    needProcess = true;
+                    break;
+                }
+            }
+            if (!needProcess) return;
+
+            // ② 把真正的遍历放到 requestIdleCallback, 减轻主线程压力
+            enqueueIdleTask(() => {
+                muts.forEach(m => {
+                    m.addedNodes.forEach(n => {
+                        if (n.nodeType !== 1) return;
+                        if (n.matches?.('a[href*="/c/"]')) markDraggable(n);
+                        n.querySelectorAll?.('a[href*="/c/"]').forEach(markDraggable);
+                    });
+                    m.removedNodes.forEach(n => {
+                        if (n.nodeType !== 1) return;
+                        if (n.matches?.('a[data-url]')) detachLink(n);
+                        n.querySelectorAll?.('a[data-url]').forEach(detachLink);
+                    });
                 });
             });
-        }, 100);
+        };
+
 
         const unifiedObs = observers.add(new MutationObserver(unifiedObsCallback));
         unifiedObs.observe(document.body, {childList: true, subtree: true});
@@ -1172,25 +1193,24 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             }
 
             const entries = Object.entries(folders);       // 需要渲染的分组
-            folderZone.replaceChildren();                  // 先清空容器
-            let i = 0;                                     // 当前渲染进度指针
+            folderZone.replaceChildren();
+            let i = 0;
             const chunk = () => {
-                const start = Date.now();
-                while (i < entries.length && Date.now() - start < CHUNK_BUDGET_MS) {
+                const frag = document.createDocumentFragment();          // 批量写入
+                const start = performance.now();                          // 精度更高
+                while (i < entries.length && performance.now() - start < CHUNK_BUDGET_MS) {
                     const [id, f] = entries[i++];
-                    folderZone.appendChild(renderFolder(id, f));
+                    frag.appendChild(renderFolder(id, f));               // 收集到片段
                 }
-                if (i < entries.length) {                  // 还有未完成任务
-                    enqueueIdleTask(chunk);                // 递归闲时继续
-                } else {                                   // 全部渲染完成
-                    highlightActive();                     // 立即刷新选中标记
-                    if (Math.random() < 0.2) {             // 按原逻辑偶尔清理
-                        enqueueIdleTask(cleanupLiveSyncMap);
-                    }
+                folderZone.appendChild(frag);                            // 一次性更新 DOM
+                if (i < entries.length) {
+                    enqueueIdleTask(chunk);
+                } else {
+                    highlightActive();
+                    if (Math.random() < 0.2) enqueueIdleTask(cleanupLiveSyncMap);
                 }
             };
-
-            enqueueIdleTask(chunk);                        // 启动首次渲染
+            enqueueIdleTask(chunk);
         }
 
 
