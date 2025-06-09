@@ -2008,9 +2008,11 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     const [chat] = folder.chats.splice(i, 1);
                     folder.chats.unshift(chat);         // 挪到最前
                     needRender = i > 0;                 // 只有顺序发生变化才刷新
-                } else {                                // 第一次写入该分组
+                } else if (window.__cgptPendingFid === folderFid) { // 仅在新建流程中自动加入
                     folder.chats.unshift({url: cur, title});
                     needRender = true;                  // 需要立即渲染生成条目
+                } else {
+                    return;                             // 避免意外写入其他分组
                 }
 
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
