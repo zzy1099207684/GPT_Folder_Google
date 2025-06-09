@@ -26,9 +26,14 @@
 
     /** 在指定容器内为尚未处理过的会话条目注入复选框 */
     function renderCheckboxes(root) {
-        const items = root.querySelectorAll(
-            'a.__menu-item[href*="/c/"]:not([data-checkbox-ready])'
-        );
+        const itemsRoot = (root.nodeType === 1 &&
+            root.matches('a.__menu-item[href*="/c/"]:not([data-checkbox-ready])'))
+            ? [root] : [];
+        const items = [
+            ...itemsRoot,
+            ...root.querySelectorAll?.('a.__menu-item[href*="/c/"]:not([data-checkbox-ready])') || []
+        ];
+        if (!items.length) return;
         items.forEach(item => {
             item.dataset.checkboxReady = '1';
 
@@ -56,12 +61,17 @@
 
     function init() {
         // 每次 DOM 变动都直接扫整页，保证任何新建/替换节点都能注入复选框
-        const apply = () => renderCheckboxes(document);
+        const handleAdded = node => {
+            if (node.nodeType !== 1) return;
+            if (node.matches?.('a.__menu-item[href*="/c/"]')) renderCheckboxes(node);
+            node.querySelectorAll?.('a.__menu-item[href*="/c/"]').forEach(renderCheckboxes);
+        };
 
-        apply();                              // 首次执行
+        handleAdded(document.body);
 
-        // 监听整页而不是单个节点，解决侧栏被 React 重建后观察器失效的问题
-        const mo = new MutationObserver(apply);
+        const mo = new MutationObserver(ms => {
+            ms.forEach(m => m.addedNodes.forEach(handleAdded));
+        });
         mo.observe(document.body, { childList: true, subtree: true });
         window.__cgptBatchDelete.cleanup = () => mo.disconnect();
         window.addEventListener('beforeunload', window.__cgptBatchDelete.cleanup);

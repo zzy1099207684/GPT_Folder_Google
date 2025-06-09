@@ -198,7 +198,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         {
             label: 'NORMAL',
             text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Pay attention to the reply style and Adjust the level of detail and length of your answers flexibly based on the complexity of the question. Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.```'
+                '```Be concise and straightforward - no fluff; Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; try your best to imitate Claude\'s answer style.```'
         },
         {
             label: 'NO_GUESS',
@@ -595,7 +595,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 list.style.left = `${gLeft}px`;
                 list.style.top = `${r.bottom + 4}px`;
 
-                Object.entries(folders).forEach(([fid, f]) => {
+                Object.entries(folders).forEach(([, f]) => {
                     const row = document.createElement('div');
                     row.textContent = f.name || 'Group';
                     row.style.cssText = 'padding:4px 12px;cursor:pointer;white-space:nowrap';
@@ -1014,6 +1014,9 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             }
         }
 
+        // 每 5 分钟执行一次深度清理
+        window.__deepCleanerId = setInterval(deepCleanMemory, 300000);
+
         // 页面离开时释放资源，防止泄漏
         window.addEventListener('beforeunload', () => {
             try {
@@ -1146,24 +1149,25 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             a.ondragstart = e => e.dataTransfer.setData('text/plain', a.href);
         }
 
-        // ======= 修改后代码 =======
-        const unifiedObsCallback = muts => {
-            // ① 若本批次完全不含 <a> 相关节点，直接返回
-            let needProcess = false;
-            for (const m of muts) {
-                if (!m.addedNodes.length && !m.removedNodes.length) continue;
-                const nodes = [...m.addedNodes, ...m.removedNodes];
-                if (nodes.some(n => n.nodeType === 1 &&
-                    (n.tagName === 'A' || n.querySelector?.('a')))) {
-                    needProcess = true;
-                    break;
-                }
-            }
-            if (!needProcess) return;
+        // 在统一回调外部新增节流状态
+        const unifiedObsCallback = (() => {
+            let queue = [];        // 收集短时间内的所有 MutationRecord
+            let scheduled = false; // 避免在同一帧内重复排队
 
-            // ② 把真正的遍历放到 requestIdleCallback, 减轻主线程压力
-            enqueueIdleTask(() => {
-                muts.forEach(m => {
+            const process = batch => {                 // ↓以下内容保持原逻辑，只把参数换成 batch
+                let needProcess = false;
+                for (const m of batch) {
+                    if (!m.addedNodes.length && !m.removedNodes.length) continue;
+                    const nodes = [...m.addedNodes, ...m.removedNodes];
+                    if (nodes.some(n => n.nodeType === 1 &&
+                        (n.tagName === 'A' || n.querySelector?.('a')))) {
+                        needProcess = true;
+                        break;
+                    }
+                }
+                if (!needProcess) return;
+
+                batch.forEach(m => {
                     m.addedNodes.forEach(n => {
                         if (n.nodeType !== 1) return;
                         if (n.matches?.('a[href*="/c/"]')) markDraggable(n);
@@ -1175,8 +1179,20 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         n.querySelectorAll?.('a[data-url]').forEach(detachLink);
                     });
                 });
-            });
-        };
+            };
+
+            return muts => {
+                queue.push(...muts);          // 合并本轮记录
+                if (scheduled) return;        // 已经排队就不再排
+                scheduled = true;
+                enqueueIdleTask(() => {       // 同帧仅一次真实处理
+                    const batch = queue;
+                    queue = [];
+                    scheduled = false;
+                    process(batch);
+                });
+            };
+        })();
 
 
         const unifiedObs = observers.add(new MutationObserver(unifiedObsCallback));
@@ -1986,7 +2002,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     if (chrome?.runtime?.id) storage.set({lastActiveMap});
                 }
                 const i = folder.chats.findIndex(c => samePath(c.url, cur));
-                let needRender = false;                 // 新增：是否真的需要刷新侧边栏
+                let needRender;                 // 新增：是否真的需要刷新侧边栏
 
                 if (i >= 0) {                           // 已在当前分组
                     const [chat] = folder.chats.splice(i, 1);
@@ -2485,7 +2501,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             if (historyNode) {
                 try {
                     historyNode.dataset.ready = '';
-                    delete historyNode._hasFolderListeners;
                 } catch (e) {
                     console.warn('[Bookmark] Error resetting history node state:', e);
                 }
