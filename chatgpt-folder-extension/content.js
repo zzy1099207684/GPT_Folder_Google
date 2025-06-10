@@ -1045,7 +1045,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
             if (updated) {
                 chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                render();
                 highlightActive();
             }
         };
