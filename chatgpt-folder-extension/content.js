@@ -1963,6 +1963,18 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 const title = histRoot?.querySelector(`a[href*="${location.pathname}"]`)?.textContent.trim() || 'New chat';
                 const curPath = new URL(cur).pathname;
 
+                if (window.__cgptPendingToken) {
+                    const oldKey = '/' + window.__cgptPendingToken;
+                    const counters = window.__cgptPromptGapCounters;
+                    if (counters[oldKey] !== undefined && counters[curPath] === undefined) {
+                        counters[curPath] = counters[oldKey];
+                    }
+                    delete counters[oldKey];
+                    try {
+                        sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
+                    } catch {}
+                }
+
                 let folderFid = activeFid && folders[activeFid] ? activeFid : null;
                 if (!folderFid) {
                     const cand = lastActiveMap[curPath];
