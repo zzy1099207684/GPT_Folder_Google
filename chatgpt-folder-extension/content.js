@@ -837,7 +837,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         if (_migrated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
 
 
-        // ========= 新增：当链接节点被移除时同步清理 =========
         function detachLink(el) {
             if (!el || !el.dataset?.url) return;
             let path;
@@ -848,6 +847,17 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             if (!path || !liveSyncMap.has(path)) return;
             const arr = liveSyncMap.get(path).filter(i => i.el !== el);
             arr.length ? liveSyncMap.set(path, arr) : liveSyncMap.delete(path);
+        }
+
+        // 根据会话路径移除对应 DOM 元素并清理映射
+        function removeChatDom(path) {
+            const arr = liveSyncMap.get(path);
+            if (!arr) return;
+            arr.forEach(({el}) => {
+                try { detachLink(el); } catch {}
+                const li = el.closest('li');
+                if (li) li.remove();
+            });
         }
 
 
@@ -1779,7 +1789,9 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     }
 
                     chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                    render();
+                    detachLink(link);
+                    li.remove();
+                    highlightActive();
                 }
             };
             li.append(link, del);
@@ -2187,8 +2199,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     }
                     chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                 }
-                /* 无论是否找到匹配条目，都强制刷新 Groups DOM，避免残留 */
-                render();
+                removeChatDom(delPath);
+                highlightActive();
             }, true);
         }
 
