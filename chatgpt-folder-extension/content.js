@@ -2230,7 +2230,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         }
 
 
-        const highlightActive = () => {
+        function highlightActive() {
             const path = location.pathname;
 
             /* 若仍在“New chat”挂起阶段，直接锁定该分组避免错跳 */
