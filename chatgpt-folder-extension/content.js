@@ -161,16 +161,25 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     new MutationObserver(restorePointerEvents)
         .observe(document.body, {attributes: true, attributeFilter: ['style']});
     /* ---------- 修复段结束 ---------- */
+
     // 抽取 pathname，尽量避免 new URL
     function _path(u) {
         if (!u) return '';
         if (typeof u === 'string') {
             if (u.startsWith('/')) return u.split('?')[0];         // 绝对内部路径
-            try { return new URL(u, location.origin).pathname; } catch { return ''; }
+            try {
+                return new URL(u, location.origin).pathname;
+            } catch {
+                return '';
+            }
         }
         // Anchor 元素或带 pathname 属性的对象
         if (u.pathname) return u.pathname.split('?')[0];
-        try { return new URL(String(u), location.origin).pathname; } catch { return ''; }
+        try {
+            return new URL(String(u), location.origin).pathname;
+        } catch {
+            return '';
+        }
     }
 
     const samePath = (a, b) => _path(a) === _path(b);
@@ -854,7 +863,10 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             const arr = liveSyncMap.get(path);
             if (!arr) return;
             arr.forEach(({el}) => {
-                try { detachLink(el); } catch {}
+                try {
+                    detachLink(el);
+                } catch {
+                }
                 const li = el.closest('li');
                 if (li) li.remove();
             });
@@ -874,7 +886,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     for (let i = 0; i < anchors.length; i++) {
                         try {
                             activePaths.add(new URL(anchors[i].href, location.origin).pathname);
-                        } catch {}
+                        } catch {
+                        }
                     }
                 } catch (e) {
                     console.warn('[Bookmark] Error collecting active paths:', e);
@@ -1632,7 +1645,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             }
 
 
-
             header.onclick = () => {
                 f.collapsed = !f.collapsed;          // 更新本地状态
                 scheduleSaveFolders();               // 通过节流函数延迟写入
@@ -1972,7 +1984,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     delete counters[oldKey];
                     try {
                         sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
-                    } catch {}
+                    } catch {
+                    }
                 }
 
                 let folderFid = activeFid && folders[activeFid] ? activeFid : null;
