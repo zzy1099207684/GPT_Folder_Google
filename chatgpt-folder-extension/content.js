@@ -198,7 +198,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         {
             label: 'NORMAL',
             text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Be concise and straightforward - no fluff; Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; try your best to imitate Claude\'s answer style.```'
+                '```Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; Emulate Claude\'s reasoning approach and communication style.```'
         },
         {
             label: 'NO_GUESS',
@@ -854,68 +854,49 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         // Enhanced cleanup function for liveSyncMap - replace existing function
         function cleanupLiveSyncMap() {
             try {
-                // 如果Map过大，进行更激进的清理
+                if (liveSyncMap.size === 0) return false;
                 const aggressiveCleanup = liveSyncMap.size > 500;
 
-                // 移除引用已不在DOM中的元素
-                let cleaned = false;
-                let totalRemoved = 0;
-
-                // 如果映射为空，跳过清理
-                if (liveSyncMap.size === 0) return false;
-
-                // 优先检查最近未访问的路径
-                const pathsToCheck = [...liveSyncMap.keys()];
-
-                // 收集当前在DOM中的路径以提高性能
+                // 收集当前在DOM中的路径
                 const activePaths = new Set();
                 try {
-                    qsa(HIST_ANCHOR).forEach(a => {
+                    const anchors = qsa(HIST_ANCHOR);
+                    for (let i = 0; i < anchors.length; i++) {
                         try {
-                            activePaths.add(new URL(a.href, location.origin).pathname);
-                        } catch (e) {
-                        } // Silently ignore URL parsing errors
-                    });
+                            activePaths.add(new URL(anchors[i].href, location.origin).pathname);
+                        } catch {}
+                    }
                 } catch (e) {
                     console.warn('[Bookmark] Error collecting active paths:', e);
                 }
 
-                pathsToCheck.forEach((path) => {
+                let cleaned = false;
+                let totalRemoved = 0;
+
+                for (const [path, arr] of liveSyncMap.entries()) {
                     if (!path) {
                         liveSyncMap.delete(path);
                         cleaned = true;
-                        return;
+                        continue;
                     }
 
-                    // 如果路径不在当前历史中且进行激进清理，直接删除整个条目
                     const pathInHistory = activePaths.has(path);
 
                     if (aggressiveCleanup && !pathInHistory) {
-                        const arr = liveSyncMap.get(path) || [];
-                        totalRemoved += arr.length;
+                        totalRemoved += Array.isArray(arr) ? arr.length : 0;
                         liveSyncMap.delete(path);
                         cleaned = true;
-                        return;
+                        continue;
                     }
 
-                    // 否则过滤无效的DOM引用
-                    const arr = liveSyncMap.get(path);
-                    if (!arr || !Array.isArray(arr)) {
+                    if (!Array.isArray(arr)) {
                         liveSyncMap.delete(path);
                         cleaned = true;
-                        return;
+                        continue;
                     }
 
                     const beforeLength = arr.length;
-
-                    // 优化: 只检查在文档体中的元素
-                    const newArr = arr.filter(({el}) => {
-                        try {
-                            return el && document.body.contains(el);
-                        } catch (e) {
-                            return false;
-                        }
-                    });
+                    const newArr = arr.filter(({el}) => el && el.isConnected);
 
                     if (newArr.length === 0) {
                         liveSyncMap.delete(path);
@@ -923,16 +904,16 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         cleaned = true;
                     } else if (newArr.length !== arr.length) {
                         liveSyncMap.set(path, newArr);
-                        totalRemoved += (beforeLength - newArr.length);
+                        totalRemoved += beforeLength - newArr.length;
                         cleaned = true;
                     }
-                });
+                }
 
                 if (cleaned && totalRemoved > 0) {
                     console.log(`[Bookmark] Cleaned ${totalRemoved} stale references from liveSyncMap`);
                 }
 
-                return cleaned; // 返回是否有清理发生
+                return cleaned;
             } catch (err) {
                 console.warn('[Bookmark] Error cleaning liveSyncMap:', err);
                 return false;

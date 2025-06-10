@@ -60,21 +60,25 @@
     }
 
     function init() {
-        // 每次 DOM 变动都直接扫整页，保证任何新建/替换节点都能注入复选框
+
+        const observeRoot = document.querySelector('div#history')
+            || document.querySelector('nav[aria-label="Chat history"]')
+            || document.body;
+
         const handleAdded = node => {
             if (node.nodeType !== 1) return;
             if (node.matches?.('a.__menu-item[href*="/c/"]')) renderCheckboxes(node);
             node.querySelectorAll?.('a.__menu-item[href*="/c/"]').forEach(renderCheckboxes);
         };
 
-        handleAdded(document.body);
+        handleAdded(observeRoot);
 
         const mo = new MutationObserver(ms => {
             ms.forEach(m => m.addedNodes.forEach(handleAdded));
         });
-        mo.observe(document.body, { childList: true, subtree: true });
+        mo.observe(observeRoot, { childList: true, subtree: true });
         window.__cgptBatchDelete.cleanup = () => mo.disconnect();
-        window.addEventListener('beforeunload', window.__cgptBatchDelete.cleanup);
+        window.addEventListener('beforeunload', window.__cgptBatchDelete.cleanup, {passive: true});
     }
 
 
