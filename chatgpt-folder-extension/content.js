@@ -1991,20 +1991,17 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
             let last = ed.lastElementChild;
 
-            /* 仅在 injectNow 为真时插入 prompt */
             if (injectNow && groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {
                 qsa('p[data-cgpt-blank]', ed).forEach(p => p.remove());   // 新增
 
-// 插入带标记的占位行
-                const blank = document.createElement('p');
-                blank.dataset.cgptBlank = '1';            // 新增
-                blank.innerHTML = '<br>';
-                ed.appendChild(blank);
-
+                // 先插入提示词、空行和固定引导语，统一放到历史内容之前
                 const gp = document.createElement('p');
                 gp.textContent = groupPrompt;
-                ed.appendChild(gp);
-                last = gp;
+
+                // 使用文档片段保证顺序，再整体 prepend 到首行
+                const frag = document.createDocumentFragment();
+                frag.appendChild(gp);
+                ed.prepend(frag);                       // 现在三行显示在用户输入上方
             }
 
             if (!(last && last.innerText.trim() === SUFFIX)) {
