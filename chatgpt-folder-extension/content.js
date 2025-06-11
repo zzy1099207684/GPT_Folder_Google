@@ -207,7 +207,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         {
             label: 'NORMAL',
             text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; Emulate Claude\'s reasoning approach and communication style.```'
+                '```Maintain consistent response style; Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; Emulate Claude\'s reasoning approach and communication style.```'
         },
         {
             label: 'NO_GUESS',
