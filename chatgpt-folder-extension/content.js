@@ -342,8 +342,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                             name: folder.name || 'Group',
                             chats: limitedChats,
                             collapsed: folder.collapsed || false,
-                            prompt: (folder.prompt || '').slice(0, 100) // 限制提示长度
-                        };
+                            prompts: (folder.prompts || []).slice(0, 3).map(p => p.slice(0, 100))
+                    };
                     });
 
                     // 尝试直接写入精简版数据
@@ -447,6 +447,15 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     window.__cgptPromptGapCounters = (() => {
         try {
             return JSON.parse(sessionStorage.getItem('cgptPromptGapCounters') || '{}');
+        } catch {
+            return {};
+        }
+    })();
+
+    // 新增：多提示词轮询索引映射
+    window.__cgptPromptIndexMap = (() => {
+        try {
+            return JSON.parse(sessionStorage.getItem('cgptPromptIndexMap') || '{}');
         } catch {
             return {};
         }
@@ -764,7 +773,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 name: name.slice(0, 20) + (name.length > 20 ? '…' : ''),
                 chats: [],
                 collapsed: true,
-                prompt: ''
+                prompts: []
             };
 
             const order = Object.keys(folders);           // 维持渲染顺序
@@ -813,7 +822,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         name: hints[i].label,
                         chats: [],
                         collapsed: true,
-                        prompt: hints[i].text
+                        prompts: [hints[i].text]
                     };
                     storedOrder.push(id);
                 }
@@ -838,8 +847,10 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         lastActiveMap = (await storage.get('lastActiveMap')) || {};
         let _migrated = false; // 标记旧版本数据迁移逻辑
         Object.values(folders).forEach(f => {
-            if (!('prompt' in f)) {
-                f.prompt = '';
+            if (!('prompts' in f)) {
+                const p = typeof f.prompt === 'string' && f.prompt ? [f.prompt] : [];
+                f.prompts = p;
+                delete f.prompt;
                 _migrated = true;
             }
         });
@@ -1348,9 +1359,45 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
                         const box = document.createElement('div');
                         box.style.cssText = 'background:#2b2521;padding:16px;border-radius:6px;max-width:400px;width:80%';
-                        const ta = document.createElement('textarea');
-                        ta.value = folders[fid].prompt || '';
-                        ta.style.cssText = 'width:100%;height:100px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:6px;resize:vertical';
+
+                        const promptWrap = document.createElement('div');
+                        promptWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+                        let activeTa;
+                        const addTa = (val = '') => {
+                            // 行容器：让 textarea 靠左，右留空位放删除键
+                            const row = document.createElement('div');
+                            row.style.cssText = 'display:flex;align-items:flex-start;gap:6px';
+
+                            // textarea 本身：宽度改为自动拉伸，占行内剩余空间
+                            const t = document.createElement('textarea');
+                            t.value = val;
+                            t.style.cssText = 'flex:1;height:80px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:6px;resize:vertical';
+                            t.onfocus = () => { activeTa = t; };
+
+                            // 删除按钮
+                            const del = document.createElement('button');
+                            del.textContent = '-';
+                            del.style.cssText = 'width:24px;height:24px;flex:0 0 24px;border:none;border-radius:6px;background:#444;color:#e7d8c5;cursor:pointer';
+                            del.onclick = () => {
+                                row.remove();
+                            };
+
+                            row.append(t, del);
+                            promptWrap.appendChild(row);
+                            activeTa = t;
+                        };
+
+                        const exist = folders[fid].prompts && Array.isArray(folders[fid].prompts)
+                            ? folders[fid].prompts
+                            : (folders[fid].prompt ? [folders[fid].prompt] : []);
+                        (exist.length ? exist : ['']).slice(0,3).forEach(v => addTa(v));
+
+                        const addBtn = document.createElement('button');
+                        addBtn.textContent = '+';
+                        addBtn.style.cssText = 'width:24px;height:24px;flex:0 0 24px;border:none;border-radius:6px;background:#444;color:#e7d8c5;cursor:pointer';
+                        addBtn.onclick = () => {
+                            if (promptWrap.children.length < 3) addTa('');
+                        };
 
                         // ① 预设提示词
                         const hintBar = document.createElement('div');
@@ -1360,14 +1407,14 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                             btn.textContent = h.label;
                             btn.style.cssText = 'cursor:pointer;padding:2px 4px;border:1px solid #555;border-radius:12px;font-size:12px;position:relative;top:-2px';
                             btn.onclick = () => {
-                                ta.focus();
-                                const {selectionStart: s, selectionEnd: e} = ta;
-                                ta.setRangeText(h.text, s, e, 'end');
-                                ta.dispatchEvent(new Event('input', {bubbles: true}));
+                                if (!activeTa) return;
+                                activeTa.focus();
+                                const {selectionStart: s, selectionEnd: e} = activeTa;
+                                activeTa.setRangeText(h.text, s, e, 'end');
+                                activeTa.dispatchEvent(new Event('input', {bubbles: true}));
                             };
                             hintBar.appendChild(btn);
                         });
-                        box.append(ta, hintBar);            // ② 把快捷栏放在 textarea 下
 
                         const ok = document.createElement('button');
                         ok.textContent = 'ok';
@@ -1391,12 +1438,16 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         });
                         gapWrap.appendChild(gapInput);
 
-                        box.append(ta, gapWrap, wrap);
+                        box.append(promptWrap, addBtn, hintBar, gapWrap, wrap);
                         modal.appendChild(box);
                         document.body.appendChild(modal);
 
                         ok.onclick = () => {
-                            folders[fid].prompt = ta.value.trim();
+                            const ps = Array.from(promptWrap.querySelectorAll('textarea'))
+                                .map(t => t.value.trim())
+                                .filter(Boolean)
+                                .slice(0, 3);
+                            folders[fid].prompts = ps;
                             folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0); // 保存间隔
                             chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                             render();
@@ -1451,6 +1502,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 const token = Date.now().toString(36);
                 window.__cgptPendingToken = token;
                 delete window.__cgptPromptGapCounters['/'];
+                delete window.__cgptPromptIndexMap['/'];
 
                 // 保底：把根路径映射到当前分组，侧栏自动收起再展开仍能保持高亮
                 lastActiveMap['/'] = clickedFid;
@@ -1888,17 +1940,25 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 }
             }
 
-            const groupPrompt = currentFid ? (folders[currentFid].prompt || '').trim() : '';
-
-            const gapCounters = window.__cgptPromptGapCounters;
-            // 用 nullish 合并运算符，允许有效的 0 被保留
-            const gap = currentFid && folders[currentFid] ? (folders[currentFid].gap ?? 3) : 3;
-
-            const counterKey =
-                (path === '/' && window.__cgptPendingToken)       // 根路径阶段按 token 区分
+            const promptList = currentFid ? (folders[currentFid].prompts || []) : [];
+            const indices = window.__cgptPromptIndexMap;
+            const counterKey =                                   // ✅ 先计算
+                (path === '/' && window.__cgptPendingToken)
                     ? `/${window.__cgptPendingToken}`
                     : path;
+            const idx = indices[counterKey] || 0;                // 再使用
+            const groupPrompt = promptList.length
+                ? (promptList[idx % promptList.length] || '').trim()
+                : '';
+
+            // 先读取当前分组的间隔值，默认为 3
+            const gap = currentFid && Number.isFinite(folders[currentFid].gap)
+                ? Math.max(0, folders[currentFid].gap)
+                : 3;
+
+            const gapCounters = window.__cgptPromptGapCounters;
             let cnt = gapCounters[counterKey];
+
             let injectNow = false;
 
             if (cnt === undefined) { // 第一次，强制追加，并将cnt设为1
@@ -1914,6 +1974,13 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 cnt += 1;                         // 未到间隔，仅累加
             }
             gapCounters[counterKey] = cnt;
+
+            if (injectNow && promptList.length) {
+                indices[counterKey] = (idx + 1) % promptList.length;
+                try {
+                    sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices));
+                } catch {}
+            }
 
             if (injectNow && groupPrompt) {
                 qsa('p', ed).forEach((p, i, arr) => {
@@ -1982,8 +2049,16 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         counters[curPath] = counters[oldKey];
                     }
                     delete counters[oldKey];
+
+                    const idxMap = window.__cgptPromptIndexMap;
+                    if (idxMap[oldKey] !== undefined && idxMap[curPath] === undefined) {
+                        idxMap[curPath] = idxMap[oldKey];
+                    }
+                    delete idxMap[oldKey];
+
                     try {
                         sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
+                        sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(idxMap));
                     } catch {
                     }
                 }
