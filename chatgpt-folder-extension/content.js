@@ -208,8 +208,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             label: 'NORMAL',
             text: [
                 '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
-                '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
-                '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
+                '※Pay attention to formatting and avoid drift;※',
+                '※Answer with this rule: No pandering, Remain objective and honest; Mimic Claude\'s response style as closely as possible;Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※',
             ]
         },
         {
@@ -1423,7 +1423,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         wrap.style.cssText = 'text-align:right;margin-top:10px';
                         wrap.append(ok, cancel);
 
-                        /* 新增：间隔轮数输入框 —— 仅正整数，默认 3 */
+                        /* 新增：间隔轮数输入框 —— 仅正整数，默认 0 */
                         const gapWrap = document.createElement('div');
                         gapWrap.style.cssText = 'margin-top:8px;font-size:12px;display:flex;align-items:center;gap:6px';
                         gapWrap.innerHTML = '<span>How often does this happen?</span>';
@@ -1431,7 +1431,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                             type: 'number',
                             min: 0,
                             step: 1,
-                            value: folders[fid].gap ?? 3,
+                            value: folders[fid].gap ?? 0,
                             style: 'flex:0 0 80px;height:24px;border-radius:4px;border:1px solid #555;background:#1e1815;color:#e7d8c5;padding:0 6px'
                         });
                         gapWrap.appendChild(gapInput);
