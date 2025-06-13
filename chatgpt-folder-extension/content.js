@@ -1,5 +1,6 @@
 // content.js
 const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]';
+const MAX_PROMPTS = 4;
 (() => { // 立即执行函数隔离作用域
     function nanoid(size = 21) {
         let id = ''
@@ -210,6 +211,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
                 '※Pay attention to formatting and avoid drift;※',
                 '※Answer with this rule: No pandering, Remain objective and honest; Mimic Claude\'s response style as closely as possible;Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※',
+                '※Pay attention to formatting and avoid drift;※',
             ]
         },
         {
@@ -340,7 +342,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                             name: folder.name || 'Group',
                             chats: limitedChats,
                             collapsed: folder.collapsed || false,
-                            prompts: (folder.prompts || []).slice(0, 3).map(p => p.slice(0, 100))
+                            prompts: (folder.prompts || []).slice(0, MAX_PROMPTS).map(p => p.slice(0, 100))
                     };
                     });
 
@@ -1386,7 +1388,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
                             /* 只读文本框，放置全部说明文字 */
                             const txt = [
-                                '1. The prompt setting interface allows you to add up to three prompts for each group, each of which can be entered or deleted;\n' +
+                                `1. The prompt setting interface allows you to add up to ${MAX_PROMPTS} prompts for each group, each of which can be entered or deleted;\n` +
                                 '2. Click "+" to add a new prompt, and "-" to delete an existing prompt;\n' +
                                 '3. Click the preset label at the bottom (such as: NO_GUESS, change_code) to insert the corresponding content into the cursor position of the currently selected input box;\n' +
                                 '4. The "how often does this happen?" input box is used to set the number of rounds between prompts. Fill in an integer, and the default value of 0 will be inserted every round;\n' +
@@ -1446,13 +1448,13 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         const exist = folders[fid].prompts && Array.isArray(folders[fid].prompts)
                             ? folders[fid].prompts
                             : (folders[fid].prompt ? [folders[fid].prompt] : []);
-                        (exist.length ? exist : ['']).slice(0,3).forEach(v => addTa(v));
+                        (exist.length ? exist : ['']).slice(0, MAX_PROMPTS).forEach(v => addTa(v));
 
                         const addBtn = document.createElement('button');
                         addBtn.textContent = '+';
                         addBtn.style.cssText = 'width:24px;height:24px;flex:0 0 24px;border:none;border-radius:6px;background:#444;color:#e7d8c5;cursor:pointer';
                         addBtn.onclick = () => {
-                            if (promptWrap.children.length < 3) addTa('');
+                            if (promptWrap.children.length < MAX_PROMPTS) addTa('');
                         };
 
                         // ① 预设提示词
@@ -1509,7 +1511,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                                     return (v.startsWith('※') && v.endsWith('※')) ? v : `※${v}※`;
                                 })
                                 .filter(Boolean)
-                                .slice(0, 3);
+                                .slice(0, MAX_PROMPTS);
                             folders[fid].prompts = ps;
                             folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0);
                             chrome.runtime.sendMessage({type: 'save-folders', data: folders});
@@ -1960,6 +1962,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             const ed = qs('.ProseMirror');
             if (!ed) return;
             const SUFFIX = ''; // 定义尾缀常量
+
             const path = location.pathname;                                         // 当前会话路径
             const mapArr = liveSyncMap.get(path) || [];                             // 映射数组（可能为空）
             mapArr.filter(({el}) => document.contains(el));
