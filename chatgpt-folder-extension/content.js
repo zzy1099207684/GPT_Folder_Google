@@ -210,7 +210,7 @@ const MAX_PROMPTS = 4;
             text: [
                 '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
                 '※Pay attention to formatting and avoid drift;※',
-                '※Answer with this rule: No pandering, Remain objective and honest; Mimic Claude\'s response style as closely as possible;Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※',
+                '※Answer with this rule: No pandering, Remain objective and honest; Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions; Match Claude\'s answering style.※',
                 '※Pay attention to formatting and avoid drift;※',
             ]
         },
