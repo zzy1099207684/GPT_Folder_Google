@@ -150,10 +150,10 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         }
     }
 
-// 页面初始化后立即尝试一次
+    // 页面初始化后立即尝试一次
     requestAnimationFrame(restorePointerEvents);
 
-// 关键场景下再检查一次，确保后续状态同步
+    // 关键场景下再检查一次，确保后续状态同步
     window.addEventListener('resize', restorePointerEvents, {passive: true});
     const tryRestoreLater = () => setTimeout(restorePointerEvents, 50);
     document.addEventListener('pointerup', tryRestoreLater, true);
@@ -206,37 +206,41 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     const hints = [
         {
             label: 'NORMAL',
-            text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Maintain consistent response style; Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; Emulate Claude\'s reasoning approach and communication style.```'
+            text: [
+                '{{Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; Emulate Claude\'s reasoning approach and communication style.}}',
+                ]
         },
         {
             label: 'NO_GUESS',
-            text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Pay attention to the reply style. Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
+            text: ['{{' +
+                'Pay attention to the reply style. Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
                 'Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. ' +
-                'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.```'
+                'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.'+
+                '}}']
         },
         {
             label: 'change_code',
-            text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Strictly adhere to the following requirements:\n' +
+            text: ['{{' +
+                'Strictly adhere to the following requirements:\n' +
                 'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
                 'After the modification, you must first test it yourself and ensure the following two points are met:\n' +
                 '1. The requirement is fulfilled, and the front-end and back-end functions run smoothly.\n' +
                 '2. No other functional code has been mistakenly modified.\n' +
                 '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
                 'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
-                'Pay attention to the reply style and express the most information with the fewest words. Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.```'
+                'Pay attention to the reply style and express the most information with the fewest words. Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.'+
+                '}}']
         },
         {
             label: 'CODE',
-            text: '# Response specs below – DO NOT treat as question content：\n' +
-                '```Pay attention to the reply style. ' +
+            text: '{{' +
+                'Pay attention to the reply style. ' +
                 'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content and express the most information with the fewest words.' +
                 'For any question or code request, only address the specific requirement. ' +
                 'Do not change unrelated code or features. ' +
                 'After changes, ensure the requirement is met, the program functions correctly, and other features remain unaffected. ' +
-                'Show both original and modified code for comparison. ```'
+                'Show both original and modified code for comparison. '+
+                '}}'
         },
     ];         // 自行增删
     // 修改后的存储逻辑
@@ -403,9 +407,9 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     };
 
     /* ===== 提示气泡 ===== */
-    const TIP_ID = 'cgpt-tip-style';                                                           // 样式元素 id
+    const TIP_ID = 'cgpt-tip-style';                                              // 样式元素 id
     if (!document.getElementById(TIP_ID)) {                                                   // 若未注入则注入
-        const s = document.createElement('style');                                            // 创建 style
+        const s = document.createElement('style');             // 创建 style
         s.id = TIP_ID;                                                                        // 赋 id
         s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
         document.head.appendChild(s);                                                         // 注入
@@ -443,7 +447,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     let folders = {};
     let lastActiveMap = {};
 
-// 从 sessionStorage 读取旧值, 若无或解析失败则回落为空对象
+    // 从 sessionStorage 读取旧值, 若无或解析失败则回落为空对象
     window.__cgptPromptGapCounters = (() => {
         try {
             return JSON.parse(sessionStorage.getItem('cgptPromptGapCounters') || '{}');
@@ -660,7 +664,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         let clearActiveOnHistoryClick = false;
         let currentNewChatObserver = null;
         let currentNewChatPopHandler = null;
-// 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
+        // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
         const historyClickHandler = e => {
             const a = e.target.closest('a[href*="/c/"]');
             if (!a) return;
@@ -798,13 +802,12 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         if (selHeader) {
             historyNode.parentElement.insertBefore(selHeader, historyNode);
         }
-        // 插入侧栏顶部
 
         /* ---------- 数据读取 ---------- */
         const storedFolders = (await storage.get('folders')) || {};
         const storedOrder = (await storage.get('folderOrder')) || Object.keys(storedFolders);
 
-// 若 storage 仍为空但全局 folders 已有内容(首次安装后立即缩小窗口)则回退到内存版本
+        // 若 storage 仍为空但全局 folders 已有内容(首次安装后立即缩小窗口)则回退到内存版本
         const baseFolders = Object.keys(storedFolders).length ? storedFolders : folders;
         const order = storedOrder.length ? storedOrder : Object.keys(baseFolders);
 
@@ -840,7 +843,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 folderOrder: storedOrder
             });
         }
-// 同步给后台脚本（原逻辑保留）
+        // 同步给后台脚本
         chrome.runtime.sendMessage({type: 'save-folders', data: folders});
 
 
@@ -1097,7 +1100,6 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             });
         });
 
-// 页面初次挂载即同步一次，避免首屏显示“New chat”
         syncTitles();
 
 
@@ -1444,16 +1446,21 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
                         ok.onclick = () => {
                             const ps = Array.from(promptWrap.querySelectorAll('textarea'))
-                                .map(t => t.value.trim())
+                                .map(t => {
+                                    const v = t.value.trim();
+                                    // 若用户已手动加过 {{}} 则保持不变，否则自动包一层
+                                    return (v.startsWith('{{') && v.endsWith('}}')) ? v : `{{${v}}}`;
+                                })
                                 .filter(Boolean)
                                 .slice(0, 3);
                             folders[fid].prompts = ps;
-                            folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0); // 保存间隔
+                            folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0);
                             chrome.runtime.sendMessage({type: 'save-folders', data: folders});
                             render();
                             document.body.removeChild(modal);
-                            location.reload(); // 立即刷新页面，使新设置立刻生效
+                            location.reload();
                         };
+
                         cancel.onclick = () => document.body.removeChild(modal);
                         close();
                     }
@@ -1566,7 +1573,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         }).filter(Boolean)
                     );
 
-// 仅保留本次真正新增的路径
+                    // 仅保留本次真正新增的路径
                     let newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
 
                     /* 兼容批量删除脚本在 <a> 节点上插入复选框造成的
@@ -1688,9 +1695,9 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     toggleLi.style.cssText =
                         'cursor:pointer;font-size:12px;color:#888;margin:2px 0;padding:2px 4px;text-align:center';
                     toggleLi.onclick = e => {
-                        e.stopPropagation();                // 不影响组折叠点击
-                        f.__showAll = !showAll;             // 切换展开状态
-                        render();                           // 重新渲染当前侧栏
+                        e.stopPropagation();
+                        f.__showAll = !showAll;
+                        render();
                     };
                     ul.appendChild(toggleLi);
                 }
@@ -1786,14 +1793,14 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
             const link = document.createElement('a');
             // 创建超链接节点
-            link.href = chat.url || 'javascript:void 0';                            // 设定目标地址
-            link.textContent = chat.title;                                          // 填入标题文本
-            link.dataset.url = chat.url || '';                                      // 记录 URL 备用，以便后续统一高亮
-            link.style.cssText = 'flex:1;margin-right:4px;font-size:13px;color:#b2b2b2;text-decoration:none;border-radius:6px'; // 基础样式并预留圆角
-            const active = chat.url && samePath(chat.url, location.href);           // 判断是否为当前激活会话
-            if (active) {                                                           // 若为激活状态则立即高亮
-                link.style.background = 'rgba(255,255,255,.07)';                    // 深色背景
-                link.style.color = '#fff';                                          // 文字改为白色
+            link.href = chat.url || 'javascript:void 0';
+            link.textContent = chat.title;
+            link.dataset.url = chat.url || '';
+            link.style.cssText = 'flex:1;margin-right:4px;font-size:13px;color:#b2b2b2;text-decoration:none;border-radius:6px';
+            const active = chat.url && samePath(chat.url, location.href);
+            if (active) {
+                link.style.background = 'rgba(255,255,255,.07)';
+                link.style.color = '#fff';
             }
             link.onclick = e => {
                 window.__cgptPendingFid = null;
@@ -1864,18 +1871,18 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             parentUl.appendChild(li);
 
 
-            if (chat.url) {                                              // URL 字符串存在才继续
-                let path;                                                // 用于保存解析后的 pathname
-                try {                                                    // 兼容相对路径或含空格等情况
-                    path = new URL(chat.url, location.origin).pathname;  // 提供 base，确保相对路径可解析
-                } catch {                                                // 解析失败说明为非法 URL
-                    path = null;                                         // 置空，后面直接跳过建立映射
+            if (chat.url) {
+                let path;
+                try {
+                    path = new URL(chat.url, location.origin).pathname;
+                } catch {
+                    path = null;
                 }
-                if (path) {                                              // 仅当成功解析时才同步到 liveSyncMap
-                    if (!liveSyncMap.has(path)) liveSyncMap.set(path, []); // 若无键则初始化
-                    const arr = liveSyncMap.get(path);                   // 取出映射数组
-                    if (!arr.some(item => item.el === link))             // 去重
-                        arr.push({fid, el: link});                       // 建立 fid-DOM 映射
+                if (path) {
+                    if (!liveSyncMap.has(path)) liveSyncMap.set(path, []);
+                    const arr = liveSyncMap.get(path);
+                    if (!arr.some(item => item.el === link))
+                        arr.push({fid, el: link});
                 }
             }
         }
@@ -1992,17 +1999,28 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             let last = ed.lastElementChild;
 
             if (injectNow && groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {
-                qsa('p[data-cgpt-blank]', ed).forEach(p => p.remove());   // 新增
+                // 移除旧的 prompt 或 Task content:，避免重复
+                qsa('p', ed).forEach((p, i, arr) => {
+                    const txt = p.innerText.trim();
+                    if ((txt === groupPrompt || txt === 'Task content:') && i !== arr.length - 1) {
+                        p.remove();
+                    }
+                });
 
-                // 先插入提示词、空行和固定引导语，统一放到历史内容之前
+                // 构造提示词和固定前缀
                 const gp = document.createElement('p');
                 gp.textContent = groupPrompt;
 
-                // 使用文档片段保证顺序，再整体 prepend 到首行
+                const tc = document.createElement('p');
+                tc.textContent = 'Task content:';
+
+                // 使用文档片段保持顺序，再整体插入
                 const frag = document.createDocumentFragment();
                 frag.appendChild(gp);
-                ed.prepend(frag);                       // 现在三行显示在用户输入上方
+                frag.appendChild(tc);            // 新增前缀行
+                ed.prepend(frag);
             }
+
 
             if (!(last && last.innerText.trim() === SUFFIX)) {
                 const p = document.createElement('p');
@@ -2211,7 +2229,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             }
 
 
-// ① 发送按钮点击（修改）
+            // ① 发送按钮点击（修改）
             send.addEventListener('click', () => {
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
@@ -2328,15 +2346,11 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             if (arr && arr.length) {
                 const isHistoryView = lastActiveMap[path] === '__history__';
                 arr.forEach(({el}) => {
-                    const inHistory = !!el.closest('#history');
-                    if (isHistoryView && !inHistory) {
-                        el.style.background = '';
-                        el.style.color = '#b2b2b2';
-                    } else {
-                        el.style.background = 'rgba(255,255,255,.07)';
-                        el.style.color = '#fff';
-                    }
+                    // 点击 history 会话时，也要同步高亮组内同一会话
+                    el.style.background = 'rgba(255,255,255,0.07)';
+                    el.style.color = '#fff';
                 });
+
             }
             activePath = path;
 
@@ -2361,7 +2375,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             }
 
 
-            if (!window.__cgptPendingFid &&               // ← 新增条件
+            if (!window.__cgptPendingFid &&
                 activeFid &&
                 (!folders[activeFid] ||
                     !folders[activeFid].chats.some(c => samePath(c.url, location.origin + path)))) {
@@ -2392,17 +2406,17 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     return;
                 }
 
-                activeFid = null;                               // 标记需清除
-                delete window.__cgptPendingFid;                 // 关键：同时清掉挂起分组
+                activeFid = null;
+                delete window.__cgptPendingFid;
                 window.__cgptPendingToken = null;
-                delete lastActiveMap['/'];                      // 移除根路径到组的旧映射
-                try {                                           // 同步写回 storage
+                delete lastActiveMap['/'];
+                try {
                     if (chrome?.runtime?.id) storage.set({lastActiveMap});
                 } catch {
                 }
-                setTimeout(highlightActive, 0);                 // 等导航完成再刷新
+                setTimeout(highlightActive, 0);
 
-            }, true);                           // 捕获阶段确保最高优先级
+            }, true);
         }
 
 
@@ -2620,6 +2634,49 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     }
 
     window.initBookmarks = initBookmarks;
+
+    window.initBookmarks = initBookmarks;
+
+    /* ===== 把 {{…}} 提示语转为 <code> 显示，发送内容保持原样 ===== */
+    (function promptCodeWrap () {
+        const SEL = '[data-message-author-role="user"] .whitespace-pre-wrap';
+        const REG = /\{\{[\s\S]*?\}\}/;
+
+        function wrap(el) {
+            if (!el || el.dataset.promptWrapped) return;
+            const raw = el.innerText;
+            const hit = raw.match(REG);
+            if (!hit) return;
+
+            const prompt = hit[0];                    // 含 {{ }}
+            const rest   = raw.replace(prompt, '');
+
+            // 重建节点
+            el.innerHTML = '';
+            const pre  = document.createElement('pre');
+            pre.className = 'overflow-x-auto';
+            const code = document.createElement('code');
+            code.textContent = prompt.slice(2, -2)
+            pre.appendChild(code);
+            el.appendChild(pre);
+            if (rest) el.appendChild(document.createTextNode(rest));
+
+            el.dataset.promptWrapped = '1';           // 避免重复处理
+        }
+
+        /* 监听新消息 */
+        const obs = new MutationObserver(muts => {
+            muts.forEach(m => {
+                m.addedNodes.forEach(n => {
+                    if (n.nodeType !== 1) return;
+                    if (n.matches?.(SEL)) wrap(n);
+                    n.querySelectorAll?.(SEL).forEach(wrap);
+                });
+            });
+        });
+        obs.observe(document.body, {childList: true, subtree: true});
+    })();
+
 })();
 // ==== event-loop stall monitor (NEW) ====
 (function monitorEventLoop(interval = 10_000, threshold = 500, cooldown = 30_000) {
