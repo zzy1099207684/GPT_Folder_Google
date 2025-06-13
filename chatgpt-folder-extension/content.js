@@ -1353,8 +1353,68 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                     if (act === 'prompt') {                       // 设置 prompt
                         const modal = document.createElement('div');
                         modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
+
                         const box = document.createElement('div');
-                        box.style.cssText = 'background:#2b2521;padding:16px;border-radius:6px;max-width:400px;width:80%';
+                        // ① 增加 position:relative 便于在盒子内绝对定位按钮
+                        box.style.cssText = 'background:#2b2521;padding:16px;border-radius:6px;max-width:400px;width:80%;position:relative';
+
+                        /* ② 新增圆形问号帮助按钮 */
+                        const helpBtn = document.createElement('button');
+                        helpBtn.textContent = '?';
+                        helpBtn.style.cssText = [
+                            'width:24px','height:24px','border-radius:50%',
+                            'border:none','background:#444','color:#e7d8c5',
+                            'font-weight:bold','cursor:pointer','line-height:24px',
+                            'margin-left:6px'            // 与输入框保持 6 px 间距
+                        ].join(';');
+
+                        /* ③ 点击帮助按钮弹出操作说明 */
+                        helpBtn.onclick = () => {
+                            if (document.getElementById('cgpt-help-box')) return;        // 单实例
+                            const overlay = document.createElement('div');
+                            overlay.id = 'cgpt-help-box';
+                            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:2147483649';
+
+                            const info = document.createElement('div');
+                            info.style.cssText = 'background:#2b2521;color:#e7d8c5;padding:16px;border-radius:6px;max-width:320px;width:80%';
+
+                            /* 标题 */
+                            const title = document.createElement('p');
+                            title.textContent = 'Instruction';
+                            title.style.cssText = 'font-weight:700;margin-bottom:8px';
+                            info.appendChild(title);
+
+                            /* 只读文本框，放置全部说明文字 */
+                            const txt = [
+                                '1. The prompt setting interface allows you to add up to three prompts for each group, each of which can be entered or deleted;\n' +
+                                '2. Click "+" to add a new prompt, and "-" to delete an existing prompt;\n' +
+                                '3. Click the preset label at the bottom (such as: NO_GUESS, change_code) to insert the corresponding content into the cursor position of the currently selected input box;\n' +
+                                '4. The "how often does this happen?" input box is used to set the number of rounds between prompts. Fill in an integer, and the default value of 0 will be inserted every round;\n' +
+                                '5. Click "ok" to save all changes, and click "cancel" to cancel;'
+                            ].join('\\n');
+
+                            const ta = document.createElement('textarea');
+                            ta.value = txt;
+                            ta.readOnly = true;
+                            ta.style.cssText = [
+                                'width:100%','height:300px',
+                                'background:#1e1815','color:#e7d8c5',
+                                'border:none','padding:8px',
+                                'border-radius:6px','resize:none',
+                                'line-height:1.4'
+                            ].join(';');
+                            info.appendChild(ta);
+
+                            /* 关闭按钮 */
+                            const close = document.createElement('button');
+                            close.textContent = 'close';
+                            close.style.cssText = 'margin-top:12px';
+                            close.onclick = () => overlay.remove();
+
+                            info.appendChild(close);
+                            overlay.appendChild(info);
+                            document.body.appendChild(overlay);
+                        };
 
                         const promptWrap = document.createElement('div');
                         promptWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';
@@ -1432,9 +1492,10 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                             min: 0,
                             step: 1,
                             value: folders[fid].gap ?? 0,
-                            style: 'flex:0 0 80px;height:24px;border-radius:4px;border:1px solid #555;background:#1e1815;color:#e7d8c5;padding:0 6px'
+                            style: 'flex:0 0 ;width:155px; height:24px;border-radius:4px;border:1px solid #555;background:#1e1815;color:#e7d8c5;padding:0 6px'
                         });
                         gapWrap.appendChild(gapInput);
+                        gapWrap.appendChild(helpBtn);
 
                         box.append(promptWrap, addBtn, hintBar, gapWrap, wrap);
                         modal.appendChild(box);
