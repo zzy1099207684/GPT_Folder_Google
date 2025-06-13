@@ -232,8 +232,12 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 '}}']
         },
         {
-            label: 'NORMAL_2',
+            label: 'NORMAL_1',
             text: '{{Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed; Match Claude\'s answering style.}}'
+        },
+        {
+            label: 'NORMAL_2',
+            text: '{{Use this rule: Pay attention to formatting and avoid drift; Never flatter,Stay truthful and neutral;}}'
         },
         {
             label: 'NORMAL_3',
