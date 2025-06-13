@@ -207,7 +207,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         {
             label: 'NORMAL',
             text: [
-                '{{Absolutely no horizontal lines(---,——,—,***) of any kind are allowed in the content; Emulate Claude\'s reasoning approach and communication style.}}',
+                '{{Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;}}',
                 ]
         },
         {
@@ -232,15 +232,12 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 '}}']
         },
         {
-            label: 'CODE',
-            text: '{{' +
-                'Pay attention to the reply style. ' +
-                'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content and express the most information with the fewest words.' +
-                'For any question or code request, only address the specific requirement. ' +
-                'Do not change unrelated code or features. ' +
-                'After changes, ensure the requirement is met, the program functions correctly, and other features remain unaffected. ' +
-                'Show both original and modified code for comparison. '+
-                '}}'
+            label: 'NORMAL_2',
+            text: '{{Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed; Match Claude\'s answering style.}}'
+        },
+        {
+            label: 'NORMAL_3',
+            text: '{{Answer with this rule: No pandering, Remain objective and honest; Mimic Claude\'s response style as closely as possible;Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;}}'
         },
     ];         // 自行增删
     // 修改后的存储逻辑
@@ -529,8 +526,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             const exist = document.getElementById('cgpt-select-header');
             if (exist) {
                 const parent = root.parentElement;
-                if (exist.parentElement !== parent || exist.nextSibling !== root) {
-                    parent.insertBefore(exist, root);      // 确保永远位于 history 前
+                if (exist.parentElement !== parent || exist.previousSibling !== root) {
+                    parent.insertBefore(exist, root.nextSibling);   // 始终位于 history 之后
                 }
                 return;                                    // 已处理完直接退出
             }
