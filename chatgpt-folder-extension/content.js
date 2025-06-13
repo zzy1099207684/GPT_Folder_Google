@@ -2299,7 +2299,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
-        };
+        }
 
 
         highlightActive();                              // 初始渲染立即同步
