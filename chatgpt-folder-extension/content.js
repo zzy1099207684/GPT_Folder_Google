@@ -208,28 +208,21 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             label: 'NORMAL',
             text: [
                 '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
-                ]
+                '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
+                '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
+            ]
         },
         {
             label: 'NO_GUESS',
             text: ['※' +
-                'Pay attention to the reply style. Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
+                'Follow this rule:Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
                 'Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. ' +
                 'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.'+
                 '※']
         },
         {
             label: 'change_code',
-            text: ['※' +
-                'Strictly adhere to the following requirements:\n' +
-                'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
-                'After the modification, you must first test it yourself and ensure the following two points are met:\n' +
-                '1. The requirement is fulfilled, and the front-end and back-end functions run smoothly.\n' +
-                '2. No other functional code has been mistakenly modified.\n' +
-                '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
-                'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
-                'Pay attention to the reply style and express the most information with the fewest words. Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.'+
-                '※']
+            text: ['※Follow this rule:Strictly adhere to the following requirements: Only modify code directly related to the specific question or requirement raised, leaving all other unrelated code and functionality unchanged; after modification, you must test the implementation yourself to ensure three critical points are met - first, the requirement is fully satisfied, second, both frontend and backend functions operate smoothly, and third, code performance remains stable without affecting anything outside the intended scope; provide both the original source code and the modified version for easy comparison and manual implementation; absolutely no horizontal dividers of any kind (---, ——, —, ———, ***) are permitted in the response content.※']
         },
         {
             label: 'NORMAL_1',
@@ -237,7 +230,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         },
         {
             label: 'NORMAL_2',
-            text: '※Use this rule: Pay attention to formatting and avoid drift; Never flatter,Stay truthful and neutral;※'
+            text: '※Pay attention to formatting and avoid drift;※'
         },
         {
             label: 'NORMAL_3',
@@ -826,7 +819,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         name: hints[i].label,
                         chats: [],
                         collapsed: true,
-                        prompts: [hints[i].text]
+                        prompts: Array.isArray(hints[i].text) ? hints[i].text : [hints[i].text]
                     };
                     storedOrder.push(id);
                 }
@@ -1405,7 +1398,9 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                         // ① 预设提示词
                         const hintBar = document.createElement('div');
                         hintBar.style.cssText = 'margin-top:6px;display:flex;gap:6px;flex-wrap:wrap';
-                        hints.forEach(h => {
+                        hints
+                            .filter(h => h.label !== 'NORMAL')          // 仅当前分组的提示词
+                            .forEach(h => {
                             const btn = document.createElement('span');
                             btn.textContent = h.label;
                             btn.style.cssText = 'cursor:pointer;padding:2px 4px;border:1px solid #555;border-radius:12px;font-size:12px;position:relative;top:-2px';
