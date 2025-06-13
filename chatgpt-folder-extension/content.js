@@ -207,20 +207,20 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
         {
             label: 'NORMAL',
             text: [
-                '{{Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;}}',
+                '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
                 ]
         },
         {
             label: 'NO_GUESS',
-            text: ['{{' +
+            text: ['※' +
                 'Pay attention to the reply style. Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
                 'Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. ' +
                 'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.'+
-                '}}']
+                '※']
         },
         {
             label: 'change_code',
-            text: ['{{' +
+            text: ['※' +
                 'Strictly adhere to the following requirements:\n' +
                 'Except for the code that needs modification due to the raised question or requirement, do not modify any other unrelated code or functionality.\n' +
                 'After the modification, you must first test it yourself and ensure the following two points are met:\n' +
@@ -229,19 +229,19 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                 '3. Ensure the code performance is stable and does not affect anything outside the intended scope.\n' +
                 'Provide me with the source code of the part to be changed and the modified code, so I can compare and paste them myself.\n' +
                 'Pay attention to the reply style and express the most information with the fewest words. Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.'+
-                '}}']
+                '※']
         },
         {
             label: 'NORMAL_1',
-            text: '{{Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed; Match Claude\'s answering style.}}'
+            text: '※Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed; Match Claude\'s answering style.※'
         },
         {
             label: 'NORMAL_2',
-            text: '{{Use this rule: Pay attention to formatting and avoid drift; Never flatter,Stay truthful and neutral;}}'
+            text: '※Use this rule: Pay attention to formatting and avoid drift; Never flatter,Stay truthful and neutral;※'
         },
         {
             label: 'NORMAL_3',
-            text: '{{Answer with this rule: No pandering, Remain objective and honest; Mimic Claude\'s response style as closely as possible;Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;}}'
+            text: '※Answer with this rule: No pandering, Remain objective and honest; Mimic Claude\'s response style as closely as possible;Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※'
         },
     ];         // 自行增删
     // 修改后的存储逻辑
@@ -412,7 +412,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
     if (!document.getElementById(TIP_ID)) {                                                   // 若未注入则注入
         const s = document.createElement('style');             // 创建 style
         s.id = TIP_ID;                                                                        // 赋 id
-        s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
+        s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1※`;
         document.head.appendChild(s);                                                         // 注入
     }
     const tip = (el, txt) => {
@@ -1449,8 +1449,8 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
                             const ps = Array.from(promptWrap.querySelectorAll('textarea'))
                                 .map(t => {
                                     const v = t.value.trim();
-                                    // 若用户已手动加过 {{}} 则保持不变，否则自动包一层
-                                    return (v.startsWith('{{') && v.endsWith('}}')) ? v : `{{${v}}}`;
+                                    // 若用户已手动加过 ※※ 则保持不变，否则自动包一层
+                                    return (v.startsWith('※') && v.endsWith('※')) ? v : `※${v}※`;
                                 })
                                 .filter(Boolean)
                                 .slice(0, 3);
@@ -2638,10 +2638,10 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
 
     window.initBookmarks = initBookmarks;
 
-    /* ===== 把 {{…}} 提示语转为 <code> 显示，发送内容保持原样 ===== */
+    /* ===== 把 ※…※ 提示语转为 <code> 显示，发送内容保持原样 ===== */
     (function promptCodeWrap () {
         const SEL = '[data-message-author-role="user"] .whitespace-pre-wrap';
-        const REG = /\{\{[\s\S]*?\}\}/;
+        const REG = /※[\s\S]*?※/;
 
         function wrap(el) {
             if (!el || el.dataset.promptWrapped) return;
@@ -2649,7 +2649,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             const hit = raw.match(REG);
             if (!hit) return;
 
-            const prompt = hit[0];                    // 含 {{ }}
+            const prompt = hit[0];                    // 含 ※ ※
             const rest   = raw.replace(prompt, '');
 
             // 重建节点
@@ -2657,7 +2657,7 @@ const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] 
             const pre  = document.createElement('pre');
             pre.className = 'overflow-x-auto';
             const code = document.createElement('code');
-            code.textContent = prompt.slice(2, -2)
+            code.textContent = prompt.slice(1, -1)
             pre.appendChild(code);
             el.appendChild(pre);
             if (rest) el.appendChild(document.createTextNode(rest));
