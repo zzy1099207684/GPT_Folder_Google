@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Folder",
-  "version": "1.0",
-  "description": "Add collapsible favorites to ChatGPT's left side",
+  "name": "ChatGPT Folder,Font,Prompt,Pin",
+  "version": "1.6",
+  "description": "a simple and great tool",
   "icons": {
     "128": "icon128.png"
   },
@@ -15,7 +15,7 @@
   "content_scripts": [
     {
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
-      "js": ["content.js"],
+      "js": ["content.js", "batch_delete.js"],
       "css": ["style.css"]
     }
   ]
