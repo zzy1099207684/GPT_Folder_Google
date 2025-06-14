@@ -252,10 +252,30 @@ const MAX_PROMPTS = 4;
         _isRecovering: false,
         _maxPendingSize: 50, // 最大未处理条目数量
 
+        /* ==== 修改后片段：storage.get ==== */
         async get(key) {
             try {
-                if (!chrome?.runtime?.id) return null;          // 新增：上下文失效时短路
-                const obj = await chrome.storage.sync.get(key); // 继续正常读取
+                if (!chrome?.runtime?.id) return null;
+
+                // 新增：分片重组逻辑
+                if (key === 'folders') {
+                    const { folderKeys = [] } = await chrome.storage.sync.get('folderKeys');
+
+                    // 如果存在分片格式
+                    if (folderKeys.length) {
+                        const chunkKeys = folderKeys.map(id => 'f_' + id);
+                        const chunks = await chrome.storage.sync.get(chunkKeys);
+                        const folders = {};
+                        folderKeys.forEach(id => folders[id] = chunks['f_' + id] || {});
+                        return folders;
+                    }
+
+                    // 向后兼容：老格式仍全量存储时直接返回
+                    const legacy = await chrome.storage.sync.get('folders');
+                    return legacy.folders || {};
+                }
+
+                const obj = await chrome.storage.sync.get(key);
                 return obj[key];
             } catch (e) {
                 console.warn('[Bookmark] storage.get error', e);
@@ -267,9 +287,22 @@ const MAX_PROMPTS = 4;
         async set(obj) {
             try {
                 if (!chrome?.runtime?.id) {
-                    // console.warn('[Bookmark] storage.set skipped: invalid context');
                     this._clearPendingWrites();
                     return;
+                }
+
+                /* 新增：将大对象 folders 拆分存储 */
+                if (obj.folders) {
+                    const folders = obj.folders;
+                    const folderKeys = Object.keys(folders);
+                    const chunked = { folderKeys };           // 记录索引
+
+                    folderKeys.forEach(id => {
+                        chunked['f_' + id] = folders[id];     // 每组单独一项
+                    });
+
+                    delete obj.folders;                       // 避免再次超限
+                    Object.assign(obj, chunked);
                 }
 
                 // 检查未处理队列大小，避免过度积累
