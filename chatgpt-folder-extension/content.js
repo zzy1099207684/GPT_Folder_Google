@@ -1906,7 +1906,7 @@ const MAX_PROMPTS = 4;
                     .some(a => samePath(a.href, chat.url));
 
                 if (!stillExists) {
-                    tip(link, 'The conversation has been hidden because it is too old, Please refresh your history to check');
+                    tip(link, 'The conversation has been hidden due to age, Please scrolling down to refresh your history');
                     return;
                 }
 
