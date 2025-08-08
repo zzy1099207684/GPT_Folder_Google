@@ -295,7 +295,13 @@ const MAX_PROMPTS = 4;
                                     const part = partsObj[`f_${id}__p${i}`];
                                     if (part && Array.isArray(part.chats)) chats.push(...part.chats);
                                 }
-                                folders[id] = { name: meta.name, collapsed: !!meta.collapsed, prompts: meta.prompts || [], chats };
+                                folders[id] = {
+                                    name: meta.name,
+                                    collapsed: !!meta.collapsed,
+                                    prompts: meta.prompts || [],
+                                    gap: Number.isFinite(meta.gap) ? meta.gap : 0,
+                                    chats
+                                };
                             } else {
                                 // 旧的单块
                                 const single = await chrome.storage.sync.get('f_' + id);
@@ -335,8 +341,8 @@ const MAX_PROMPTS = 4;
                     function sizeOf(v){ return JSON.stringify(v).length; }
 
                     function packOne(id, data){
-                        const { name = 'Group', collapsed = false, prompts = [], chats = [] } = data || {};
-                        const base = { name, collapsed, prompts };
+                        const { name = 'Group', collapsed = false, prompts = [], chats = [], gap=0 } = data || {};
+                        const base = { name, collapsed, prompts,gap };
                         const baseCost = sizeOf({ ...base, chats: [] });
                         let buf = [];
                         let used = baseCost;
@@ -443,7 +449,8 @@ const MAX_PROMPTS = 4;
                             name: folder.name || 'Group',
                             chats: limitedChats,
                             collapsed: folder.collapsed || false,
-                            prompts: (folder.prompts || []).slice(0, MAX_PROMPTS).map(p => p.slice(0, 100))
+                            prompts: (folder.prompts || []).slice(0, MAX_PROMPTS).map(p => p.slice(0, 100)),
+                            gap: Number.isFinite(folder.gap) ? folder.gap : 0
                         };
                     });
 
@@ -1611,17 +1618,16 @@ const MAX_PROMPTS = 4;
                             const ps = Array.from(promptWrap.querySelectorAll('textarea'))
                                 .map(t => {
                                     const v = t.value.trim();
-                                    // 若用户已手动加过 ※※ 则保持不变，否则自动包一层
                                     return (v.startsWith('※') && v.endsWith('※')) ? v : `※${v}※`;
                                 })
                                 .filter(Boolean)
                                 .slice(0, MAX_PROMPTS);
                             folders[fid].prompts = ps;
                             folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0);
+                            if (chrome?.runtime?.id) storage.set({ folders });  // 先持久化
                             safeSendMessage({type: 'save-folders', data: folders});
                             render();
-                            document.body.removeChild(modal);
-                            location.reload();
+                            document.body.removeChild(modal);                   // 移除刷新
                         };
 
                         cancel.onclick = () => document.body.removeChild(modal);
