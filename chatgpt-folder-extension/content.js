@@ -10,6 +10,18 @@ const MAX_PROMPTS = 4;
         return id
     }
 
+    function safeSendMessage(msg) {
+        try {
+            if (chrome?.runtime?.id && typeof chrome.runtime.sendMessage === 'function') {
+                chrome.runtime.sendMessage(msg, () => {
+                    void chrome.runtime.lastError;
+                });
+            }
+        } catch (_) {
+        }
+    }
+
+
     // 单实例哨兵：若已存在则直接退出，防止重复执行
     if (window.__cgptBookmarksInstance) {
         console.warn('[Bookmark] Duplicate instance detected, aborting.');
@@ -46,7 +58,7 @@ const MAX_PROMPTS = 4;
                 if (chrome?.runtime?.id) {
                     // 同步写入 storage.sync，保证 collapsed 状态持久化
                     await storage.set({folders});
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    safeSendMessage({type: 'save-folders', data: folders});
                 }
             } catch (e) {
                 console.warn('[Bookmark] Debounced save error:', e);
@@ -217,10 +229,10 @@ const MAX_PROMPTS = 4;
         {
             label: 'NO_GUESS',
             text: ['※' +
-                'Follow this rule:Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
-                'Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. ' +
-                'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.'+
-                '※']
+            'Follow this rule:Only provide information that is explicitly and verifiably present in the provided content, regardless of its type. ' +
+            'Any form of speculation, inference, assumption, extrapolation, analogy, or reasoning beyond the given facts is strictly and absolutely forbidden. ' +
+            'Absolutely no horizontal lines(---,——,—,———,***) of any kind are allowed in the content.' +
+            '※']
         },
         {
             label: 'change_code',
@@ -258,22 +270,44 @@ const MAX_PROMPTS = 4;
                 if (!chrome?.runtime?.id) return null;
 
                 // 新增：分片重组逻辑
+                // 兼容新老格式：优先按 meta.parts 聚合，否则退回 f_<id> 单块或 legacy
                 if (key === 'folders') {
                     const { folderKeys = [] } = await chrome.storage.sync.get('folderKeys');
-
-                    // 如果存在分片格式
+                    const folders = {};
                     if (folderKeys.length) {
-                        const chunkKeys = folderKeys.map(id => 'f_' + id);
-                        const chunks = await chrome.storage.sync.get(chunkKeys);
-                        const folders = {};
-                        folderKeys.forEach(id => folders[id] = chunks['f_' + id] || {});
+                        const metaKeys = folderKeys.map(id => `f_${id}__meta`);
+                        const metas = await chrome.storage.sync.get(metaKeys);
+                        // 先找出所有需要的分片键
+                        const allPartKeys = [];
+                        folderKeys.forEach(id => {
+                            const meta = metas[`f_${id}__meta`];
+                            if (meta && Number.isInteger(meta.parts) && meta.parts > 0) {
+                                for (let i = 0; i < meta.parts; i++) allPartKeys.push(`f_${id}__p${i}`);
+                            }
+                        });
+                        const partsObj = allPartKeys.length ? await chrome.storage.sync.get(allPartKeys) : {};
+                        // 聚合
+                        for (const id of folderKeys) {
+                            const meta = metas[`f_${id}__meta`];
+                            if (meta && Number.isInteger(meta.parts) && meta.parts > 0) {
+                                const chats = [];
+                                for (let i = 0; i < meta.parts; i++) {
+                                    const part = partsObj[`f_${id}__p${i}`];
+                                    if (part && Array.isArray(part.chats)) chats.push(...part.chats);
+                                }
+                                folders[id] = { name: meta.name, collapsed: !!meta.collapsed, prompts: meta.prompts || [], chats };
+                            } else {
+                                // 旧的单块
+                                const single = await chrome.storage.sync.get('f_' + id);
+                                folders[id] = single['f_' + id] || {};
+                            }
+                        }
                         return folders;
                     }
-
-                    // 向后兼容：老格式仍全量存储时直接返回
                     const legacy = await chrome.storage.sync.get('folders');
                     return legacy.folders || {};
                 }
+
 
                 const obj = await chrome.storage.sync.get(key);
                 return obj[key];
@@ -295,15 +329,45 @@ const MAX_PROMPTS = 4;
                 if (obj.folders) {
                     const folders = obj.folders;
                     const folderKeys = Object.keys(folders);
-                    const chunked = { folderKeys };           // 记录索引
+                    const out = { folderKeys };
+                    const MAX_BYTES = 6 * 1024; // 留安全余量，低于 8KB
 
-                    folderKeys.forEach(id => {
-                        chunked['f_' + id] = folders[id];     // 每组单独一项
-                    });
+                    function sizeOf(v){ return JSON.stringify(v).length; }
 
-                    delete obj.folders;                       // 避免再次超限
-                    Object.assign(obj, chunked);
+                    function packOne(id, data){
+                        const { name = 'Group', collapsed = false, prompts = [], chats = [] } = data || {};
+                        const base = { name, collapsed, prompts };
+                        const baseCost = sizeOf({ ...base, chats: [] });
+                        let buf = [];
+                        let used = baseCost;
+                        let parts = 0;
+
+                        const flush = () => {
+                            if (!buf.length) return;
+                            out[`f_${id}__p${parts}`] = { chats: buf };
+                            parts += 1;
+                            buf = [];
+                            used = baseCost;
+                        };
+
+                        for (const c of chats) {
+                            const inc = sizeOf(c) + 2; // 粗略计入逗号等开销
+                            if (used + inc > MAX_BYTES && buf.length) flush();
+                            buf.push(c);
+                            used += inc;
+                        }
+                        flush();
+
+                        out[`f_${id}__meta`] = { ...base, parts };
+                        // 兼容清理旧单块键
+                        out[`f_${id}`] = undefined;
+                    }
+
+                    folderKeys.forEach(id => packOne(id, folders[id]));
+                    delete obj.folders;
+                    Object.assign(obj, out);
                 }
+
 
                 // 检查未处理队列大小，避免过度积累
                 if (Object.keys(this._pendingWrites).length > this._maxPendingSize) {
@@ -337,7 +401,11 @@ const MAX_PROMPTS = 4;
                         if (e?.message?.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {      // 新增：写入过频
                             console.warn('[Bookmark] Too many writes, backing off:', e);
                             this._retryWrite(Math.max(delay * 2, 60000));                   // 至少等待 60 s
-                        } else if (e?.message?.includes('QUOTA_BYTES_PER_ITEM') || e?.message?.includes('QUOTA_BYTES')) {
+                        } else if (
+                            (e && typeof e.message === 'string' &&
+                                /QUOTA_BYTES_PER_ITEM|QUOTA_BYTES|kQuotaBytesPerItem|quota exceeded/i.test(e.message)) ||
+                            e?.name === 'QuotaExceededError'
+                        ) {
                             console.warn('[Bookmark] Storage quota exceeded:', e);
                             this._handleQuotaError();
                         } else {
@@ -376,13 +444,13 @@ const MAX_PROMPTS = 4;
                             chats: limitedChats,
                             collapsed: folder.collapsed || false,
                             prompts: (folder.prompts || []).slice(0, MAX_PROMPTS).map(p => p.slice(0, 100))
-                    };
+                        };
                     });
 
                     // 尝试直接写入精简版数据
                     setTimeout(async () => {
                         try {
-                            await chrome.storage.sync.set({folders: minimalFolders});
+                            await storage.set({ folders: minimalFolders }); // 会自动拆分为 folderKeys + f_<id>
                             console.log('[Bookmark] Saved minimal version of folders');
                         } catch (err) {
                             console.error('[Bookmark] Failed to save minimal folders:', err);
@@ -668,7 +736,7 @@ const MAX_PROMPTS = 4;
                         const toggleAll = document.querySelector('#cgpt-select-header input[type="checkbox"]');
                         if (toggleAll) toggleAll.checked = false;
 
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                        safeSendMessage({type: 'save-folders', data: folders});
                         render();                     // 复用原有渲染逻辑
                         list.remove();
                     };
@@ -812,7 +880,7 @@ const MAX_PROMPTS = 4;
             const order = Object.keys(folders);           // 维持渲染顺序
             if (chrome?.runtime?.id) {
                 storage.set({folders, folderOrder: order});
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                safeSendMessage({type: 'save-folders', data: folders});
             }
             render();                                     // 刷新 UI
         });
@@ -873,7 +941,7 @@ const MAX_PROMPTS = 4;
             });
         }
         // 同步给后台脚本
-        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+        safeSendMessage({type: 'save-folders', data: folders});
 
 
         lastActiveMap = (await storage.get('lastActiveMap')) || {};
@@ -886,7 +954,7 @@ const MAX_PROMPTS = 4;
                 _migrated = true;
             }
         });
-        if (_migrated) chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+        if (_migrated) safeSendMessage({type: 'save-folders', data: folders});
 
 
         function detachLink(el) {
@@ -1110,7 +1178,7 @@ const MAX_PROMPTS = 4;
             });
 
             if (updated) {
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                safeSendMessage({type: 'save-folders', data: folders});
                 highlightActive();
             }
         };
@@ -1172,9 +1240,9 @@ const MAX_PROMPTS = 4;
                             }
                         }
                     }
-                    if (changed) {                                   // 删除会话后分组已刷新
-                        chrome.runtime.sendMessage({type: 'save-folders', data: folders});
-                        highlightActive();                           // 立刻重新计算高亮状态
+                    if (changed) {
+                        safeSendMessage({type: 'save-folders', data: folders});
+                        highlightActive();
                     }
                     prevHistoryPaths = currentPaths;
                 } catch (err) {
@@ -1269,6 +1337,7 @@ const MAX_PROMPTS = 4;
                 } else {
                     highlightActive();
                     if (Math.random() < 0.2) enqueueIdleTask(cleanupLiveSyncMap);
+                    enqueueIdleTask(() => syncTitles());   // 新增：渲染完立即同步一次标题
                 }
             };
             enqueueIdleTask(chunk);
@@ -1370,7 +1439,7 @@ const MAX_PROMPTS = 4;
                         const n = prompt('rename group', folders[fid].name);
                         if (n && n.trim()) {
                             folders[fid].name = n.trim().slice(0, 20) + (n.trim().length > 20 ? '…' : '');
-                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            safeSendMessage({type: 'save-folders', data: folders});
                             render();
                         }
                         close();
@@ -1379,7 +1448,7 @@ const MAX_PROMPTS = 4;
                     if (act === 'delete') {                       // 删除
                         if (confirm('sure delete this group?')) {
                             delete folders[fid];
-                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            safeSendMessage({type: 'save-folders', data: folders});
                             render();
                         }
                         close();
@@ -1397,9 +1466,9 @@ const MAX_PROMPTS = 4;
                         const helpBtn = document.createElement('button');
                         helpBtn.textContent = '?';
                         helpBtn.style.cssText = [
-                            'width:24px','height:24px','border-radius:50%',
-                            'border:none','background:#444','color:#e7d8c5',
-                            'font-weight:bold','cursor:pointer','line-height:24px',
+                            'width:24px', 'height:24px', 'border-radius:50%',
+                            'border:none', 'background:#444', 'color:#e7d8c5',
+                            'font-weight:bold', 'cursor:pointer', 'line-height:24px',
                             'margin-left:6px'            // 与输入框保持 6 px 间距
                         ].join(';');
 
@@ -1432,10 +1501,10 @@ const MAX_PROMPTS = 4;
                             ta.value = txt;
                             ta.readOnly = true;
                             ta.style.cssText = [
-                                'width:100%','height:300px',
-                                'background:#1e1815','color:#e7d8c5',
-                                'border:none','padding:8px',
-                                'border-radius:6px','resize:none',
+                                'width:100%', 'height:300px',
+                                'background:#1e1815', 'color:#e7d8c5',
+                                'border:none', 'padding:8px',
+                                'border-radius:6px', 'resize:none',
                                 'line-height:1.4'
                             ].join(';');
                             info.appendChild(ta);
@@ -1463,7 +1532,9 @@ const MAX_PROMPTS = 4;
                             const t = document.createElement('textarea');
                             t.value = val;
                             t.style.cssText = 'flex:1;height:80px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:6px;resize:vertical';
-                            t.onfocus = () => { activeTa = t; };
+                            t.onfocus = () => {
+                                activeTa = t;
+                            };
 
                             // 删除按钮
                             const del = document.createElement('button');
@@ -1496,18 +1567,18 @@ const MAX_PROMPTS = 4;
                         hints
                             .filter(h => h.label !== 'NORMAL')          // 仅当前分组的提示词
                             .forEach(h => {
-                            const btn = document.createElement('span');
-                            btn.textContent = h.label;
-                            btn.style.cssText = 'cursor:pointer;padding:2px 4px;border:1px solid #555;border-radius:12px;font-size:12px;position:relative;top:-2px';
-                            btn.onclick = () => {
-                                if (!activeTa) return;
-                                activeTa.focus();
-                                const {selectionStart: s, selectionEnd: e} = activeTa;
-                                activeTa.setRangeText(h.text, s, e, 'end');
-                                activeTa.dispatchEvent(new Event('input', {bubbles: true}));
-                            };
-                            hintBar.appendChild(btn);
-                        });
+                                const btn = document.createElement('span');
+                                btn.textContent = h.label;
+                                btn.style.cssText = 'cursor:pointer;padding:2px 4px;border:1px solid #555;border-radius:12px;font-size:12px;position:relative;top:-2px';
+                                btn.onclick = () => {
+                                    if (!activeTa) return;
+                                    activeTa.focus();
+                                    const {selectionStart: s, selectionEnd: e} = activeTa;
+                                    activeTa.setRangeText(h.text, s, e, 'end');
+                                    activeTa.dispatchEvent(new Event('input', {bubbles: true}));
+                                };
+                                hintBar.appendChild(btn);
+                            });
 
                         const ok = document.createElement('button');
                         ok.textContent = 'ok';
@@ -1547,7 +1618,7 @@ const MAX_PROMPTS = 4;
                                 .slice(0, MAX_PROMPTS);
                             folders[fid].prompts = ps;
                             folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0);
-                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            safeSendMessage({type: 'save-folders', data: folders});
                             render();
                             document.body.removeChild(modal);
                             location.reload();
@@ -1569,7 +1640,7 @@ const MAX_PROMPTS = 4;
                             const insertAt = chat.pinned ? 0 : (firstUnPinned === -1 ? f.chats.length : firstUnPinned);
                             f.chats.splice(insertAt, 0, chat);
 
-                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            safeSendMessage({type: 'save-folders', data: folders});
                             render();
                             highlightActive();
                         }
@@ -1732,7 +1803,7 @@ const MAX_PROMPTS = 4;
                             } else {
                                 folder.chats.unshift({url: newChatUrl, title});
                             }
-                            chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                            safeSendMessage({type: 'save-folders', data: folders});
                             render();               // 重新渲染以建立 liveSyncMap
                         }
 
@@ -1819,7 +1890,7 @@ const MAX_PROMPTS = 4;
                 if (!url || f.chats.some(c => samePath(c.url, url))) return;
                 const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || 'chat';
                 f.chats.unshift({url, title: t}); // 插入到数组开头
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                safeSendMessage({type: 'save-folders', data: folders});
                 const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
                 const fidList = Object.keys(folders);
                 const idx = fidList.indexOf(fid);
@@ -1951,7 +2022,7 @@ const MAX_PROMPTS = 4;
                     } catch {
                     }
 
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    safeSendMessage({type: 'save-folders', data: folders});
                     detachLink(link);
                     li.remove();
                     highlightActive();
@@ -2079,7 +2150,8 @@ const MAX_PROMPTS = 4;
                 indices[counterKey] = (idx + 1) % promptList.length;
                 try {
                     sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices));
-                } catch {}
+                } catch {
+                }
             }
 
             if (injectNow && groupPrompt) {
@@ -2215,7 +2287,7 @@ const MAX_PROMPTS = 4;
                     return;                             // 避免意外写入其他分组
                 }
 
-                chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                safeSendMessage({type: 'save-folders', data: folders});
 
                 if (needRender) render();               // 根据标志决定是否重绘
                 highlightActive();                      // 始终保持高亮状态
@@ -2245,13 +2317,16 @@ const MAX_PROMPTS = 4;
                     // 直接生成结构，避免克隆失效
                     const a = document.createElement('a');
                     a.href = target;
-                    a.dataset.url = target;
+                    a.dataset.url = target;          // 占位标记，后续用来识别并移除
                     a.textContent = 'New chat';
                     a.style.cssText =
                         'display:block;padding:6px 12px;font-size:13px;line-height:1.25;' +
                         'border-radius:6px;color:#b2b2b2;text-decoration:none;';
 
                     const li = document.createElement('li');
+                    li.style.display = 'none';
+                    li.dataset.cgptPlaceholder = '1';
+
                     li.appendChild(a);
                     hist.insertBefore(li, hist.firstChild);
                 };
@@ -2405,7 +2480,7 @@ const MAX_PROMPTS = 4;
                         } catch {
                         }
                     }
-                    chrome.runtime.sendMessage({type: 'save-folders', data: folders});
+                    safeSendMessage({type: 'save-folders', data: folders});
                 }
                 removeChatDom(delPath);
                 highlightActive();
@@ -2552,10 +2627,15 @@ const MAX_PROMPTS = 4;
 
                 console.log(`[Bookmark] Memory check: mapSize=${mapSize}, observers=${observerCount}, invalidRefs=${invalidRefs}/${totalRefs} (${(invalidRatio * 100).toFixed(1)}%)`);
 
+                let __domMismatchStreak = 0;
+                const domMismatch = (wrapperExists && !historyExists) || (!wrapperExists && historyExists);
+                __domMismatchStreak = domMismatch ? (__domMismatchStreak + 1) : 0;
+                const hasAnyNonZero = (mapSize > 0) || (observerCount > 0) || (invalidRefs > 0);
+
                 // 如果有明显异常 (地图过大或DOM不一致或太多无效引用)
-                if (mapSize > 1000 || (significantLeak && invalidRatio > 0.3) ||
-                    (wrapperExists && !historyExists) ||
-                    (!wrapperExists && historyExists)) {
+                if (mapSize > 1000 ||
+                    (significantLeak && invalidRatio > 0.3) ||
+                    (__domMismatchStreak >= 3 && hasAnyNonZero)) {
                     console.warn(`[Bookmark] Memory check failed: mapSize=${mapSize}, observers=${observerCount}, invalidRatio=${invalidRatio.toFixed(2)}`);
 
                     // 尝试清理
@@ -2572,7 +2652,9 @@ const MAX_PROMPTS = 4;
                     }
 
                     // 如果仍有问题，重新初始化
-                    if (mapSize > 2000 || invalidRatio > 0.5 || ((wrapperExists && !historyExists) && document.readyState === 'complete')) {
+                    if (mapSize > 2000 ||
+                        invalidRatio > 0.5 ||
+                        (__domMismatchStreak >= 6 && document.readyState === 'complete')) {
                         console.warn('[Bookmark] Performing emergency reset');
 
                         // 添加应急日志
@@ -2731,7 +2813,7 @@ const MAX_PROMPTS = 4;
     window.initBookmarks = initBookmarks;
 
     /* ===== 把 ※…※ 提示语转为 <code> 显示，发送内容保持原样 ===== */
-    (function promptCodeWrap () {
+    (function promptCodeWrap() {
         const SEL = '[data-message-author-role="user"] .whitespace-pre-wrap';
         const REG = /※[\s\S]*?※/;
 
@@ -2742,11 +2824,11 @@ const MAX_PROMPTS = 4;
             if (!hit) return;
 
             const prompt = hit[0];                    // 含 ※ ※
-            const rest   = raw.replace(prompt, '');
+            const rest = raw.replace(prompt, '');
 
             // 重建节点
             el.innerHTML = '';
-            const pre  = document.createElement('pre');
+            const pre = document.createElement('pre');
             pre.className = 'overflow-x-auto';
             const code = document.createElement('code');
             code.textContent = prompt.slice(1, -1)
