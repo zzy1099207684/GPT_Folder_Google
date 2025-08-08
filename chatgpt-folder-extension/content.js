@@ -878,10 +878,11 @@ const MAX_PROMPTS = 4;
 
             const fid = 'grp_' + nanoid()
             folders[fid] = {
-                name: name.slice(0, 20) + (name.length > 20 ? '…' : ''),
+                name: name.slice(0, 20) + (name.length > 20) ? '…' : '',
                 chats: [],
                 collapsed: true,
-                prompts: []
+                prompts: [],
+                gap: 0
             };
 
             const order = Object.keys(folders);           // 维持渲染顺序
