@@ -973,8 +973,7 @@ const MAX_PROMPTS = 4;
         let _migrated = false; // 标记旧版本数据迁移逻辑
         Object.values(folders).forEach(f => {
             if (!('prompts' in f)) {
-                const p = typeof f.prompt === 'string' && f.prompt ? [f.prompt] : [];
-                f.prompts = p;
+                f.prompts = typeof f.prompt === 'string' && f.prompt ? [f.prompt] : [];
                 delete f.prompt;
                 _migrated = true;
             }
@@ -1244,7 +1243,6 @@ const MAX_PROMPTS = 4;
                     }
 
                     // 原有删除同步逻辑
-                    const activePaths = currentPaths;
                     let changed = false;
                     const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
 
@@ -1635,14 +1633,13 @@ const MAX_PROMPTS = 4;
                         document.body.appendChild(modal);
 
                         ok.onclick = () => {
-                            const ps = Array.from(promptWrap.querySelectorAll('textarea'))
+                            folders[fid].prompts = Array.from(promptWrap.querySelectorAll('textarea'))
                                 .map(t => {
                                     const v = t.value.trim();
                                     return (v.startsWith('※') && v.endsWith('※')) ? v : `※${v}※`;
                                 })
                                 .filter(Boolean)
                                 .slice(0, MAX_PROMPTS);
-                            folders[fid].prompts = ps;
                             folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0);
                             if (chrome?.runtime?.id) storage.set({ folders });  // 先持久化
                             safeSendMessage({type: 'save-folders', data: folders});
@@ -2490,7 +2487,7 @@ const MAX_PROMPTS = 4;
 
                 let changed = false;
                 // 遍历所有分组，剔除匹配 url 的会话
-                Object.entries(folders).forEach(([fid, f]) => {
+                Object.entries(folders).forEach(([, f]) => {
                     const idx = f.chats.findIndex(c => samePath(c.url, location.origin + delPath));
                     if (idx !== -1) {
                         f.chats.splice(idx, 1);
@@ -2538,7 +2535,6 @@ const MAX_PROMPTS = 4;
             }
 
             if (arr && arr.length) {
-                const isHistoryView = lastActiveMap[path] === '__history__';
                 arr.forEach(({el}) => {
                     // 点击 history 会话时，也要同步高亮组内同一会话
                     el.style.background = 'rgba(255,255,255,0.07)';
@@ -2579,7 +2575,7 @@ const MAX_PROMPTS = 4;
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
-        };
+        }
 
 
         highlightActive();                              // 初始渲染立即同步
