@@ -2515,18 +2515,19 @@ const MAX_PROMPTS = 4;
             }
 
 
-            // ① 发送按钮点击（修改）
+            // ① 发送按钮点击
             send.addEventListener('click', () => {
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
                 const hasUserInput = ed && ed.innerText.trim().length > 0;
-                if (hasUserInput) appendSuffix();       // 始终先写入尾缀
+                if (hasUserInput) appendSuffix();
                 bumpActiveChat();
                 scheduleHistoryRefresh();
                 ensureChatRegistered();
+                ensureFrostedBG();             // 新增：发送后确保磨砂背景存在
             }, {capture: true});
 
-            // ② 回车快捷发送（修改、去重监听）
+// ② 回车快捷发送
             if (!ed.dataset.keyhooked) {
                 ed.dataset.keyhooked = '1';
                 ed.addEventListener('keydown', e => {
@@ -2536,13 +2537,15 @@ const MAX_PROMPTS = 4;
                         const label = btn.getAttribute('aria-label') || btn.innerText;
                         if (label.toLowerCase().includes('stop')) return;
                         const hasUserInput = ed && ed.innerText.trim().length > 0;
-                        if (hasUserInput) appendSuffix();       // 始终先写入尾缀
+                        if (hasUserInput) appendSuffix();
                         bumpActiveChat();
                         scheduleHistoryRefresh();
                         ensureChatRegistered();
+                        ensureFrostedBG();     // 新增：回车发送后同样保证背景
                     }
                 }, {capture: true});
             }
+
 
         }
 
@@ -3000,3 +3003,90 @@ const MAX_PROMPTS = 4;
     }, interval);
 })();
 
+// 全局保留首页“磨砂背景”的兜底层
+function ensureFrostedBG() {
+    if (document.getElementById('cgpt-frosted-bg')) return;
+
+    const root = Object.assign(document.createElement('div'), { id: 'cgpt-frosted-bg' });
+    root.style.cssText = [
+        'position:fixed','inset:0','pointer-events:none',
+        'z-index:0','contain:paint','opacity:1'
+    ].join(';');
+
+    // 使用与ss页一致的背景素材 + 模糊，贴合原观感
+    const pic = document.createElement('picture');
+    const src = document.createElement('source');
+    src.type = 'image/webp';
+    src.srcset = [
+        'https://persistent.oaistatic.com/burrito-nux/640.webp 640w',
+        'https://persistent.oaistatic.com/burrito-nux/1280.webp 1280w',
+        'https://persistent.oaistatic.com/burrito-nux/1920.webp 1920w'
+    ].join(', ');
+    pic.appendChild(src);
+
+    const img = new Image();
+    img.alt = '';
+    img.loading = 'eager';
+    img.fetchpriority = 'high';
+    img.sizes = '100vw';
+    img.srcset = src.srcset;
+    img.style.cssText = [
+        'position:absolute','inset:0','width:100%','height:100%','object-fit:cover',
+        'transform:scale(1.02)','filter:blur(20px)','opacity:.3'
+    ].join(';');
+    pic.appendChild(img);
+
+    // 顶部到下方的渐变，暗色模式下更贴近ss页表达
+    const grad = document.createElement('div');
+    grad.style.cssText = [
+        'position:absolute','inset:0',
+        'background:linear-gradient(to bottom, rgba(0,0,0,0) 0%, var(--token-main-surface, #000) 100%)',
+        'opacity:.6'
+    ].join(';');
+
+    root.append(pic, grad);
+    document.body.prepend(root);
+}
+
+// 兜底：若节点被SPA切换移除，自动恢复
+(function keepFrostedBgAlive(){
+    const ob = new MutationObserver(() => {
+        if (!document.getElementById('cgpt-frosted-bg')) ensureFrostedBG();
+    });
+    ob.observe(document.body, {childList:true});
+    ensureFrostedBG();
+})();
+
+// 新增：顶栏磨砂，限定 header#page-header，避免误伤其它区域
+(function ensureFrostedHeader(){
+    const ID = 'cgpt-frosted-header-style';
+    if (document.getElementById(ID)) return;
+    const s = document.createElement('style');
+    s.id = ID;
+    s.textContent = [
+        'header#page-header{',
+        'background:rgba(0,0,0,.15)!important;',
+        '-webkit-backdrop-filter:blur(16px) saturate(120%);',
+        'backdrop-filter:blur(16px) saturate(120%);',
+        '}'
+    ].join('');
+    document.head.appendChild(s);
+})();
+
+// 侧边栏磨砂：先清空父层纯色，再给 nav 加模糊
+(function ensureFrostedSidebar(){
+    const ID = 'cgpt-frosted-sidebar-style';
+    if (document.getElementById(ID)) return;
+    const s = document.createElement('style');
+    s.id = ID;
+    s.textContent = [
+        '#stage-slideover-sidebar,#stage-slideover-sidebar .bg-token-bg-elevated-secondary,#stage-slideover-sidebar [class*="bg-token-bg-elevated-secondary"]{background:transparent!important;background-color:transparent!important;}',
+        '#stage-slideover-sidebar nav[aria-label="Chat history"] .sticky{background:rgba(0,0,0,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
+        'html.light #stage-slideover-sidebar nav[aria-label="Chat history"] .sticky{background:rgba(255,255,255,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
+
+        /* 新增：让顶部 aside 与 header 同款磨砂 */
+        '#stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, #stage-slideover-sidebar aside[class="bg-token-bg-elevated-secondary"]{background:rgba(0,0,0,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
+        'html.light #stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, html.light #stage-slideover-sidebar aside[class*="bg-token-bg-elevated-secondary"]{background:rgba(255,255,255,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}'
+        ].join('');
+    document.head.appendChild(s);
+})();
