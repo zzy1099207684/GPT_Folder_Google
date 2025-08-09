@@ -1971,7 +1971,7 @@ const MAX_PROMPTS = 4;
             link.href = chat.url || 'javascript:void 0';
             link.textContent = chat.title;
             link.dataset.url = chat.url || '';
-            link.style.cssText = 'flex:1;margin-right:4px;font-size:13px;color:#b2b2b2;text-decoration:none;border-radius:6px';
+            link.style.cssText = 'flex:1;min-width:0;margin-right:4px;font-size:13px;color:#b2b2b2;text-decoration:none;border-radius:6px;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.25';
             const active = chat.url && samePath(chat.url, location.href);
             if (active) {
                 link.style.background = 'rgba(255,255,255,.07)';
