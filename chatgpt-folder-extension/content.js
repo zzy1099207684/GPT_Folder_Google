@@ -1381,6 +1381,47 @@ const MAX_PROMPTS = 4;
 
         /* ---------- 文件夹渲染 ---------- */
         function renderFolder(fid, f) {
+            function renderChatsLocal() {
+                ul.replaceChildren();
+                if (f.collapsed) {
+                    ul.style.display = 'none';
+                    return;
+                }
+
+                const MAX_VISIBLE = 10;
+                const chatsForRender = [...f.chats].sort((a, b) =>
+                    (a.pinned === b.pinned) ? 0 : (a.pinned ? -1 : 1)
+                );
+                const showAll = !!f.__showAll;
+                const visibleList = showAll ? chatsForRender : chatsForRender.slice(0, MAX_VISIBLE);
+
+                let ci = 0;
+                const chatChunk = () => {
+                    const start = Date.now();
+                    while (ci < visibleList.length && Date.now() - start < CHUNK_BUDGET_MS) {
+                        renderChat(ul, fid, visibleList[ci++]);
+                    }
+                    if (ci < visibleList.length) enqueueIdleTask(chatChunk);
+                };
+                enqueueIdleTask(chatChunk);
+
+                if (chatsForRender.length > MAX_VISIBLE) {
+                    const toggleLi = document.createElement('li');
+                    toggleLi.textContent = showAll
+                        ? '▲ close all'
+                        : `▼ more (${chatsForRender.length - MAX_VISIBLE})`;
+                    toggleLi.style.cssText =
+                        'cursor:pointer;font-size:12px;color:#888;margin:2px 0;padding:2px 4px;text-align:center';
+                    toggleLi.onclick = e => {
+                        e.stopPropagation();
+                        f.__showAll = !showAll;
+                        renderChatsLocal();
+                    };
+                    ul.appendChild(toggleLi);
+                }
+
+                ul.style.display = '';
+            }
             // 新增一行：容错，保证后续所有地方都能安全访问 f.chats.length
             if (!Array.isArray(f?.chats)) f.chats = [];
             const box = document.createElement('div');
@@ -1903,10 +1944,17 @@ const MAX_PROMPTS = 4;
 
 
             header.onclick = () => {
-                f.collapsed = !f.collapsed;          // 更新本地状态
-                scheduleSaveFolders();               // 通过节流函数延迟写入
-                render();
-                highlightActive();
+                f.collapsed = !f.collapsed;
+                scheduleSaveFolders();
+                arrow.textContent = f.collapsed ? '∴' : '∵';
+
+                if (!f.collapsed && ul.childElementCount === 0) {
+                    renderChatsLocal();                     // 首次展开时懒渲染条目
+                } else {
+                    ul.style.display = f.collapsed ? 'none' : '';
+                }
+
+                if (typeof highlightActive === 'function') highlightActive();
             };
 
             // —— 修改后代码片段 ——
