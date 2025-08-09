@@ -592,9 +592,10 @@ const MAX_PROMPTS = 4;
 
         const selHeader = qs('#cgpt-select-header');
         if (hist && selHeader) {
-            const parent = hist.parentElement;
-            if (selHeader.parentElement !== parent || selHeader.nextSibling !== hist) {
-                try { parent.insertBefore(selHeader, hist); }
+            const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+            const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+            if (selHeader.parentElement !== chatsAside || selHeader.nextSibling !== chatsH2) {
+                try { chatsAside.insertBefore(selHeader, chatsH2); }
                 catch (e) { console.warn('[Bookmark] Failed to relocate select header:', e); }
             }
         }
@@ -644,11 +645,12 @@ const MAX_PROMPTS = 4;
         function insertMultiSelectHeader(root) {
             /* 若块已存在就搬到 div#history 之上，避免重复创建 */
             const exist = document.getElementById('cgpt-select-header');
+            const chatsAside = root.querySelector('aside[aria-labelledby]') || root;
+            const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
             if (exist) {
-                const parent = root.parentElement;
-                // 目标：始终位于 history 之前
-                if (exist.parentElement !== parent || exist.nextSibling !== root) {
-                    parent.insertBefore(exist, root);              // 固定到 Chat history 之前
+                // 目标：始终位于 Chats 标题正上方
+                if (exist.parentElement !== chatsAside || exist.nextSibling !== chatsH2) {
+                    chatsAside.insertBefore(exist, chatsH2);
                 }
                 return;
             }
@@ -656,7 +658,7 @@ const MAX_PROMPTS = 4;
             // 外层 aside（宽度缩减，与分组列表项对齐）
             const aside = document.createElement('aside');
             aside.id = 'cgpt-select-header';
-            aside.style.cssText = 'margin:4px 12px 0;width:calc(100% - 24px)';
+            aside.style.cssText = 'margin:0 12px 4px;width:calc(100% - 24px)';
 
             // 内层工具条
             const bar = document.createElement('div');
@@ -680,7 +682,7 @@ const MAX_PROMPTS = 4;
             bar.appendChild(menuBtn);
 
             aside.appendChild(bar);
-            root.parentElement.insertBefore(aside, root);
+            chatsAside.insertBefore(aside, chatsH2);
 
 
             /* === 交互 === */
@@ -715,7 +717,7 @@ const MAX_PROMPTS = 4;
                 pop.innerHTML = '';
                 const entry = document.createElement('div');
                 entry.textContent = 'groups';
-                entry.style.cssText = 'padding:4px 12px;cursor:pointer;white-space:nowrap';
+                entry.style.cssText = 'padding:0px 12px;cursor:pointer;white-space:nowrap';
                 pop.appendChild(entry);
 
                 const r = menuBtn.getBoundingClientRect();
@@ -933,9 +935,10 @@ const MAX_PROMPTS = 4;
         // 重新定位多选头部块到 history 与 bookmarks wrapper 之间
         const selHeader = document.getElementById('cgpt-select-header');
         if (selHeader) {
-            historyNode.parentElement.insertBefore(selHeader, historyNode);
+            const chatsAside = historyNode.querySelector('aside[aria-labelledby]') || historyNode;
+            const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+            chatsAside.insertBefore(selHeader, chatsH2);
         }
-
         /* ---------- 数据读取 ---------- */
         const storedFolders = (await storage.get('folders')) || {};
         const storedOrder = (await storage.get('folderOrder')) || Object.keys(storedFolders);
