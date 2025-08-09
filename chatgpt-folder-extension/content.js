@@ -590,7 +590,6 @@ const MAX_PROMPTS = 4;
             }
         }
 
-        // 新增：Batch Processing 固定到 Chats 之上
         const selHeader = qs('#cgpt-select-header');
         if (hist && selHeader) {
             const parent = hist.parentElement;
