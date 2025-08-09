@@ -1346,6 +1346,39 @@ const MAX_PROMPTS = 4;
         const unifiedObs = observers.add(new MutationObserver(unifiedObsCallback));
         unifiedObs.observe(document.body, {childList: true, subtree: true});
 
+        // ① 新增：让附件条显示可见的横向滚动条
+        function enableAttachStripScroll() {
+            const STYLE_ID = 'cgpt-attach-scroll-style';
+            if (!document.getElementById(STYLE_ID)) {
+                const s = document.createElement('style');
+                s.id = STYLE_ID;
+                s.textContent = `
+      form[data-type="unified-composer"] .cgpt-attach-strip{
+        overflow-x:auto !important;
+        -ms-overflow-style:auto;
+        scrollbar-width:auto;
+        scrollbar-gutter: stable both-edges;
+        overscroll-behavior-inline: contain;
+      }
+      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar{height:8px}
+      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.35);border-radius:8px}
+      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-track{background:transparent}
+    `;
+                document.head.appendChild(s);
+            }
+            // 选择并标记附件容器；去掉隐藏滚动条的类
+            const strip = document.querySelector('form[data-type="unified-composer"] .horizontal-scroll-fade-mask');
+            if (strip && !strip.classList.contains('cgpt-attach-strip')) {
+                strip.classList.remove('no-scrollbar');
+                strip.classList.add('cgpt-attach-strip');
+            }
+        }
+// 首次与后续动态渲染都处理
+        enableAttachStripScroll();
+        const attachObs = observers.add(new MutationObserver(() => enableAttachStripScroll()));
+        attachObs.observe(document.body, { childList:true, subtree:true });
+
+
 
         /* ---------- 渲染 ---------- */
 
