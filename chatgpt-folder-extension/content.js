@@ -287,27 +287,30 @@ const MAX_PROMPTS = 4;
                         });
                         const partsObj = allPartKeys.length ? await chrome.storage.sync.get(allPartKeys) : {};
                         // 聚合
+                        // 聚合
                         for (const id of folderKeys) {
                             const meta = metas[`f_${id}__meta`];
-                            if (meta && Number.isInteger(meta.parts) && meta.parts > 0) {
-                                const chats = [];
-                                for (let i = 0; i < meta.parts; i++) {
-                                    const part = partsObj[`f_${id}__p${i}`];
-                                    if (part && Array.isArray(part.chats)) chats.push(...part.chats);
+                            if (meta && Number.isInteger(meta.parts)) {
+                                let chats = [];
+                                if (meta.parts > 0) {
+                                    for (let i = 0; i < meta.parts; i++) {
+                                        const part = partsObj[`f_${id}__p${i}`];
+                                        if (part && Array.isArray(part.chats)) chats.push(...part.chats);
+                                    }
                                 }
                                 folders[id] = {
-                                    name: meta.name,
+                                    name: meta.name || 'Group',
                                     collapsed: !!meta.collapsed,
-                                    prompts: meta.prompts || [],
+                                    prompts: Array.isArray(meta.prompts) ? meta.prompts : [],
                                     gap: Number.isFinite(meta.gap) ? meta.gap : 0,
                                     chats
                                 };
                             } else {
-                                // 旧的单块
                                 const single = await chrome.storage.sync.get('f_' + id);
                                 folders[id] = single['f_' + id] || {};
                             }
                         }
+
                         return folders;
                     }
                     const legacy = await chrome.storage.sync.get('folders');
@@ -878,7 +881,7 @@ const MAX_PROMPTS = 4;
 
             const fid = 'grp_' + nanoid()
             folders[fid] = {
-                name: name.slice(0, 20) + (name.length > 20) ? '…' : '',
+                name: name.length > 20 ? name.slice(0, 20) + '…' : name,
                 chats: [],
                 collapsed: true,
                 prompts: [],
@@ -1354,6 +1357,8 @@ const MAX_PROMPTS = 4;
 
         /* ---------- 文件夹渲染 ---------- */
         function renderFolder(fid, f) {
+            // 新增一行：容错，保证后续所有地方都能安全访问 f.chats.length
+            if (!Array.isArray(f?.chats)) f.chats = [];
             const box = document.createElement('div');
             box.style.marginTop = '4px';
             const header = document.createElement('div');
