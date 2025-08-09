@@ -590,6 +590,17 @@ const MAX_PROMPTS = 4;
             }
         }
 
+        // 新增：Batch Processing 固定到 Chats 之上
+        const selHeader = qs('#cgpt-select-header');
+        if (hist && selHeader) {
+            const parent = hist.parentElement;
+            if (selHeader.parentElement !== parent || selHeader.nextSibling !== hist) {
+                try { parent.insertBefore(selHeader, hist); }
+                catch (e) { console.warn('[Bookmark] Failed to relocate select header:', e); }
+            }
+        }
+
+
         if (!hist && wrapper) {
             try {
                 wrapper.remove()
@@ -636,10 +647,11 @@ const MAX_PROMPTS = 4;
             const exist = document.getElementById('cgpt-select-header');
             if (exist) {
                 const parent = root.parentElement;
-                if (exist.parentElement !== parent || exist.previousSibling !== root) {
-                    parent.insertBefore(exist, root.nextSibling);   // 始终位于 history 之后
+                // 目标：始终位于 history 之前
+                if (exist.parentElement !== parent || exist.nextSibling !== root) {
+                    parent.insertBefore(exist, root);              // 固定到 Chat history 之前
                 }
-                return;                                    // 已处理完直接退出
+                return;
             }
 
             // 外层 aside（宽度缩减，与分组列表项对齐）
@@ -669,7 +681,7 @@ const MAX_PROMPTS = 4;
             bar.appendChild(menuBtn);
 
             aside.appendChild(bar);
-            root.parentElement.insertBefore(aside, root.nextSibling);
+            root.parentElement.insertBefore(aside, root);
 
 
             /* === 交互 === */
