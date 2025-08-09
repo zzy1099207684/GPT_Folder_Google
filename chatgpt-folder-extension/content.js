@@ -656,6 +656,12 @@ const MAX_PROMPTS = 4;
             toggle.style.cssText = 'accent-color:#10a37f;cursor:pointer';
             bar.appendChild(toggle);
 
+            // 批量处理文字
+            const batchLabel = document.createElement('span');
+            batchLabel.textContent = 'Batch Processing';
+            batchLabel.style.cssText = 'font-size:13px;color:white';
+            bar.appendChild(batchLabel);
+
             // 右侧省略号
             const menuBtn = document.createElement('span');
             menuBtn.textContent = '⋯';
@@ -729,16 +735,24 @@ const MAX_PROMPTS = 4;
                     row.textContent = f.name || 'Group';
                     row.style.cssText = 'padding:4px 12px;cursor:pointer;white-space:nowrap';
                     row.onclick = () => {
+                        // showGroupList → row.onclick 内
                         const chosen = [...root.querySelectorAll('a.__menu-item[href*="/c/"]')]
                             .filter(a => a.querySelector('input.history-checkbox')?.checked);
 
+                        // 按 Chats 中的出现顺序收集需要新增的项
+                        const toPrepend = [];
                         chosen.forEach(a => {
                             const url = a.href;
                             const title = (a.textContent || 'Chat').trim();
                             if (!f.chats.some(c => samePath(c.url, url))) {
-                                f.chats.unshift({url, title});
+                                toPrepend.push({ url, title });
                             }
                         });
+
+                        // 一次性前插，确保顺序与 Chats 保持一致
+                        if (toPrepend.length) {
+                            f.chats = [...toPrepend, ...f.chats];
+                        }
 
                         // 新增：分组后立即清空多选状态
                         if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
