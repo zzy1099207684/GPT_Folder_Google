@@ -2326,13 +2326,14 @@ const MAX_PROMPTS = 4;
         }
 
         function ensureChatRegistered() {
-            if (location.pathname.startsWith('/c/')) return;     // 已是 /c/ 直接结束
+            if (location.pathname.startsWith('/c/')) return;
             const watcher = setInterval(() => {
                 if (location.pathname.startsWith('/c/')) {
                     clearInterval(watcher);
                     window.bumpActiveChat?.();
+                    window.scheduleHistoryRefresh?.(); // 新增：立即启动 Chats 监听与占位替换
                 }
-            }, 120);                        // 120 ms 轮询，成本极低
+            }, 120);
         }
 
         function bindSend() {
@@ -2526,6 +2527,7 @@ const MAX_PROMPTS = 4;
                 }, 1500);
             }
 
+            window.scheduleHistoryRefresh = scheduleHistoryRefresh;
 
             // ① 发送按钮点击
             send.addEventListener('click', () => {
