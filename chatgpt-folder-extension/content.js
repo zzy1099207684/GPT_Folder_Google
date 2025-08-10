@@ -2180,7 +2180,7 @@ const MAX_PROMPTS = 4;
                 clearActiveOnHistoryClick = false;
                 return;
             }
-
+            if (isUploading()) return;
             const ed = qs('.ProseMirror');
             if (!ed) return;
             const SUFFIX = ''; // 定义尾缀常量
@@ -2334,6 +2334,15 @@ const MAX_PROMPTS = 4;
                     window.scheduleHistoryRefresh?.(); // 新增：立即启动 Chats 监听与占位替换
                 }
             }, 120);
+        }
+
+        function isUploading() {
+            const form = qs('form[data-type="unified-composer"]');
+            if (!form) return false;
+            const btn = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]', form);
+            const buttonBusy = !!(btn && (btn.disabled || btn.getAttribute('aria-disabled') === 'true'));
+            const hasProgress = !!form.querySelector('[role="progressbar"],progress,[data-state="uploading"],[aria-busy="true"]');
+            return buttonBusy || hasProgress;
         }
 
         function bindSend() {
@@ -2531,6 +2540,7 @@ const MAX_PROMPTS = 4;
 
             // ① 发送按钮点击
             send.addEventListener('click', () => {
+                if (isUploading()) return;
                 const label = send.getAttribute('aria-label') || send.innerText;
                 if (label.toLowerCase().includes('stop')) return;
                 const hasUserInput = ed && ed.innerText.trim().length > 0;
@@ -2546,6 +2556,7 @@ const MAX_PROMPTS = 4;
                 ed.dataset.keyhooked = '1';
                 ed.addEventListener('keydown', e => {
                     if (e.key === 'Enter' && !e.shiftKey) {
+                        if (isUploading()) { e.preventDefault(); return; }
                         const btn = qs('#composer-submit-button');
                         if (!btn) return;
                         const label = btn.getAttribute('aria-label') || btn.innerText;
