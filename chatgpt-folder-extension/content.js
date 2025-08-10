@@ -2229,6 +2229,18 @@ const MAX_PROMPTS = 4;
                 }
             }
 
+            /* 新增：仅当“角标”可见或处于挂起建联态时才允许注入组 prompt */
+            const allowByPending = !!(window.__cgptPendingFid && folders[window.__cgptPendingFid]);
+            let allowByTriangle = false;
+            if (activeFid) {
+                const cornerEl = document.querySelector(`.cgpt-folder-corner[data-fid="${activeFid}"]`);
+                const color = cornerEl?.style?.borderTopColor || '';
+                allowByTriangle = !!cornerEl && color && color !== 'transparent';
+            }
+            if (!allowByPending && !allowByTriangle) {
+                currentFid = null;   // 阻断后续 prompt 注入
+            }
+
             const promptList = currentFid ? (folders[currentFid].prompts || []) : [];
             const indices = window.__cgptPromptIndexMap;
             const counterKey =                                   // ✅ 先计算
