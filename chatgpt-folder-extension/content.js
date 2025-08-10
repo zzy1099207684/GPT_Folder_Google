@@ -1466,9 +1466,10 @@ const MAX_PROMPTS = 4;
             const corner = document.createElement('div');
             corner.className = 'cgpt-folder-corner';
             corner.dataset.fid = fid;
-
             corner.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;border-top:12px solid transparent;border-right:12px solid transparent';
+            if (fid === activeFid) corner.style.borderTopColor = '#fff';
             header.append(corner);
+
 
             const arrow = document.createElement('span');
             arrow.textContent = f.collapsed ? '∴' : '∵';
@@ -2688,16 +2689,24 @@ const MAX_PROMPTS = 4;
             }
 
 
-            if (!window.__cgptPendingFid &&
-                activeFid &&
-                (!folders[activeFid] ||
-                    !folders[activeFid].chats.some(c => samePath(c.url, location.origin + path)))) {
-                activeFid = null;
+            if (!window.__cgptPendingFid && activeFid) {
+                const belongs = folders[activeFid]?.chats?.some(
+                    c => samePath(c.url, location.origin + path)
+                );
+                if (!belongs) {
+                    const mapped = lastActiveMap[path];
+                    if (mapped && mapped !== '__history__' && folders[mapped]) {
+                        activeFid = mapped;           // 信任已建立的 路径→分组 映射
+                    } else {
+                        activeFid = null;
+                    }
+                }
             }
 
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
+
         }
 
 
