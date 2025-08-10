@@ -2551,7 +2551,7 @@ const MAX_PROMPTS = 4;
                 ensureFrostedBG();             // 新增：发送后确保磨砂背景存在
             }, {capture: true});
 
-// ② 回车快捷发送
+            // ② 回车快捷发送
             if (!ed.dataset.keyhooked) {
                 ed.dataset.keyhooked = '1';
                 ed.addEventListener('keydown', e => {
@@ -2605,7 +2605,7 @@ const MAX_PROMPTS = 4;
                 const btn = ev.target.closest('button[data-testid="delete-conversation-confirm-button"]');
                 if (!btn) return;                              // 非确认删除按钮
 
-                const delPath = location.pathname;             // /c/xxxxxxxx
+                const delPath = location.pathname;
                 if (!delPath.startsWith('/c/')) return;
 
                 let changed = false;
@@ -3109,7 +3109,6 @@ function ensureFrostedBG() {
         '#stage-slideover-sidebar nav[aria-label="Chat history"] .sticky{background:rgba(0,0,0,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
         'html.light #stage-slideover-sidebar nav[aria-label="Chat history"] .sticky{background:rgba(255,255,255,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
 
-        /* 新增：让顶部 aside 与 header 同款磨砂 */
         '#stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, #stage-slideover-sidebar aside[class="bg-token-bg-elevated-secondary"]{background:rgba(0,0,0,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
         'html.light #stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, html.light #stage-slideover-sidebar aside[class*="bg-token-bg-elevated-secondary"]{background:rgba(255,255,255,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}'
         ].join('');
