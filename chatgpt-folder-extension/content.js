@@ -2415,18 +2415,25 @@ const MAX_PROMPTS = 4;
                     if (chrome?.runtime?.id) storage.set({lastActiveMap});
                 }
                 const i = folder.chats.findIndex(c => samePath(c.url, cur));
-                let needRender;                 // 新增：是否真的需要刷新侧边栏
+                let needRender;
+
+                // 识别当前三角标是否确实指向该组
+                const cornerEl = document.querySelector(`.cgpt-folder-corner[data-fid="${activeFid}"]`);
+                const triangleOn = !!cornerEl && cornerEl.style && cornerEl.style.borderTopColor && cornerEl.style.borderTopColor !== 'transparent';
+                const triangleOwnsThis = triangleOn && activeFid && folderFid === activeFid;
 
                 if (i >= 0) {                           // 已在当前分组
                     const [chat] = folder.chats.splice(i, 1);
-                    folder.chats.unshift(chat);         // 挪到最前
-                    needRender = i > 0;                 // 只有顺序发生变化才刷新
-                } else if (window.__cgptPendingFid === folderFid) { // 仅在新建流程中自动加入
-                    folder.chats.unshift({url: cur, title});
-                    needRender = true;                  // 需要立即渲染生成条目
+                    folder.chats.unshift(chat);
+                    needRender = i > 0;
+                } else if (window.__cgptPendingFid === folderFid || triangleOwnsThis) {
+                    // 新建流程或三角标明确选中该组时，将新会话纳入该组
+                    folder.chats.unshift({ url: cur, title });
+                    needRender = true;
                 } else {
-                    return;                             // 避免意外写入其他分组
+                    return;                             // 其余场景保持原有保护
                 }
+
 
                 safeSendMessage({type: 'save-folders', data: folders});
 
