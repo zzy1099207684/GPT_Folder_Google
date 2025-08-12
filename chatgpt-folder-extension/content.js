@@ -891,10 +891,36 @@ const MAX_PROMPTS = 4;
                             console.warn('[Bookmark] Batch delete sync error:', e);
                         }
                     } finally {
+                        // 6) 若当前所处会话被删除，返回 New chat
+                        try {
+                            const cur = location.pathname.split('?')[0];
+                            const deleted = Array.isArray(ids) && ids.some(id => cur === `/c/${id}`);
+                            if (deleted) {
+                                const globalNewBtn = document.querySelector('button[aria-label="New chat"]');
+                                if (globalNewBtn) {
+                                    window.__cgptSuppressGroupClear = true;
+                                    globalNewBtn.click();
+                                } else {
+                                    const newAnchor =
+                                        document.querySelector('a[href="/"]') ||
+                                        document.querySelector('a[href*="/?temporary-chat=true"]');
+                                    if (newAnchor) {
+                                        window.__cgptIgnoreNextHistoryClick = true;
+                                        newAnchor.click();
+                                        setTimeout(() => { window.__cgptIgnoreNextHistoryClick = false; }, 500);
+                                    } else {
+                                        history.pushState({}, '', '/');
+                                        window.dispatchEvent(new Event('popstate'));
+                                    }
+                                }
+                            }
+                        } catch {}
+
                         // 6) 关闭遮罩并收起菜单
                         overlay.close();
                         hide();
                     }
+
                 };
 
             });
