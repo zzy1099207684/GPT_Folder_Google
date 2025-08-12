@@ -5,8 +5,6 @@ chrome.runtime.onMessage.addListener((msg) => {
     const folderKeys = Object.keys(folders);
     const out = { folderKeys };
     const MAX_BYTES = 6 * 1024;
-
-    function sizeOf(v){ return JSON.stringify(v).length; }
     function packOne(id, data){
         const { name='Group', collapsed=false, prompts=[], chats=[] } = data || {};
         const base = { name, collapsed, prompts };
