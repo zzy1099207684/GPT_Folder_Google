@@ -2768,22 +2768,6 @@ const MAX_PROMPTS = 4;
         render();
         clearActiveOnHistoryClick = false;
 
-        historyNode.addEventListener('click', e => {
-            const a = e.target.closest('a[href*="/c/"]');
-            if (!a) return;
-            lastClickedChatEl = null;
-            const path = new URL(a.href, location.origin).pathname;
-            lastActiveMap[path] = '__history__';
-            try {
-                if (chrome?.runtime?.id) {
-                    storage.set({lastActiveMap});
-                }
-            } catch (err) {
-                console.warn('[Bookmark] Error saving lastActiveMap:', err);
-            }
-            setTimeout(highlightActive, 0);
-        });
-
         // ===== 全局 Delete chat 监听：点击确认删除按钮后，自动移除组内对应条目 =====
         if (!window.__cgptDeleteHooked) {
             window.__cgptDeleteHooked = true;
