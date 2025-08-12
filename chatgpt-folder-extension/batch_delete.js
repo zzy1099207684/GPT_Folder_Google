@@ -22,7 +22,7 @@
     window.addEventListener('beforeunload', () => {
         selected.clear();
         save();
-    });
+    }, { passive: true });
 
     /** 在指定容器内为尚未处理过的会话条目注入复选框 */
     function renderCheckboxes(root) {

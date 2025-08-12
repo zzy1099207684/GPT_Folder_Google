@@ -10,7 +10,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     function packOne(id, data){
         const { name='Group', collapsed=false, prompts=[], chats=[] } = data || {};
         const base = { name, collapsed, prompts };
-        const baseCost = sizeOf({ ...base, chats: [] });
+        const baseCost = JSON.stringify({ ...base, chats: [] }).length;
         let buf = [];
         let used = baseCost;
         let parts = 0;
@@ -22,15 +22,29 @@ chrome.runtime.onMessage.addListener((msg) => {
             used = baseCost;
         };
         for (const c of chats) {
-            const inc = sizeOf(c) + 2;
-            if (used + inc > MAX_BYTES && buf.length) flush();
+            const inc = JSON.stringify(c).length + 2;
+            if (used + inc > MAX_BYTES) {
+                if (buf.length) {
+                    flush();                 // 先写出已累积分片
+                }
+                if (baseCost + inc > MAX_BYTES) {
+                    // 单条异常大：隔离成独立分片，避免拖累后续分片
+                    out[`f_${id}__p${parts}`] = { chats: [c] };
+                    parts += 1;
+                    used = baseCost;
+                    continue;
+                }
+            }
             buf.push(c);
             used += inc;
         }
         flush();
         out[`f_${id}__meta`] = { ...base, parts };
-        out[`f_${id}`] = undefined; // 兼容清理旧键
+        out[`f_${id}`] = undefined;
     }
+// 写入时容错处理 lastError，避免无回调沉默失败
+    chrome.storage.sync.set(out, () => { void chrome.runtime.lastError; });
+
     folderKeys.forEach(id => packOne(id, folders[id]));
     chrome.storage.sync.set(out);
 

@@ -166,6 +166,11 @@ const MAX_PROMPTS = 4;
     // 页面初始化后立即尝试一次
     requestAnimationFrame(restorePointerEvents);
 
+    window.addEventListener('pagehide', () => {
+        try { observers.disconnectAll(); } catch {}
+        try { window.__deepCleanerId && clearInterval(window.__deepCleanerId); } catch {}
+    }, { passive: true });
+
     // 关键场景下再检查一次，确保后续状态同步
     window.addEventListener('resize', restorePointerEvents, {passive: true});
     const tryRestoreLater = () => setTimeout(restorePointerEvents, 50);
@@ -518,7 +523,7 @@ const MAX_PROMPTS = 4;
     if (!document.getElementById(TIP_ID)) {                                                   // 若未注入则注入
         const s = document.createElement('style');             // 创建 style
         s.id = TIP_ID;                                                                        // 赋 id
-        s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1※`;
+        s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
         document.head.appendChild(s);                                                         // 注入
     }
     const tip = (el, txt) => {
@@ -1182,6 +1187,8 @@ const MAX_PROMPTS = 4;
             }
         });
 
+
+
         // 统一版本 —— 自动选根节点，兼容旧/新版侧栏
         const syncTitles = () => {
             let updated = false;
@@ -1264,19 +1271,25 @@ const MAX_PROMPTS = 4;
 
                     const fidList = Object.keys(folders);
                     for (const [fid, folder] of Object.entries(folders)) {
-                        const oldChats = folder.chats;
-                        const newChats = oldChats;
+                        const oldChats = Array.isArray(folder.chats) ? folder.chats : [];
+                        const newChats = oldChats.filter(c => {
+                            try {
+                                const p = new URL(c.url, location.origin).pathname;
+                                return currentPaths.has(p);
+                            } catch { return false; }
+                        });
                         if (newChats.length !== oldChats.length) {
                             folder.chats = newChats;
                             changed = true;
                             const idx = fidList.indexOf(fid);
                             const oldBox = folderZone.children[idx];
-                            if (oldBox) { // 安全检查
+                            if (oldBox) {
                                 const newBox = renderFolder(fid, folder);
                                 folderZone.replaceChild(newBox, oldBox);
                             }
                         }
                     }
+
                     if (changed) {
                         safeSendMessage({type: 'save-folders', data: folders});
                         highlightActive();
@@ -1432,12 +1445,13 @@ const MAX_PROMPTS = 4;
 
                 let ci = 0;
                 const chatChunk = () => {
-                    const start = Date.now();
-                    while (ci < visibleList.length && Date.now() - start < CHUNK_BUDGET_MS) {
+                    const start = performance.now();
+                    while (ci < visibleList.length && performance.now() - start < CHUNK_BUDGET_MS) {
                         renderChat(ul, fid, visibleList[ci++]);
                     }
                     if (ci < visibleList.length) enqueueIdleTask(chatChunk);
                 };
+
                 enqueueIdleTask(chatChunk);
 
                 if (chatsForRender.length > MAX_VISIBLE) {
