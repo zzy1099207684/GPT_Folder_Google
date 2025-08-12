@@ -702,6 +702,7 @@ const MAX_PROMPTS = 4;
             });
 
             // ② 弹出菜单
+            // ② 弹出菜单
             const pop = document.createElement('div');
             pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:120px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:9999';
             document.body.appendChild(pop);
@@ -725,6 +726,12 @@ const MAX_PROMPTS = 4;
                 entry.style.cssText = 'padding:0px 12px;cursor:pointer;white-space:nowrap';
                 pop.appendChild(entry);
 
+                // 新增：Delete
+                const delEntry = document.createElement('div');
+                delEntry.textContent = 'Delete';
+                delEntry.style.cssText = 'padding:4px 12px;cursor:pointer;white-space:nowrap';
+                pop.appendChild(delEntry);
+
                 const r = menuBtn.getBoundingClientRect();
                 const pLeft = Math.max(0, Math.min(r.right - 120, window.innerWidth - 120));
                 pop.style.left = `${pLeft}px`;
@@ -735,6 +742,161 @@ const MAX_PROMPTS = 4;
                     showGroupList(r);
                     hide();
                 };
+
+                // 最小化工具函数，仅作用于本弹框
+                function idFromUrl(url) {
+                    const m = /\/c\/([^/?#]+)/.exec(url);
+                    return m ? m[1] : url;
+                }
+                function buildAcceptLanguage() {
+                    const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
+                        .map(s => String(s || '').split(';')[0])
+                        .filter(Boolean);
+                    const uniq = [...new Set(ls)].slice(0, 4);
+                    if (!uniq.length) return 'en-US,en;q=0.9';
+                    const qs = [1.0, 0.9, 0.8, 0.7];
+                    return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
+                }
+                async function getHeaders() {
+                    const h = {
+                        accept: '*/*',
+                        'accept-language': buildAcceptLanguage(),
+                        'content-type': 'application/json'
+                    };
+                    try {
+                        const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data && data.accessToken) h.authorization = `Bearer ${data.accessToken}`;
+                        }
+                    } catch {}
+                    return h;
+                }
+
+                delEntry.onclick = async () => {
+                    const chosen = [...root.querySelectorAll('a.__menu-item[href*="/c/"]')]
+                        .filter(a => a.querySelector('input.history-checkbox')?.checked);
+                    const ids = chosen.map(a => idFromUrl(a.href));
+                    if (!ids.length) { hide(); return; }
+
+                    // 1) 构建“删除中”遮罩与动画，阻止任何交互
+                    const OVERLAY_ID = 'cgpt-batch-deleting-overlay';
+                    const STYLE_ID = 'cgpt-batch-deleting-style';
+
+                    function showDeletingOverlay(total) {
+                        if (!document.getElementById(STYLE_ID)) {
+                            const s = document.createElement('style');
+                            s.id = STYLE_ID;
+                            s.textContent =
+                                '@keyframes cgptSpin{to{transform:rotate(360deg)}}' +
+                                `#${OVERLAY_ID}{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}` +
+                                `#${OVERLAY_ID} .box{display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 18px;border-radius:10px;background:rgba(34,34,34,.9);backdrop-filter:saturate(120%) blur(2px);color:#fff;font-size:14px}` +
+                                `#${OVERLAY_ID} .spin{width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;animation:cgptSpin .8s linear infinite}`;
+                            document.head.appendChild(s);
+                        }
+                        const o = document.createElement('div');
+                        o.id = OVERLAY_ID;
+                        // 让现有恢复指针事件的逻辑识别到“有遮罩在”
+                        o.setAttribute('role', 'dialog');
+                        o.setAttribute('aria-modal', 'true');
+                        o.dataset.state = 'open';
+
+                        const box = document.createElement('div');
+                        box.className = 'box';
+                        const spin = document.createElement('div');
+                        spin.className = 'spin';
+                        const text = document.createElement('div');
+                        text.className = 'txt';
+                        text.textContent = total > 1 ? `Deleting 0/${total}` : 'Deleting...';
+                        box.append(spin, text);
+                        o.appendChild(box);
+
+                        // 拦截所有输入
+                        o.addEventListener('keydown', e => e.preventDefault(), true);
+                        o.addEventListener('click', e => e.preventDefault(), true);
+                        o.addEventListener('pointerdown', e => e.preventDefault(), true);
+                        document.body.appendChild(o);
+                        return {
+                            update(n) { text.textContent = total > 1 ? `Deleting ${n}/${total}` : 'Deleting...'; },
+                            close() { try { o.remove(); } catch {} }
+                        };
+                    }
+
+                    const overlay = showDeletingOverlay(ids.length);
+
+                    try {
+                        // 2) 获取头信息
+                        const headers = await getHeaders();
+
+                        // 3) 并行删除，实时更新进度文本
+                        let done = 0;
+                        const tasks = ids.map(id =>
+                            fetch(`/backend-api/conversation/${id}`, {
+                                method: 'PATCH',
+                                headers,
+                                body: JSON.stringify({ is_visible: false })
+                            }).catch(() => null).finally(() => {
+                                done += 1;
+                                overlay.update(done);
+                            })
+                        );
+                        await Promise.allSettled(tasks);
+
+                        // 4) 清理历史面板 DOM
+                        if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
+                        chosen.forEach(a => a.remove());
+                        const toggleAll = document.querySelector('#cgpt-select-header input[type="checkbox"]');
+                        if (toggleAll) toggleAll.checked = false;
+
+                        // 5) 同步剔除分组中对应会话，并局部重绘受影响的组（保持原逻辑）
+                        try {
+                            const delPaths = new Set(ids.map(id => `/c/${id}`));
+                            let changed = false;
+                            const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                            const fidList = Object.keys(folders);
+
+                            for (const [fid, folder] of Object.entries(folders)) {
+                                const oldChats = Array.isArray(folder.chats) ? folder.chats : [];
+                                const newChats = oldChats.filter(c => {
+                                    try {
+                                        const p = new URL(c.url, location.origin).pathname;
+                                        return !delPaths.has(p);
+                                    } catch { return true; }
+                                });
+                                if (newChats.length !== oldChats.length) {
+                                    folder.chats = newChats;
+                                    changed = true;
+                                    const idx = fidList.indexOf(fid);
+                                    const oldBox = folderZone?.children?.[idx];
+                                    if (oldBox) {
+                                        const newBox = renderFolder(fid, folder);
+                                        folderZone.replaceChild(newBox, oldBox);
+                                    }
+                                }
+                            }
+
+                            if (changed) {
+                                delPaths.forEach(p => {
+                                    try { removeChatDom(p); } catch {}
+                                    if (lastActiveMap[p]) delete lastActiveMap[p];
+                                });
+                                if (chrome?.runtime?.id) {
+                                    storage.set({ lastActiveMap });
+                                    storage.set({ folders });
+                                }
+                                safeSendMessage({ type: 'save-folders', data: folders });
+                                highlightActive();
+                            }
+                        } catch (e) {
+                            console.warn('[Bookmark] Batch delete sync error:', e);
+                        }
+                    } finally {
+                        // 6) 关闭遮罩并收起菜单
+                        overlay.close();
+                        hide();
+                    }
+                };
+
             });
 
             // ③ 选择目标分组
