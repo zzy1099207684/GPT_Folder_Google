@@ -969,6 +969,10 @@ const MAX_PROMPTS = 4;
         const historyClickHandler = e => {
             const a = e.target.closest('a[href*="/c/"]');
             if (!a) return;
+
+            // 新增：若刚从组内触发导航，则忽略这次 history 覆盖
+            if (window.__cgptIgnoreNextHistoryClick) return;
+
             clearActiveOnHistoryClick = true;
             lastClickedChatEl = null;
             const path = new URL(a.href, location.origin).pathname;
@@ -980,11 +984,11 @@ const MAX_PROMPTS = 4;
             } catch (err) {
                 console.warn('[Bookmark] Error saving lastActiveMap:', err);
             }
-            // 延迟到下一个事件循环，让 popstate 先触发，再更新高亮
             setTimeout(() => {
                 highlightActive();
             }, 0);
         };
+
 
         historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
         historyNode.addEventListener('click', historyClickHandler);
@@ -2267,17 +2271,16 @@ const MAX_PROMPTS = 4;
                 if (!chat.url) return;
                 e.preventDefault();
 
-                // ① 判断这条会话是否仍出现在 History 侧栏
-                const stillExists = qsa(HIST_ANCHOR)
-                    .some(a => samePath(a.href, chat.url));
+                // 新增：一次性保护，防止紧随其后的 history 监听把映射写成 "__history__"
+                window.__cgptIgnoreNextHistoryClick = true;
+                setTimeout(() => { try { delete window.__cgptIgnoreNextHistoryClick; } catch {} }, 500);
 
+                const stillExists = qsa(HIST_ANCHOR).some(a => samePath(a.href, chat.url));
                 if (!stillExists) {
                     tip(link, 'The conversation has been hidden due to age, Please scrolling down to refresh your history');
                     return;
                 }
 
-
-                // ② 正常导航分支（原逻辑保持不变）
                 lastClickedChatEl = link;
                 const path = new URL(chat.url, location.origin).pathname;
                 lastActiveMap[path] = fid;
@@ -2288,11 +2291,12 @@ const MAX_PROMPTS = 4;
                 }
                 history.pushState({}, '', chat.url);
                 window.dispatchEvent(new Event('popstate'));
-                highlightActive();                        // 同一路径重复点击时立即刷新选中组
+                highlightActive();
                 setTimeout(() => {
                     if (lastClickedChatEl === link) lastClickedChatEl = null;
                 }, 100);
             };
+
 
 
             const del = document.createElement('span');
