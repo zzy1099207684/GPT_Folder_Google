@@ -241,7 +241,7 @@ const MAX_PROMPTS = 4;
         },
         {
             label: 'change_code',
-            text: ['※Follow this rule:Strictly adhere to the following requirements: Only modify code directly related to the specific question or requirement raised, leaving all other unrelated code and functionality unchanged; after modification, you must test the implementation yourself to ensure three critical points are met - first, the requirement is fully satisfied, second, both frontend and backend functions operate smoothly, and third, code performance remains stable without affecting anything outside the intended scope; provide both the original source code and the modified version for easy comparison and manual implementation; absolutely no horizontal dividers of any kind (---, ——, —, ———, ***) are permitted in the response content.※']
+            text: ['※Follow this rule:Strictly adhere to the following requirements: Only modify code directly related to the specific question or requirement raised, leaving all other unrelated code and functionality unchanged; after modification, you must test the implementation yourself to ensure three critical points are met - first, the requirement is fully satisfied, second, both frontend and backend functions operate smoothly, and third, code performance remains stable without affecting anything outside the intended scope; provide both the original source code and the modified version for easy comparison and manual implementation;※']
         },
         {
             label: 'NORMAL_1',
