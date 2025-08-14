@@ -977,7 +977,13 @@ const MAX_PROMPTS = 4;
                         // 2) 获取头信息
                         const headers = await getHeaders();
 
-                        // 3) 并行删除，实时更新进度文本
+                        try {
+                            const curPath = location.pathname.split('?')[0];
+                            const deletingCurrent = Array.isArray(ids) && ids.some(id => curPath === `/c/${id}`);
+                            if (deletingCurrent) {
+                                softGoHome(); // 优先点击 New chat，其次 history.pushState
+                            }
+                        } catch {}
                         let done = 0;
                         const tasks = ids.map(id =>
                             fetch(`/backend-api/conversation/${id}`, {
@@ -991,9 +997,15 @@ const MAX_PROMPTS = 4;
                         );
                         await Promise.allSettled(tasks);
 
+
                         // 4) 清理历史面板 DOM
                         if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
-                        chosen.forEach(a => a.remove());
+                        chosen.forEach(a => {
+                            const li = a.closest('li');
+                            const node = li || a;
+                            node.setAttribute('data-cgpt-soft-deleted', '1');
+                            node.style.display = 'none';
+                        });
                         const toggleAll = document.querySelector('#cgpt-select-header input[type="checkbox"]');
                         if (toggleAll) toggleAll.checked = false;
 
@@ -1045,24 +1057,42 @@ const MAX_PROMPTS = 4;
                             const cur = location.pathname.split('?')[0];
                             const deleted = Array.isArray(ids) && ids.some(id => cur === `/c/${id}`);
                             if (deleted) {
-                                const globalNewBtn = document.querySelector('button[aria-label="New chat"]');
-                                if (globalNewBtn) {
-                                    window.__cgptSuppressGroupClear = true;
-                                    globalNewBtn.click();
-                                } else {
-                                    const newAnchor =
-                                        document.querySelector('a[href="/"]') ||
-                                        document.querySelector('a[href*="/?temporary-chat=true"]');
-                                    if (newAnchor) {
-                                        window.__cgptIgnoreNextHistoryClick = true;
-                                        newAnchor.click();
-                                        setTimeout(() => { window.__cgptIgnoreNextHistoryClick = false; }, 500);
-                                    } else {
-                                        history.pushState({}, '', '/');
-                                        window.dispatchEvent(new Event('popstate'));
+                                try {
+                                    window.__cgptPendingFid = null;
+                                    window.__cgptPendingToken = null;
+                                    const counters = window.__cgptPromptGapCounters || {};
+                                    const indices  = window.__cgptPromptIndexMap || {};
+                                    delete counters['/'];
+                                    delete indices['/'];
+                                    sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
+                                    sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices));
+                                } catch {}
+
+                                // 软跳转：优先点击现有“New chat”入口，其次用 pushState
+                                const softGoHome = () => {
+                                    const btn =
+                                        qs('a[href="/"]') ||
+                                        qs('a[aria-label*="New chat" i]') ||
+                                        qs('a[data-testid="new-chat-button"]');
+                                    if (btn) {
+                                        try {
+                                            window.__cgptIgnoreNextHistoryClick = true;
+                                            btn.click();
+                                            setTimeout(() => { window.__cgptIgnoreNextHistoryClick = false; }, 500);
+                                            return true;
+                                        } catch {}
                                     }
-                                }
+                                    try {
+                                        history.pushState(null, '', '/');
+                                        window.dispatchEvent(new PopStateEvent('popstate'));
+                                        return true;
+                                    } catch {}
+                                    return false;
+                                };
+                                softGoHome();
+                                // 不再使用 location.replace('/')
                             }
+
                         } catch {}
 
                         // 6) 关闭遮罩并收起菜单
@@ -1111,7 +1141,12 @@ const MAX_PROMPTS = 4;
 
                         // 新增：分组后立即清空多选状态
                         if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
-                        root.querySelectorAll('input.history-checkbox').forEach(cb => cb.checked = false);
+                        chosen.forEach(a => {
+                            const li = a.closest('li');
+                            const node = li || a;
+                            node.setAttribute('data-cgpt-soft-deleted','1');
+                            node.style.display = 'none';
+                        });
                         const toggleAll = document.querySelector('#cgpt-select-header input[type="checkbox"]');
                         if (toggleAll) toggleAll.checked = false;
 
