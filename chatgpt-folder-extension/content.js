@@ -2698,8 +2698,6 @@ const MAX_PROMPTS = 4;
             if (!ed || !send || send.dataset.hooked) return;
             send.dataset.hooked = "1";
 
-
-
             // 修改后版本：新增 i === -1 时插入逻辑，只对 activeFid 生效
             const bumpActiveChat = () => {
                 if (!location.pathname.startsWith('/c/')) return;
@@ -2723,12 +2721,21 @@ const MAX_PROMPTS = 4;
                     }
                     delete idxMap[oldKey];
 
+                    // 新增：迁移 prompt 开关映射
+                    const toggles = window.__cgptPromptTogglePerPath || {};
+                    if (toggles[oldKey] !== undefined && toggles[curPath] === undefined) {
+                        toggles[curPath] = toggles[oldKey];
+                    }
+                    delete toggles[oldKey];
+
                     try {
                         sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
                         sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(idxMap));
+                        sessionStorage.setItem('cgptPromptToggle', JSON.stringify(toggles));
                     } catch {
                     }
                 }
+
 
                 let folderFid = activeFid && folders[activeFid] ? activeFid : null;
                 if (!folderFid) {
