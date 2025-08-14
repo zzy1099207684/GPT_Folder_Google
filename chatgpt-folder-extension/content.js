@@ -116,13 +116,18 @@ const MAX_PROMPTS = 4;
             render(currentOn);
 
             sw.onclick = () => {
-                const next = !(window.__cgptPromptTogglePerPath[key] !== false);
-                window.__cgptPromptTogglePerPath[key] = next;
+                const pathNow = location.pathname;
+                const keyNow = (pathNow === '/' && window.__cgptPendingToken)
+                    ? `/${window.__cgptPendingToken}`
+                    : pathNow;
+                const next = !(window.__cgptPromptTogglePerPath[keyNow] !== false);
+                window.__cgptPromptTogglePerPath[keyNow] = next;
                 try {
                     sessionStorage.setItem('cgptPromptToggle', JSON.stringify(window.__cgptPromptTogglePerPath));
                 } catch {}
                 render(next);
             };
+
 
             box.append(label, sw);
             // 将容器加到表单。表单通常是相对定位；若不是，也不会影响交互
