@@ -2916,7 +2916,8 @@ const MAX_PROMPTS = 4;
             if (!ed.dataset.keyhooked) {
                 ed.dataset.keyhooked = '1';
                 ed.addEventListener('keydown', e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.isComposing || e.keyCode === 229) return;
+                    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
                         if (isUploading()) { e.preventDefault(); return; }
                         const btn = qs('#composer-submit-button');
                         if (!btn) return;
@@ -2931,6 +2932,7 @@ const MAX_PROMPTS = 4;
                         ensureFrostedBG();     // 新增：回车发送后同样保证背景
                     }
                 }, {capture: true});
+
             }
 
 
