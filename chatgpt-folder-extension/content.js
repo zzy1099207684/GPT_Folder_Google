@@ -21,6 +21,155 @@ const MAX_PROMPTS = 4;
         }
     }
 
+    function ensurePromptToggle() {
+        const form = qs('form[data-type="unified-composer"]');
+        if (!form) return;
+
+        // 仅在“组内 new chat”或“点击组内会话”两类场景显示
+        const path = location.pathname;
+        const fromPending = !!(window.__cgptPendingFid && folders[window.__cgptPendingFid]);
+        const mappedFid = lastActiveMap[path];
+        const fromMapped = !!(mappedFid && mappedFid !== '__history__' && folders[mappedFid]);
+        const shouldShow = fromPending || fromMapped;
+
+        let box = form.querySelector('#cgpt-prompt-toggle');
+        if (!shouldShow) { if (box) box.remove(); return; }
+
+        // 计算与发送前计数器一致的 key（根路径首条消息用临时 token 键）
+        const key = (path === '/' && window.__cgptPendingToken)
+            ? `/${window.__cgptPendingToken}` : path;
+
+        function placeBox(b) {
+            try {
+                // 尽量匹配多语言与不同实现
+                const micBtn = qs(
+                    [
+                        'button[aria-label*="voice" i]',
+                        'button[aria-label*="microphone" i]',
+                        'button[aria-label*="语音"]',
+                        'button[aria-label*="麦克风"]',
+                        'button[data-testid*="voice" i]'
+                    ].join(','),
+                    form
+                );
+                // 找不到麦克风则回退到发送按钮，避免位置丢失
+                const target = micBtn || qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]', form);
+
+                const fr = form.getBoundingClientRect();
+                if (target) {
+                    const tr = target.getBoundingClientRect();
+                    const left = Math.max(8, Math.round(tr.left - fr.left - b.offsetWidth - 40)); // 与目标间距 8px
+                    const top  = Math.round(tr.top - fr.top + (tr.height - b.offsetHeight) / 2); // 垂直居中
+                    b.style.left = left + 'px';
+                    b.style.top  = top + 'px';
+                    b.style.right = 'auto';
+                    b.style.bottom = 'auto';
+                } else {
+                    // 兜底：仍保持原来的靠右策略
+                    b.style.left = '';
+                    b.style.right = '92px';
+                    b.style.top = 'auto';
+                    b.style.bottom = '8px';
+                }
+            } catch {}
+        }
+
+// 创建容器与开关
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'cgpt-prompt-toggle';
+            box.style.cssText = [
+                'position:absolute','z-index:3',
+                'display:flex','align-items:center','gap:6px',
+                'background:rgba(255,255,255,0.05)','border-radius:12px',
+                'padding:2px 8px','font-size:12px','user-select:none'
+            ].join(';');
+
+            const label = document.createElement('span');
+            label.textContent = 'prompt';
+
+            const sw = document.createElement('button');
+            sw.type = 'button';
+            sw.className = 'cgpt-switch';
+            sw.style.cssText = [
+                'width:34px','height:20px','border-radius:10px','border:none',
+                'position:relative','cursor:pointer','outline:none'
+            ].join(';');
+
+            const knob = document.createElement('span');
+            knob.style.cssText = [
+                'position:absolute','top:2px','left:2px','width:16px','height:16px',
+                'border-radius:50%','background:#fff','transition:left .15s'
+            ].join(';');
+            sw.appendChild(knob);
+
+            // 状态渲染
+            const render = (on) => {
+                sw.setAttribute('aria-pressed', String(!!on));
+                sw.style.background = on ? '#10a37f' : '#666';
+                knob.style.left = on ? '16px' : '2px';
+            };
+
+            // 默认开启：未定义即 true
+            const map = window.__cgptPromptTogglePerPath || {};
+            const currentOn = map[key] !== false;
+            render(currentOn);
+
+            sw.onclick = () => {
+                const next = !(window.__cgptPromptTogglePerPath[key] !== false);
+                window.__cgptPromptTogglePerPath[key] = next;
+                try {
+                    sessionStorage.setItem('cgptPromptToggle', JSON.stringify(window.__cgptPromptTogglePerPath));
+                } catch {}
+                render(next);
+            };
+
+            box.append(label, sw);
+            // 将容器加到表单。表单通常是相对定位；若不是，也不会影响交互
+            form.appendChild(box);
+
+            placeBox(box);
+            if (!form.__promptToggleRO) {
+                const ro = new ResizeObserver(() => placeBox(box));
+                ro.observe(form);
+                form.__promptToggleRO = ro;
+            }
+            // 新增：若能拿到麦克风按钮，同步监听它自身的尺寸与可见性变化
+            const __mic = qs(
+                'button[aria-label*="voice" i],button[aria-label*="microphone" i],button[aria-label*="语音"],button[aria-label*="麦克风"],button[data-testid*="voice" i]',
+                form
+            );
+            if (__mic && !form.__promptToggleMicRO) {
+                try {
+                    const ro2 = new ResizeObserver(() => placeBox(box));
+                    ro2.observe(__mic);
+                    form.__promptToggleMicRO = ro2;
+                } catch {}
+            }
+            window.addEventListener('resize', () => placeBox(box), { passive: true });
+        } else {
+            // 已存在时同步当前 key 的状态
+            const keyNow = (path === '/' && window.__cgptPendingToken)
+                ? `/${window.__cgptPendingToken}` : path;
+            const map = window.__cgptPromptTogglePerPath || {};
+            const on = map[keyNow] !== false;
+            const sw = box.querySelector('.cgpt-switch');
+            const knob = sw?.firstElementChild;
+            if (sw && knob) {
+                sw.setAttribute('aria-pressed', String(!!on));
+                sw.style.background = on ? '#10a37f' : '#666';
+                knob.style.left = on ? '16px' : '2px';
+            }
+            placeBox(box);
+        }
+    }
+
+
+    window.__cgptPromptTogglePerPath = (() => {
+        try { return JSON.parse(sessionStorage.getItem('cgptPromptToggle') || '{}'); }
+        catch { return {}; }
+    })();
+
 
     // 单实例哨兵：若已存在则直接退出，防止重复执行
     if (window.__cgptBookmarksInstance) {
@@ -241,7 +390,7 @@ const MAX_PROMPTS = 4;
         },
         {
             label: 'change_code',
-            text: ['※Follow this rule:Strictly adhere to the following requirements: Only modify code directly related to the specific question or requirement raised, leaving all other unrelated code and functionality unchanged; after modification, you must test the implementation yourself to ensure three critical points are met - first, the requirement is fully satisfied, second, both frontend and backend functions operate smoothly, and third, code performance remains stable without affecting anything outside the intended scope; provide both the original source code and the modified version for easy comparison and manual implementation;※']
+            text: ['※Follow this rule:Strictly adhere to the following requirements: Only modify code directly related to the specific question or requirement raised, leaving all other unrelated code and functionality unchanged; after modification, you must test the implementation yourself to ensure three critical points are met - first, the requirement is fully satisfied, second, both frontend and backend functions operate smoothly, and third, code performance remains stable without affecting anything outside the intended scope; provide both the original source code and the modified version for easy comparison and manual implementation;If a new code is added, the original codes around the new code position are given for easy positioning.※']
         },
         {
             label: 'NORMAL_1',
@@ -2498,36 +2647,23 @@ const MAX_PROMPTS = 4;
                 });
             }
 
-            let last = ed.lastElementChild;
+            const toggles = window.__cgptPromptTogglePerPath || {};
+            const toggleOn = toggles[counterKey] !== false;
 
-            if (injectNow && groupPrompt && !(last && last.innerText.trim() === groupPrompt)) {
-                // 移除旧的 prompt 或 Task content:，避免重复
+            if (injectNow && groupPrompt && toggleOn) {
                 qsa('p', ed).forEach((p, i, arr) => {
                     const txt = p.innerText.trim();
-                    if ((txt === groupPrompt || txt === 'Task content:') && i !== arr.length - 1) {
-                        p.remove();
-                    }
+                    if ((txt === groupPrompt || txt === 'Task content:') && i !== arr.length - 1) p.remove();
                 });
-
-                // 构造提示词和固定前缀
-                const gp = document.createElement('p');
-                gp.textContent = groupPrompt;
-
-                const tc = document.createElement('p');
-                tc.textContent = 'Task content:';
-
-                // 使用文档片段保持顺序，再整体插入
-                const frag = document.createDocumentFragment();
-                frag.appendChild(gp);
-                frag.appendChild(tc);            // 新增前缀行
+                const gp = document.createElement('p'); gp.textContent = groupPrompt;
+                const tc = document.createElement('p'); tc.textContent = 'Task content:';
+                const frag = document.createDocumentFragment(); frag.appendChild(gp); frag.appendChild(tc);
                 ed.prepend(frag);
             }
 
-
+            let last = ed.lastElementChild;
             if (!(last && last.innerText.trim() === SUFFIX)) {
-                const p = document.createElement('p');
-                p.textContent = SUFFIX;
-                ed.appendChild(p);
+                const p = document.createElement('p'); p.textContent = SUFFIX; ed.appendChild(p);
             }
             ed.dispatchEvent(new Event('input', {bubbles: true}));
         }
@@ -2558,7 +2694,9 @@ const MAX_PROMPTS = 4;
             const send = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]');
 
             if (!ed || !send || send.dataset.hooked) return;
-            send.dataset.hooked = "1";                                                   // 标记已挂钩避免重复
+            send.dataset.hooked = "1";
+
+            try { ensurePromptToggle(); } catch {}
 
             // 修改后版本：新增 i === -1 时插入逻辑，只对 activeFid 生效
             const bumpActiveChat = () => {
@@ -2650,7 +2788,7 @@ const MAX_PROMPTS = 4;
                     window.__cgptPendingFid = null;
                     window.__cgptPendingToken = null;
                 }
-
+                ensurePromptToggle();
             };
 
             window.bumpActiveChat = bumpActiveChat;
@@ -2778,6 +2916,7 @@ const MAX_PROMPTS = 4;
                         const hasUserInput = ed && ed.innerText.trim().length > 0;
                         if (hasUserInput) appendSuffix();
                         bumpActiveChat();
+                        ensurePromptToggle();
                         scheduleHistoryRefresh();
                         ensureChatRegistered();
                         ensureFrostedBG();     // 新增：回车发送后同样保证背景
@@ -2903,7 +3042,7 @@ const MAX_PROMPTS = 4;
             document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                 el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
             });
-
+            ensurePromptToggle();
         }
 
 
@@ -2934,6 +3073,7 @@ const MAX_PROMPTS = 4;
                 } catch {
                 }
                 setTimeout(highlightActive, 0);
+                setTimeout(() => { try { ensurePromptToggle(); } catch {} }, 0);
 
             }, true);
         }
