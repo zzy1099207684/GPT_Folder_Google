@@ -2693,10 +2693,12 @@ const MAX_PROMPTS = 4;
             // 兼容新版界面多种发送按钮写法
             const send = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]');
 
+            try { ensurePromptToggle(); } catch {}
+
             if (!ed || !send || send.dataset.hooked) return;
             send.dataset.hooked = "1";
 
-            try { ensurePromptToggle(); } catch {}
+
 
             // 修改后版本：新增 i === -1 时插入逻辑，只对 activeFid 生效
             const bumpActiveChat = () => {
