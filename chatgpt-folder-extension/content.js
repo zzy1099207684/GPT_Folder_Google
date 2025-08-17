@@ -1296,7 +1296,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             });
             const fontLabel = Object.assign(document.createElement('span'), {
                 textContent: 'Font:',                          // 标签
-                style: 'margin-right:8px;font-size:12px'
+                style: 'margin-right:8px;font-size:14px'
             });
             const fontSelect = Object.assign(document.createElement('select'), {
                 style: [
@@ -3114,6 +3114,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 row.__cgptSpaBound = 1;
                                 row.addEventListener('click', e => {
                                     if (e.defaultPrevented) return;
+                                    // 放行复选框、按钮等交互控件
+                                    if (e.target.closest('input[type="checkbox"], [data-radix-popper-content-wrapper], [data-radix-focus-guard]')) {
+                                        return;
+                                    }
                                     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
                                     const href = row.getAttribute('href');
                                     if (!href) return;
@@ -3121,6 +3125,23 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     history.pushState({}, '', href);
                                     window.dispatchEvent(new Event('popstate'));
                                 }, {passive: false});
+
+                                // 防止上层其他捕获监听抢走
+                                row.addEventListener('mousedown', e => {
+                                    if (e.target.closest('input[type="checkbox"], [data-radix-popper-content-wrapper], [data-radix-focus-guard]')) {
+                                        e.stopPropagation();
+                                    }
+                                }, true); // capture
+
+                                // 兜底样式，避免遮罩挡点
+                                document.head.insertAdjacentHTML('beforeend', `
+                                <style>
+                                  a [data-radix-popper-content-wrapper],
+                                  a [data-radix-focus-guard],
+                                  a input[type="checkbox"] { pointer-events:auto; position:relative; z-index:1; }
+                                </style>
+                                `);
+
                             }
 
 // 维持选中态与顺序
