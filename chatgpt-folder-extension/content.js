@@ -2269,6 +2269,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 activeFid = clickedFid;
                                 render();
                                 highlightActive();
+
+                                window.__cgptPendingNewChatPath = p;
+                                try { scheduleHistoryRefresh?.(p); } catch {}
+                                try { __cgptEnsureHistoryRowFor?.(p); } catch {}
                             }
 
                         } catch (err) {
@@ -2789,9 +2793,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const watcher = setInterval(() => {
                     if (location.pathname.startsWith('/c/')) {
                         clearInterval(watcher);
+                        const p = location.pathname;
                         window.bumpActiveChat?.();
-                        window.scheduleHistoryRefresh?.(); // 新增：立即启动 Chats 监听与占位替换
-                        window.__cgptMonitorFirstAnswerThenReload?.(); // 新增：进入 /c/... 后再启动“首答结束→3秒→拉取会话”监控
+                        window.scheduleHistoryRefresh?.(p);
+                        window.__cgptMonitorFirstAnswerThenReload?.(); // 仍保留原先DOM方案
+                        try { __cgptEnsureHistoryRowFor?.(p); } catch {}
                     }
                 }, 120);
             }
@@ -2924,56 +2930,42 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 window.bumpActiveChat = bumpActiveChat;
 
                 // 等待窗口改为 15 s，刷新间隔固定 500 ms
-                function scheduleHistoryRefresh() {
-                    // 统一获取侧栏根节点，兼容旧版 div#history 与新版 nav[aria-label="Chat history"]
+                function scheduleHistoryRefresh(targetPath) {
                     const getHist = () => qs('div#history') || qs('nav[aria-label="Chat history"]');
 
-                    // 1. 若侧栏尚未出现目标路径，则手动插入占位条目
                     const insertHistoryEntry = () => {
                         const hist = getHist();
                         if (!hist) return;
 
-                        const target = location.pathname;
-                        if (hist.querySelector(`a[href*="${target}"]`)) return;   // 已有条目
-
-                        // 直接生成结构，避免克隆失效
+                        const target = targetPath || location.pathname;   // 允许外部显式指定目标
+                        if (hist.querySelector(`a[href*="${target}"]`)) return;
                         const a = document.createElement('a');
                         a.href = target;
-                        a.dataset.url = target;          // 占位标记，后续用来识别并移除
+                        a.dataset.url = target;                           // 占位标记
                         a.textContent = 'New chat';
-                        a.style.cssText =
-                            'display:block;padding:6px 12px;font-size:13px;line-height:1.25;' +
-                            'border-radius:6px;color:#b2b2b2;text-decoration:none;';
-
+                        a.style.cssText = 'display:block;padding:6px 12px;font-size:13px;line-height:1.25;border-radius:6px;color:#b2b2b2;text-decoration:none;';
                         const li = document.createElement('li');
                         li.style.display = 'none';
                         li.dataset.cgptPlaceholder = '1';
-
                         li.appendChild(a);
                         hist.insertBefore(li, hist.firstChild);
                     };
 
-                    // 2. 原 MutationObserver 逻辑，用于后续刷新顺序
                     const watch = () => {
-                        insertHistoryEntry();      // 先插入
+                        insertHistoryEntry();
                         const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                         if (!hist) return;
-                        const target = location.pathname;
+                        const target = targetPath || location.pathname;
                         const moveIfReady = () => {
-                            // 仅把没有 data-url 的视为“真·聊天”节点
                             const ok =
-                                qs(`div#history a[href*="${target}"]:not([data-url])`)
-                                || qs(`nav[aria-label="Chat history"] a[href*="${target}"]:not([data-url])`);
+                                qs(`div#history a[href*="${target}"]:not([data-url])`) ||
+                                qs(`nav[aria-label="Chat history"] a[href*="${target}"]:not([data-url])`);
                             if (ok) {
-                                // 若仍存在占位条目，安全移除
-                                const placeholder = qs(`div#history a[data-url="${target}"]`)
-                                    || qs(`nav[aria-label="Chat history"] a[data-url="${target}"]`);
+                                const placeholder =
+                                    qs(`div#history a[data-url="${target}"]`) ||
+                                    qs(`nav[aria-label="Chat history"] a[data-url="${target}"]`);
                                 if (placeholder && placeholder !== ok) {
-                                    try {                     // 解除 liveSyncMap 绑定，避免脏引用
-                                        (typeof detachLink === 'function') && detachLink(placeholder);
-                                    } catch (e) {
-                                        console.warn('[Bookmark] detachLink error:', e);
-                                    }
+                                    try { (typeof detachLink === 'function') && detachLink(placeholder); } catch (e) {}
                                     placeholder.closest('li')?.remove();
                                 }
                                 refreshHistoryOrder();
@@ -2981,17 +2973,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             }
                             return false;
                         };
-
                         if (moveIfReady()) return;
-                        const ob = new MutationObserver(() => {
-                            if (moveIfReady()) ob.disconnect();
-                        });
+                        const ob = new MutationObserver(() => { if (moveIfReady()) ob.disconnect(); });
                         ob.observe(hist, {childList: true, subtree: true});
-                        setTimeout(() => ob.disconnect(), 60000);  // 60 s 超时自动清理
+                        setTimeout(() => ob.disconnect(), 60000);
                     };
 
-                    // 3. 根据当前路径决定立即监听或延迟到 popstate
-                    if (location.pathname.startsWith('/c/')) {
+                    if ((targetPath || location.pathname).startsWith('/c/')) {
                         watch();
                     } else {
                         const once = () => {
@@ -3002,21 +2990,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         window.addEventListener('popstate', once);
                     }
 
-                    /* 4. 兜底：1.5 秒后仍无条目则整页刷新 */
                     setTimeout(() => {
                         try {
                             const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
-                            if (!hist) return;
-                            const target = location.pathname;
-                            if (!qs(`div#history a[href*="${target}"]`, hist)) {
-                                scheduleHistoryRefresh();
+                            const target = targetPath || location.pathname;
+                            if (hist && !qs(`div#history a[href*="${target}"]`, hist)) {
+                                scheduleHistoryRefresh(targetPath);        // 递归时继续盯同一个目标
                                 refreshHistoryOrder();
                             }
-                        } catch (e) {
-                            console.warn('[Bookmark] Fallback reload error:', e);
-                        }
+                        } catch (e) {}
                     }, 1500);
                 }
+
 
                 // 新增：首次回答结束→3秒→调用conversations→局部刷新
                 (function () {
@@ -3040,10 +3025,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         return h;
                     }
                     // 新增：把返回数据用于最小 DOM 补丁，确保 Chats 可见
-                    function __cgptPatchChatsFromResponse(data) {
+                    function __cgptPatchChatsFromResponse(data, opts = {}) {
                         try {
+                            const explicitPath = opts.path || null;
+                            const idFromOpt = opts.id || (explicitPath ? (/\/c\/([^/?#]+)/.exec(explicitPath)||[])[1] : null);
                             const idMatch = /\/c\/([^/?#]+)/.exec(location.pathname);
-                            const curId = idMatch && idMatch[1];
+                            const curId = idFromOpt || (idMatch && idMatch[1]);
                             if (!curId || !data) return;
 
                             const list = Array.isArray(data.items) ? data.items
@@ -3055,47 +3042,33 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             const hist = document.querySelector('div#history') || document.querySelector('nav[aria-label="Chat history"]');
                             if (!hist) return;
 
-                            // function __cgptPatchChatsFromResponse(data) {...}
                             const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
                             const path = '/c/' + curId;
                             let row = chatsAside.querySelector(`a[href*="${path}"]`);
                             if (!row) {
-                                // 1) 选一个现有会话条目当模板
                                 const tplLink = chatsAside.querySelector('a[href^="/c/"]');
                                 const tplItem = tplLink && (tplLink.closest('li') || tplLink);
-
                                 if (tplItem) {
-                                    // 2) 深克隆，继承类名与事件委托
                                     const clone = tplItem.cloneNode(true);
                                     const link = clone.querySelector('a[href^="/c/"]') || clone;
-
-                                    // 3) 替换目标链接与可选的data-url，移除选中态
                                     link.href = path;
                                     if (link.hasAttribute('data-url')) link.setAttribute('data-url', path); else link.removeAttribute('data-url');
                                     link.removeAttribute('aria-current');
                                     link.removeAttribute('target');
                                     link.setAttribute('data-discover', 'true');
-
-                                    // 4) 写入标题，尽量只改文本节点，不动图标结构
                                     const titleEl =
                                         link.querySelector('.truncate') ||
                                         link.querySelector('[data-testid="conversation-item-title"]') ||
                                         link;
                                     titleEl.textContent = title;
-
-                                    // 5) 清掉可能遗留的选中背景类
                                     clone.querySelectorAll('[class]').forEach(n => {
                                         if (/\bbg-token-/.test(n.className)) n.className = n.className.replace(/\bbg-token-[^\s]+/g, '').trim();
                                     });
-
-                                    // 6) 插入到Chats列表顶部
-                                    const list = tplItem.parentElement && /^(UL|OL)$/.test(tplItem.parentElement.tagName) ? tplItem.parentElement : null;
-                                    if (list) list.insertBefore(clone, list.firstChild);
+                                    const listEl = tplItem.parentElement && /^(UL|OL)$/.test(tplItem.parentElement.tagName) ? tplItem.parentElement : null;
+                                    if (listEl) listEl.insertBefore(clone, listEl.firstChild);
                                     else chatsAside.insertBefore(clone, tplItem);
-
                                     row = link;
                                 } else {
-                                    // 模板兜底：仍保持原有逻辑，但加上data-url与类名，避免整页刷新
                                     const li = document.createElement('li');
                                     const a = document.createElement('a');
                                     a.href = path;
@@ -3110,7 +3083,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     row = a;
                                 }
                             } else {
-                                // 已存在，保持同步标题并确保可见
                                 const textEl = row.querySelector('.truncate') || row;
                                 if (textEl.textContent !== title) textEl.textContent = title;
                                 const li = row.closest('li');
@@ -3130,35 +3102,25 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     window.dispatchEvent(new Event('popstate'));
                                 }, {passive: false});
                             }
-                            /* 新增：当前会话高亮 */
-                            try {
-                                const curr = location.pathname;
-                                if (curr === path) {
-                                    row.setAttribute('aria-current', 'page');
-                                } else {
-                                    row.removeAttribute('aria-current');
-                                }
-                            } catch {}
 
-                            // 统一让侧栏排序与高亮逻辑跑一次
+// 维持选中态与顺序
                             try { refreshHistoryOrder(); } catch {}
-
                         } catch {}
                     }
 
-
-                    async function __cgptFetchConversationsAndRefresh() {
+                    async function __cgptFetchConversationsAndRefresh(explicitIdOrPath) {
                         try {
                             const headers = await __cgptGetAuthHeaders();
-                            const url = '/backend-api/conversations?offset=0&limit=30&order=updated&is_archived=false';
-                            const res = await fetch(url, {headers, credentials: 'same-origin'});
+                            const res = await fetch('/backend-api/conversations?offset=0&limit=30&order=updated&is_archived=false', {headers, credentials: 'same-origin'});
                             if (res.ok) {
-                                // 新增：解析并进行最小 DOM 补丁
-                                try {
-                                    const json = await res.json().catch(() => null);
-                                    if (json) __cgptPatchChatsFromResponse(json);
-                                } catch {}
-                                try { scheduleHistoryRefresh(); } catch {}
+                                const json = await res.json().catch(() => null);
+                                if (json) {
+                                    const opts = typeof explicitIdOrPath === 'string'
+                                        ? (explicitIdOrPath.startsWith('/c/') ? {path: explicitIdOrPath} : {id: explicitIdOrPath})
+                                        : {};
+                                    __cgptPatchChatsFromResponse(json, opts);
+                                }
+                                try { scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined); } catch {}
                             }
                         } catch {}
                     }
@@ -3174,7 +3136,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const startAt = Date.now();
                         const sel = '#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]';
                         const int = setInterval(() => {
-                            if (Date.now() - startAt > 60000) { clearInterval(int); return; }
                             const btn = qs(sel);
                             const label = btn ? ((btn.getAttribute('aria-label') || btn.innerText || '') + '').toLowerCase() : '';
                             const stopOn = label.includes('stop');
@@ -3186,6 +3147,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             }
                         }, 300);
                     }
+
+                    // 小兜底：盯住某个/c/...，先做DOM占位监听，再在4s与10s各拉一次conversations列表以补条目
+                    function __cgptEnsureHistoryRowFor(path) {
+                        if (!path || !path.startsWith('/c/')) return;
+                        try { scheduleHistoryRefresh?.(path); } catch {}
+                        const id = (/\/c\/([^/?#]+)/.exec(path)||[])[1];
+                        setTimeout(() => { try { __cgptFetchConversationsAndRefresh?.(id); } catch {} }, 4000);
+                        setTimeout(() => { try { __cgptFetchConversationsAndRefresh?.(id); } catch {} }, 10000);
+                    }
+                    window.__cgptEnsureHistoryRowFor = __cgptEnsureHistoryRowFor;
+
                     window.__cgptMonitorFirstAnswerThenReload = __cgptMonitorFirstAnswerThenReload;
                 })();
 
