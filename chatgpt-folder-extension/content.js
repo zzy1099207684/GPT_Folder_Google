@@ -1237,10 +1237,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             let currentNewChatPopHandler = null;
             // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
             const historyClickHandler = e => {
+                // 忽略对交互子元素的点击：复选框、三点按钮及其菜单
+                if (e.target && e.target.closest('input.history-checkbox, .__menu-item-trailing-btn, [data-trailing-button], button, [role="menu"], [role="menuitem"], [role="button"]')) {
+                    return;
+                }
+
                 const a = e.target.closest('a[href*="/c/"]');
                 if (!a) return;
 
-                // 新增：若刚从组内触发导航，则忽略这次 history 覆盖
                 if (window.__cgptIgnoreNextHistoryClick) return;
 
                 clearActiveOnHistoryClick = true;
@@ -1254,11 +1258,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 } catch (err) {
                     console.warn('[Bookmark] Error saving lastActiveMap:', err);
                 }
-                setTimeout(() => {
-                    highlightActive();
-                }, 0);
+                setTimeout(() => { highlightActive(); }, 0);
             };
-
 
             historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
             historyNode.addEventListener('click', historyClickHandler);
@@ -1543,25 +1544,25 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const currAnchor = anchors.find(a => samePath(a.href, currPath));
                     if (!currAnchor) return;
 
-                    const row = currAnchor.closest('li') || currAnchor;   // 只移动条目本身
-                    if (row && row.parentElement) {
-                        const parent = row.parentElement;                 // <aside> 或 <ul>
-                        const label = parent.querySelector('h2.__menu-label');
-                        // 计算目标插入点
-                        let target = label ? label.nextElementSibling : parent.firstChild;
-                        // 若目标节点已被移走或并非 parent 的子节点，则兜底用列表首个有效子节点
-                        if (!target || target.parentElement !== parent) target = parent.firstChild;
+                    /* 新增：统一维护 Chats 的选中态 */
+                    anchors.forEach(a => a.removeAttribute('aria-current'));
+                    currAnchor.setAttribute('aria-current', 'page');
 
-                        // 只有条目确实需要移动且目标安全时才执行插入
+                    const row = currAnchor.closest('li') || currAnchor;
+                    if (row && row.parentElement) {
+                        const parent = row.parentElement;
+                        const label = parent.querySelector('h2.__menu-label');
+                        let target = label ? label.nextElementSibling : parent.firstChild;
+                        if (!target || target.parentElement !== parent) target = parent.firstChild;
                         if (target && target !== row) {
-                            parent.insertBefore(row, target);             // 永远在同一父节点内移动，避免 DOMException
+                            parent.insertBefore(row, target);
                         }
                     }
-
                 } catch (e) {
                     console.warn('[Bookmark] refreshHistoryOrder error:', e);
                 }
             }
+
 
 
             function deepCleanMemory() {
@@ -1746,8 +1747,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 if (a.dataset.drag) return;
                 a.dataset.drag = "1";
                 a.draggable = true;
-                a.ondragstart = e => e.dataTransfer.setData('text/plain', a.href);
+                a.ondragstart = e => {
+                    // 在交互控件上禁用拖拽，保留正常点击
+                    if (e && e.target && e.target.closest('input, button, [data-trailing-button], .__menu-item-trailing-btn, [role="menu"], [role="menuitem"], [role="button"]')) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    e.dataTransfer.setData('text/plain', a.href);
+                };
             }
+
 
             // 在统一回调外部新增节流状态
             const unifiedObsCallback = (() => {
@@ -2782,9 +2791,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         clearInterval(watcher);
                         window.bumpActiveChat?.();
                         window.scheduleHistoryRefresh?.(); // 新增：立即启动 Chats 监听与占位替换
+                        window.__cgptMonitorFirstAnswerThenReload?.(); // 新增：进入 /c/... 后再启动“首答结束→3秒→拉取会话”监控
                     }
                 }, 120);
             }
+
 
             function isUploading() {
                 const form = qs('form[data-type="unified-composer"]');
@@ -3007,7 +3018,179 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }, 1500);
                 }
 
+                // 新增：首次回答结束→3秒→调用conversations→局部刷新
+                (function () {
+                    function __cgptBuildAcceptLanguage() {
+                        const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
+                            .map(s => String(s || '').split(';')[0]).filter(Boolean);
+                        const uniq = [...new Set(ls)].slice(0, 4);
+                        if (!uniq.length) return 'en-US,en;q=0.9';
+                        const qs = [1.0, 0.9, 0.8, 0.7];
+                        return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
+                    }
+                    async function __cgptGetAuthHeaders() { // 授权参考Batch Delete中的getHeaders实现:contentReference[oaicite:1]{index=1}
+                        const h = {accept: '*/*', 'accept-language': __cgptBuildAcceptLanguage(), 'content-type': 'application/json'};
+                        try {
+                            const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
+                            if (r.ok) {
+                                const j = await r.json();
+                                if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
+                            }
+                        } catch {}
+                        return h;
+                    }
+                    // 新增：把返回数据用于最小 DOM 补丁，确保 Chats 可见
+                    function __cgptPatchChatsFromResponse(data) {
+                        try {
+                            const idMatch = /\/c\/([^/?#]+)/.exec(location.pathname);
+                            const curId = idMatch && idMatch[1];
+                            if (!curId || !data) return;
+
+                            const list = Array.isArray(data.items) ? data.items
+                                : Array.isArray(data.conversations) ? data.conversations : [];
+                            const item = list.find(it => it?.id === curId || it?.conversation_id === curId);
+                            if (!item) return;
+
+                            const title = String(item.title || 'New chat');
+                            const hist = document.querySelector('div#history') || document.querySelector('nav[aria-label="Chat history"]');
+                            if (!hist) return;
+
+                            // function __cgptPatchChatsFromResponse(data) {...}
+                            const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+                            const path = '/c/' + curId;
+                            let row = chatsAside.querySelector(`a[href*="${path}"]`);
+                            if (!row) {
+                                // 1) 选一个现有会话条目当模板
+                                const tplLink = chatsAside.querySelector('a[href^="/c/"]');
+                                const tplItem = tplLink && (tplLink.closest('li') || tplLink);
+
+                                if (tplItem) {
+                                    // 2) 深克隆，继承类名与事件委托
+                                    const clone = tplItem.cloneNode(true);
+                                    const link = clone.querySelector('a[href^="/c/"]') || clone;
+
+                                    // 3) 替换目标链接与可选的data-url，移除选中态
+                                    link.href = path;
+                                    if (link.hasAttribute('data-url')) link.setAttribute('data-url', path); else link.removeAttribute('data-url');
+                                    link.removeAttribute('aria-current');
+                                    link.removeAttribute('target');
+                                    link.setAttribute('data-discover', 'true');
+
+                                    // 4) 写入标题，尽量只改文本节点，不动图标结构
+                                    const titleEl =
+                                        link.querySelector('.truncate') ||
+                                        link.querySelector('[data-testid="conversation-item-title"]') ||
+                                        link;
+                                    titleEl.textContent = title;
+
+                                    // 5) 清掉可能遗留的选中背景类
+                                    clone.querySelectorAll('[class]').forEach(n => {
+                                        if (/\bbg-token-/.test(n.className)) n.className = n.className.replace(/\bbg-token-[^\s]+/g, '').trim();
+                                    });
+
+                                    // 6) 插入到Chats列表顶部
+                                    const list = tplItem.parentElement && /^(UL|OL)$/.test(tplItem.parentElement.tagName) ? tplItem.parentElement : null;
+                                    if (list) list.insertBefore(clone, list.firstChild);
+                                    else chatsAside.insertBefore(clone, tplItem);
+
+                                    row = link;
+                                } else {
+                                    // 模板兜底：仍保持原有逻辑，但加上data-url与类名，避免整页刷新
+                                    const li = document.createElement('li');
+                                    const a = document.createElement('a');
+                                    a.href = path;
+                                    a.setAttribute('data-url', path);
+                                    a.setAttribute('data-discover', 'true');
+                                    a.className = 'group __menu-item hoverable gap-1.5';
+                                    a.textContent = title;
+                                    li.appendChild(a);
+                                    const ul = chatsAside.querySelector('ul,ol');
+                                    if (ul) ul.insertBefore(li, ul.firstChild);
+                                    else chatsAside.insertBefore(li, chatsAside.firstChild);
+                                    row = a;
+                                }
+                            } else {
+                                // 已存在，保持同步标题并确保可见
+                                const textEl = row.querySelector('.truncate') || row;
+                                if (textEl.textContent !== title) textEl.textContent = title;
+                                const li = row.closest('li');
+                                if (li && li.style.display === 'none') li.style.display = '';
+                            }
+
+                            /* 新增：给条目绑定一次性 SPA 导航，避免整页刷新 */
+                            if (row && !row.__cgptSpaBound) {
+                                row.__cgptSpaBound = 1;
+                                row.addEventListener('click', e => {
+                                    if (e.defaultPrevented) return;
+                                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                                    const href = row.getAttribute('href');
+                                    if (!href) return;
+                                    e.preventDefault();
+                                    history.pushState({}, '', href);
+                                    window.dispatchEvent(new Event('popstate'));
+                                }, {passive: false});
+                            }
+                            /* 新增：当前会话高亮 */
+                            try {
+                                const curr = location.pathname;
+                                if (curr === path) {
+                                    row.setAttribute('aria-current', 'page');
+                                } else {
+                                    row.removeAttribute('aria-current');
+                                }
+                            } catch {}
+
+                            // 统一让侧栏排序与高亮逻辑跑一次
+                            try { refreshHistoryOrder(); } catch {}
+
+                        } catch {}
+                    }
+
+
+                    async function __cgptFetchConversationsAndRefresh() {
+                        try {
+                            const headers = await __cgptGetAuthHeaders();
+                            const url = '/backend-api/conversations?offset=0&limit=30&order=updated&is_archived=false';
+                            const res = await fetch(url, {headers, credentials: 'same-origin'});
+                            if (res.ok) {
+                                // 新增：解析并进行最小 DOM 补丁
+                                try {
+                                    const json = await res.json().catch(() => null);
+                                    if (json) __cgptPatchChatsFromResponse(json);
+                                } catch {}
+                                try { scheduleHistoryRefresh(); } catch {}
+                            }
+                        } catch {}
+                    }
+
+                    function __cgptMonitorFirstAnswerThenReload() {
+                        if (!location.pathname.startsWith('/c/')) return;
+                        const m = /\/c\/([^/?#]+)/.exec(location.pathname);
+                        const id = m && m[1];
+                        if (!id) return;
+                        window.__cgptFirstReplyDoneMap = window.__cgptFirstReplyDoneMap || {};
+                        if (window.__cgptFirstReplyDoneMap[id]) return;
+
+                        const startAt = Date.now();
+                        const sel = '#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]';
+                        const int = setInterval(() => {
+                            if (Date.now() - startAt > 60000) { clearInterval(int); return; }
+                            const btn = qs(sel);
+                            const label = btn ? ((btn.getAttribute('aria-label') || btn.innerText || '') + '').toLowerCase() : '';
+                            const stopOn = label.includes('stop');
+                            const hasAssistant = !!document.querySelector('[data-message-author-role="assistant"],[data-testid="assistant"],[data-message-role="assistant"]');
+                            if (!stopOn && hasAssistant) {
+                                clearInterval(int);
+                                window.__cgptFirstReplyDoneMap[id] = 1;
+                                setTimeout(__cgptFetchConversationsAndRefresh, 3000);
+                            }
+                        }, 300);
+                    }
+                    window.__cgptMonitorFirstAnswerThenReload = __cgptMonitorFirstAnswerThenReload;
+                })();
+
                 window.scheduleHistoryRefresh = scheduleHistoryRefresh;
+
 
                 // ① 发送按钮点击
                 send.addEventListener('click', () => {
@@ -3019,7 +3202,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     bumpActiveChat();
                     scheduleHistoryRefresh();
                     ensureChatRegistered();
-                    ensureFrostedBG();             // 新增：发送后确保磨砂背景存在
+                    ensureFrostedBG();
+                    window.__cgptMonitorFirstAnswerThenReload?.();
                 }, {capture: true});
 
                 // ② 回车快捷发送
@@ -3042,11 +3226,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             ensurePromptToggle();
                             scheduleHistoryRefresh();
                             ensureChatRegistered();
-                            ensureFrostedBG();     // 新增：回车发送后同样保证背景
+                            ensureFrostedBG();
+                            window.__cgptMonitorFirstAnswerThenReload?.();
                         }
                     }, {capture: true});
 
                 }
+
+
             }
 
             observers.add(new MutationObserver(bindSend)).observe(document.body, {childList: true, subtree: true});
@@ -3164,6 +3351,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                     el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
                 });
+                try { refreshHistoryOrder(); } catch {}
                 ensurePromptToggle();
             }
 
