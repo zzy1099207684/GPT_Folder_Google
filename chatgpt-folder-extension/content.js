@@ -1258,7 +1258,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 } catch (err) {
                     console.warn('[Bookmark] Error saving lastActiveMap:', err);
                 }
-                setTimeout(() => { highlightActive(); }, 0);
+                setTimeout(() => {
+                    highlightActive();
+                }, 0);
             };
 
             historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
@@ -1562,7 +1564,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     console.warn('[Bookmark] refreshHistoryOrder error:', e);
                 }
             }
-
 
 
             function deepCleanMemory() {
@@ -2271,8 +2272,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 highlightActive();
 
                                 window.__cgptPendingNewChatPath = p;
-                                try { scheduleHistoryRefresh?.(p); } catch {}
-                                try { __cgptEnsureHistoryRowFor?.(p); } catch {}
+                                try {
+                                    scheduleHistoryRefresh?.(p);
+                                } catch {
+                                }
+                                try {
+                                    __cgptEnsureHistoryRowFor?.(p);
+                                } catch {
+                                }
                             }
 
                         } catch (err) {
@@ -2316,9 +2323,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         // 仅保留本次真正新增的路径
                         let newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
 
-                        /* 兼容批量删除脚本在 <a> 节点上插入复选框造成的
-                       MutationObserver 次序提前，导致 newPaths 判空。
-                       若判空，则以侧栏当前首行作为兜底，确保能落到点击的分组 */
                         if (!newPaths.length && anchors[0]) {
                             try {
                                 const topPath = new URL(anchors[0].href, location.origin).pathname;
@@ -2797,7 +2801,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         window.bumpActiveChat?.();
                         window.scheduleHistoryRefresh?.(p);
                         window.__cgptMonitorFirstAnswerThenReload?.(); // 仍保留原先DOM方案
-                        try { __cgptEnsureHistoryRowFor?.(p); } catch {}
+                        try {
+                            __cgptEnsureHistoryRowFor?.(p);
+                        } catch {
+                        }
                     }
                 }, 120);
             }
@@ -2965,7 +2972,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     qs(`div#history a[data-url="${target}"]`) ||
                                     qs(`nav[aria-label="Chat history"] a[data-url="${target}"]`);
                                 if (placeholder && placeholder !== ok) {
-                                    try { (typeof detachLink === 'function') && detachLink(placeholder); } catch (e) {}
+                                    try {
+                                        (typeof detachLink === 'function') && detachLink(placeholder);
+                                    } catch (e) {
+                                    }
                                     placeholder.closest('li')?.remove();
                                 }
                                 refreshHistoryOrder();
@@ -2974,7 +2984,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             return false;
                         };
                         if (moveIfReady()) return;
-                        const ob = new MutationObserver(() => { if (moveIfReady()) ob.disconnect(); });
+                        const ob = new MutationObserver(() => {
+                            if (moveIfReady()) ob.disconnect();
+                        });
                         ob.observe(hist, {childList: true, subtree: true});
                         setTimeout(() => ob.disconnect(), 60000);
                     };
@@ -2998,7 +3010,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 scheduleHistoryRefresh(targetPath);        // 递归时继续盯同一个目标
                                 refreshHistoryOrder();
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                        }
                     }, 1500);
                 }
 
@@ -3013,22 +3026,29 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const qs = [1.0, 0.9, 0.8, 0.7];
                         return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
                     }
+
                     async function __cgptGetAuthHeaders() { // 授权参考Batch Delete中的getHeaders实现:contentReference[oaicite:1]{index=1}
-                        const h = {accept: '*/*', 'accept-language': __cgptBuildAcceptLanguage(), 'content-type': 'application/json'};
+                        const h = {
+                            accept: '*/*',
+                            'accept-language': __cgptBuildAcceptLanguage(),
+                            'content-type': 'application/json'
+                        };
                         try {
                             const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
                             if (r.ok) {
                                 const j = await r.json();
                                 if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
                             }
-                        } catch {}
+                        } catch {
+                        }
                         return h;
                     }
+
                     // 新增：把返回数据用于最小 DOM 补丁，确保 Chats 可见
                     function __cgptPatchChatsFromResponse(data, opts = {}) {
                         try {
                             const explicitPath = opts.path || null;
-                            const idFromOpt = opts.id || (explicitPath ? (/\/c\/([^/?#]+)/.exec(explicitPath)||[])[1] : null);
+                            const idFromOpt = opts.id || (explicitPath ? (/\/c\/([^/?#]+)/.exec(explicitPath) || [])[1] : null);
                             const idMatch = /\/c\/([^/?#]+)/.exec(location.pathname);
                             const curId = idFromOpt || (idMatch && idMatch[1]);
                             if (!curId || !data) return;
@@ -3104,14 +3124,21 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             }
 
 // 维持选中态与顺序
-                            try { refreshHistoryOrder(); } catch {}
-                        } catch {}
+                            try {
+                                refreshHistoryOrder();
+                            } catch {
+                            }
+                        } catch {
+                        }
                     }
 
                     async function __cgptFetchConversationsAndRefresh(explicitIdOrPath) {
                         try {
                             const headers = await __cgptGetAuthHeaders();
-                            const res = await fetch('/backend-api/conversations?offset=0&limit=30&order=updated&is_archived=false', {headers, credentials: 'same-origin'});
+                            const res = await fetch('/backend-api/conversations?offset=0&limit=30&order=updated&is_archived=false', {
+                                headers,
+                                credentials: 'same-origin'
+                            });
                             if (res.ok) {
                                 const json = await res.json().catch(() => null);
                                 if (json) {
@@ -3120,9 +3147,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                         : {};
                                     __cgptPatchChatsFromResponse(json, opts);
                                 }
-                                try { scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined); } catch {}
+                                try {
+                                    scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
+                                } catch {
+                                }
                             }
-                        } catch {}
+                        } catch {
+                        }
                     }
 
                     function __cgptMonitorFirstAnswerThenReload() {
@@ -3151,11 +3182,25 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     // 小兜底：盯住某个/c/...，先做DOM占位监听，再在4s与10s各拉一次conversations列表以补条目
                     function __cgptEnsureHistoryRowFor(path) {
                         if (!path || !path.startsWith('/c/')) return;
-                        try { scheduleHistoryRefresh?.(path); } catch {}
-                        const id = (/\/c\/([^/?#]+)/.exec(path)||[])[1];
-                        setTimeout(() => { try { __cgptFetchConversationsAndRefresh?.(id); } catch {} }, 4000);
-                        setTimeout(() => { try { __cgptFetchConversationsAndRefresh?.(id); } catch {} }, 10000);
+                        try {
+                            scheduleHistoryRefresh?.(path);
+                        } catch {
+                        }
+                        const id = (/\/c\/([^/?#]+)/.exec(path) || [])[1];
+                        setTimeout(() => {
+                            try {
+                                __cgptFetchConversationsAndRefresh?.(id);
+                            } catch {
+                            }
+                        }, 4000);
+                        setTimeout(() => {
+                            try {
+                                __cgptFetchConversationsAndRefresh?.(id);
+                            } catch {
+                            }
+                        }, 10000);
                     }
+
                     window.__cgptEnsureHistoryRowFor = __cgptEnsureHistoryRowFor;
 
                     window.__cgptMonitorFirstAnswerThenReload = __cgptMonitorFirstAnswerThenReload;
@@ -3323,7 +3368,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
                     el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
                 });
-                try { refreshHistoryOrder(); } catch {}
+                try {
+                    refreshHistoryOrder();
+                } catch {
+                }
                 ensurePromptToggle();
             }
 
