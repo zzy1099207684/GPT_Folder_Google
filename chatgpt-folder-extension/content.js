@@ -88,7 +88,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
             }
 
-// 创建容器与开关
             if (!box) {
                 box = document.createElement('div');
                 box.id = 'cgpt-prompt-toggle';
@@ -302,7 +301,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const dt = now - last;
                 last = now;
                 samples.push(dt);
-                if (samples.length > 60) samples.shift();        // 最近 60 帧
+                if (samples.length > 60) samples.shift();
                 if (samples.length === 60) {
                     const fps = 1000 / (samples.reduce((a, b) => a + b, 0) / 60);
                     if (fps < 55 && CHUNK_BUDGET_MS > 4) CHUNK_BUDGET_MS = 4;
@@ -3144,7 +3143,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                             }
 
-// 维持选中态与顺序
+                            // 维持选中态与顺序
                             try {
                                 refreshHistoryOrder();
                             } catch {
@@ -3800,7 +3799,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         document.head.appendChild(s);
     })();
 
-// 侧边栏磨砂：先清空父层纯色，再给 nav 加模糊
+    // 侧边栏磨砂：先清空父层纯色，再给 nav 加模糊
     (function ensureFrostedSidebar() {
         const ID = 'cgpt-frosted-sidebar-style';
         if (document.getElementById(ID)) return;
