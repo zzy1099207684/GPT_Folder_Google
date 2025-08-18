@@ -481,11 +481,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                             if (part && Array.isArray(part.chats)) chats.push(...part.chats);
                                         }
                                     }
+                                    // 读取独立 gap 映射
+                                    const gapObj = await chrome.storage.sync.get('folderGaps');
+                                    const gapMap = gapObj.folderGaps || {};
+
                                     folders[id] = {
                                         name: meta.name || 'Group',
                                         collapsed: !!meta.collapsed,
                                         prompts: Array.isArray(meta.prompts) ? meta.prompts : [],
-                                        gap: Number.isFinite(meta.gap) ? meta.gap : 0,
+                                        gap: Number.isFinite(gapMap[id]) ? gapMap[id]
+                                            : (Number.isFinite(meta.gap) ? meta.gap : 0),
                                         chats
                                     };
                                 } else {
@@ -1397,9 +1402,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 if (!baseFolders[fid]) return;
                 const next = baseFolders[fid];
                 const old  = prevFolders?.[fid] || {};
-                const mergedGap = Number.isFinite(old.gap)
-                    ? old.gap
-                    : (Number.isFinite(next.gap) ? next.gap : 0);
+                const mergedGap = Number.isFinite(next.gap)
+                    ? next.gap
+                    : (Number.isFinite(old.gap) ? old.gap : 0);
                 folders[fid] = {...next, gap: Math.max(0, parseInt(mergedGap, 10) || 0)};
             });
 
@@ -2212,7 +2217,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             modal.appendChild(box);
                             document.body.appendChild(modal);
 
-                            ok.onclick = () => {
+                            ok.onclick = async () => {
                                 folders[fid].prompts = Array.from(promptWrap.querySelectorAll('textarea'))
                                     .map(t => {
                                         const v = t.value.trim();
@@ -2220,12 +2225,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     })
                                     .filter(Boolean)
                                     .slice(0, MAX_PROMPTS);
-                                folders[fid].gap = Math.max(0, parseInt(gapInput.value) || 0);
-                                if (chrome?.runtime?.id) storage.set({folders});  // 先持久化
+                                const newGap = Math.max(0, parseInt(gapInput.value) || 0);
+                                folders[fid].gap = newGap;
+                                if (chrome?.runtime?.id) {
+                                    const gaps = (await storage.get('folderGaps')) || {};
+                                    gaps[fid] = newGap;
+                                    await storage.set({folders, folderGaps: gaps});
+                                }
                                 safeSendMessage({type: 'save-folders', data: folders});
                                 render();
-                                document.body.removeChild(modal);                   // 移除刷新
+                                document.body.removeChild(modal);
                             };
+
 
                             cancel.onclick = () => document.body.removeChild(modal);
                             close();
