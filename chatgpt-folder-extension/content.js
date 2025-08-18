@@ -1575,7 +1575,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         byPath.set(p, winner);
                     }
 
-                    // 下面保持原逻辑：统一选中态，并把当前会话行移到其分组顶部
+                    // 统一选中态，禁止改动原有顺序
                     const currPath = location.pathname;
                     const keptAnchors = [...byPath.values()];
                     const currAnchor = keptAnchors.find(a => samePath(a.href, currPath));
@@ -1584,14 +1584,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     keptAnchors.forEach(a => a.removeAttribute('aria-current'));
                     currAnchor.setAttribute('aria-current', 'page');
 
-                    const row = currAnchor.closest('li') || currAnchor;
-                    if (row && row.parentElement) {
-                        const parent = row.parentElement;
-                        const label = parent.querySelector('h2.__menu-label');
-                        let target = label ? label.nextElementSibling : parent.firstChild;
-                        if (!target || target.parentElement !== parent) target = parent.firstChild;
-                        if (target && target !== row) parent.insertBefore(row, target);
-                    }
                 } catch (e) {
                     console.warn('[Bookmark] refreshHistoryOrder error:', e);
                 }
