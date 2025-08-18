@@ -1549,13 +1549,39 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                     if (!hist) return;
 
+                    // 新增：按 pathname 去重，优先保留真实项（无 data-url），清理其余重复
+                    const all = qsa('a[href*="/c/"]', hist);
+                    const byPath = new Map();
+                    for (const a of all) {
+                        let p = null;
+                        try { p = new URL(a.href, location.origin).pathname; } catch {}
+                        if (!p) continue;
+
+                        const kept = byPath.get(p);
+                        if (!kept) {
+                            byPath.set(p, a);
+                            continue;
+                        }
+
+                        const keptPlaceholder = kept.hasAttribute('data-url');
+                        const curPlaceholder = a.hasAttribute('data-url');
+                        const winner = keptPlaceholder && !curPlaceholder ? a : kept;       // 真实优先
+                        const loser  = winner === a ? kept : a;
+
+                        const li = (loser.closest && loser.closest('li')) || loser;
+                        try { typeof detachLink === 'function' && detachLink(loser); } catch {}
+                        if (li && li.parentElement) li.remove();
+
+                        byPath.set(p, winner);
+                    }
+
+                    // 下面保持原逻辑：统一选中态，并把当前会话行移到其分组顶部
                     const currPath = location.pathname;
-                    const anchors = qsa('a[href*="/c/"]', hist);
-                    const currAnchor = anchors.find(a => samePath(a.href, currPath));
+                    const keptAnchors = [...byPath.values()];
+                    const currAnchor = keptAnchors.find(a => samePath(a.href, currPath));
                     if (!currAnchor) return;
 
-                    /* 新增：统一维护 Chats 的选中态 */
-                    anchors.forEach(a => a.removeAttribute('aria-current'));
+                    keptAnchors.forEach(a => a.removeAttribute('aria-current'));
                     currAnchor.setAttribute('aria-current', 'page');
 
                     const row = currAnchor.closest('li') || currAnchor;
@@ -1564,9 +1590,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const label = parent.querySelector('h2.__menu-label');
                         let target = label ? label.nextElementSibling : parent.firstChild;
                         if (!target || target.parentElement !== parent) target = parent.firstChild;
-                        if (target && target !== row) {
-                            parent.insertBefore(row, target);
-                        }
+                        if (target && target !== row) parent.insertBefore(row, target);
                     }
                 } catch (e) {
                     console.warn('[Bookmark] refreshHistoryOrder error:', e);
