@@ -411,7 +411,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             },
             {
                 label: 'change_code',
-                text: ['※Follow this rule:Strictly adhere to the following requirements: Only modify code directly related to the specific question or requirement raised, leaving all other unrelated code and functionality unchanged; after modification, you must test the implementation yourself to ensure three critical points are met - first, the requirement is fully satisfied, second, both frontend and backend functions operate smoothly, and third, code performance remains stable without affecting anything outside the intended scope; provide both the original source code and the modified version for easy comparison and manual implementation; If new code is added, please provide a small amount of original code around the new code location for easy positioning;Absolutely no horizontal lines (---,——,—,***) are allowed;※']
+                text: ['※ Strictly adhere to the following requirements: Only code directly related to the specific problem or requirement raised may be modified; after modification, self-testing must be performed to ensure that three key points are met: first, the requirements are fully met; second, the code can run stably and smoothly; third, the code does not affect anything outside the intended scope; provide the original source code and the modified version for easy comparison and manual implementation; if new code is added, please provide a small amount of original code around the new code location to facilitate positioning; horizontal lines (---, ——, —, ***) are strictly prohibited; ※']
             },
             {
                 label: 'NO_GUESS',
@@ -1390,10 +1390,19 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const baseFolders = Object.keys(storedFolders).length ? storedFolders : folders;
             const order = storedOrder.length ? storedOrder : Object.keys(baseFolders);
 
+            // 保留旧内存中的有效 gap，storage 优先，其次旧值，最后 0
+            const prevFolders = folders;
             folders = {};
             order.forEach(fid => {
-                if (baseFolders[fid]) folders[fid] = baseFolders[fid];
+                if (!baseFolders[fid]) return;
+                const next = baseFolders[fid];
+                const old  = prevFolders?.[fid] || {};
+                const mergedGap = Number.isFinite(next.gap)
+                    ? next.gap
+                    : (Number.isFinite(old.gap) ? old.gap : 0);
+                folders[fid] = {...next, gap: Math.max(0, parseInt(mergedGap, 10) || 0)};
             });
+
 
             const presetFlag = (await storage.get('presetInitialized')) || 0;
             if (presetFlag === 0) {
@@ -1416,13 +1425,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     folderOrder: storedOrder
                 });
             } else {
+                // 侧栏重新挂载时，确保本次内存里的 folders 与排序也同步持久化
                 await storage.set({
+                    folders,
                     folderOrder: storedOrder
                 });
             }
             // 同步给后台脚本
             safeSendMessage({type: 'save-folders', data: folders});
-
 
 
             lastActiveMap = (await storage.get('lastActiveMap')) || {};
