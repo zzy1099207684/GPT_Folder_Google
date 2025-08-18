@@ -1416,14 +1416,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     folderOrder: storedOrder
                 });
             } else {
-                // 侧栏重新挂载时，确保本次内存里的 folders 与排序也同步持久化
                 await storage.set({
-                    folders,
                     folderOrder: storedOrder
                 });
             }
             // 同步给后台脚本
             safeSendMessage({type: 'save-folders', data: folders});
+
 
 
             lastActiveMap = (await storage.get('lastActiveMap')) || {};
