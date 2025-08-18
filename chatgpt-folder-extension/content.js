@@ -1390,16 +1390,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const baseFolders = Object.keys(storedFolders).length ? storedFolders : folders;
             const order = storedOrder.length ? storedOrder : Object.keys(baseFolders);
 
-            // 保留旧内存中的有效 gap，storage 优先，其次旧值，最后 0
+            // 保留旧内存中的有效 gap，内存优先，其次 storage，最后 0
             const prevFolders = folders;
             folders = {};
             order.forEach(fid => {
                 if (!baseFolders[fid]) return;
                 const next = baseFolders[fid];
                 const old  = prevFolders?.[fid] || {};
-                const mergedGap = Number.isFinite(next.gap)
-                    ? next.gap
-                    : (Number.isFinite(old.gap) ? old.gap : 0);
+                const mergedGap = Number.isFinite(old.gap)
+                    ? old.gap
+                    : (Number.isFinite(next.gap) ? next.gap : 0);
                 folders[fid] = {...next, gap: Math.max(0, parseInt(mergedGap, 10) || 0)};
             });
 
@@ -1706,29 +1706,40 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             syncTitles();
 
 
-            let prevHistoryPaths = new Set(qsa(HIST_ANCHOR).map(a => new URL(a.href).pathname));
-            /* —— 检测 history 会话被删除后同步移除收藏夹中对应条目 —— */
-            // 修改后的代码
+            let prevHistoryPaths = new Set(qsa(HIST_ANCHOR).map(a => {
+                try { return new URL(a.href, location.origin).pathname; } catch { return ''; }
+            }).filter(Boolean));
             let historyCleanupDebouncer = null;
             const historyCleanupObs = observers.add(new MutationObserver(() => {
-                // 添加防抖，避免短时间内多次触发
                 clearTimeout(historyCleanupDebouncer);
                 historyCleanupDebouncer = setTimeout(() => {
                     try {
-                        const anchors = qsa('div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]')
-                        const currentPaths = new Set(anchors.map(a => new URL(a.href).pathname));
+                        const histRoot = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                        const anchors = qsa('a[href*="/c/"]', histRoot);
+                        const currentPaths = new Set(anchors.map(a => {
+                            try { return new URL(a.href, location.origin).pathname; } catch { return ''; }
+                        }).filter(Boolean));
 
-                        // 如果路径集合没有变化，跳过处理
-                        if (prevHistoryPaths.size === currentPaths.size &&
-                            [...prevHistoryPaths].every(path => currentPaths.has(path))) {
+                        // 只依据“软删除”标记做分组同步，避免把未加载的老会话误判为删除
+                        const softDeletedAnchors = qsa(
+                            '[data-cgpt-soft-deleted="1"] a[href*="/c/"],' +
+                            'a[href*="/c/"][data-cgpt-soft-deleted="1"],' +
+                            'li[data-cgpt-soft-deleted="1"] a[href*="/c/"]',
+                            histRoot || document
+                        );
+                        const softDeletedPaths = new Set(softDeletedAnchors.map(a => {
+                            try { return new URL(a.href, location.origin).pathname; } catch { return ''; }
+                        }).filter(Boolean));
+
+                        if (softDeletedPaths.size === 0) {
+                            // 更新快照，避免重复计算；不改动分组
+                            prevHistoryPaths = currentPaths;
                             return;
                         }
 
-                        // 原有删除同步逻辑
                         let changed = false;
                         const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
-
-                        if (!folderZone) return; // 安全检查
+                        if (!folderZone) { prevHistoryPaths = currentPaths; return; }
 
                         const fidList = Object.keys(folders);
                         for (const [fid, folder] of Object.entries(folders)) {
@@ -1736,33 +1747,27 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             const newChats = oldChats.filter(c => {
                                 try {
                                     const p = new URL(c.url, location.origin).pathname;
-                                    return currentPaths.has(p);
-                                } catch {
-                                    return false;
-                                }
+                                    // 仅当被标记软删除时从分组移除
+                                    return !softDeletedPaths.has(p);
+                                } catch { return true; }
                             });
                             if (newChats.length !== oldChats.length) {
                                 folder.chats = newChats;
                                 changed = true;
                                 const idx = fidList.indexOf(fid);
                                 const oldBox = folderZone.children[idx];
-                                if (oldBox) {
-                                    const newBox = renderFolder(fid, folder);
-                                    folderZone.replaceChild(newBox, oldBox);
-                                }
+                                if (oldBox) folderZone.replaceChild(renderFolder(fid, folder), oldBox);
                             }
                         }
 
-                        if (changed) {
-                            safeSendMessage({type: 'save-folders', data: folders});
-                            highlightActive();
-                        }
+                        if (changed) { safeSendMessage({type: 'save-folders', data: folders}); highlightActive(); }
                         prevHistoryPaths = currentPaths;
                     } catch (err) {
                         console.warn('[Bookmark] History cleanup error:', err);
                     }
-                }, 300); // 300ms 防抖
+                }, 300);
             }));
+
 
 
             historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
@@ -2595,8 +2600,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     const stillExists = qsa(HIST_ANCHOR).some(a => samePath(a.href, chat.url));
                     if (!stillExists) {
-                        tip(link, 'The conversation has been hidden due to age, Please scrolling down to refresh your history');
-                        return;
+                        try { window.scheduleHistoryRefresh?.(chat.url); } catch {}
+                        try { window.__cgptEnsureHistoryRowFor?.(chat.url); } catch {}
+                        // 不中断，继续导航
                     }
 
                     lastClickedChatEl = link;
