@@ -2699,6 +2699,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const ed = qs('.ProseMirror');
                 if (!ed) return;
                 const SUFFIX = ''; // 定义尾缀常量
+                let changed = false;
 
                 const path = location.pathname;                                         // 当前会话路径
                 const mapArr = liveSyncMap.get(path) || [];                             // 映射数组（可能为空）
@@ -2824,13 +2825,44 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     ed.prepend(frag);
                 }
 
-                let last = ed.lastElementChild;
-                if (!(last && last.innerText.trim() === SUFFIX)) {
+                if (SUFFIX) {                              // SUFFIX 为空时不追加空段落
+                    let last = ed.lastElementChild;
+                    if (!(last && last.innerText.trim() === SUFFIX)) {
+                        const p = document.createElement('p');
+                        p.textContent = SUFFIX;
+                        ed.appendChild(p);
+                    }
+                }
+
+// 若本次需要注入组 prompt
+                if (injectNow && groupPrompt && toggleOn) {
+                    qsa('p', ed).forEach((p, i, arr) => {
+                        const txt = p.innerText.trim();
+                        if ((txt === groupPrompt || txt === 'Task content:') && i !== arr.length - 1) p.remove();
+                    });
+                    const gp = document.createElement('p');
+                    gp.textContent = groupPrompt;
+                    const tc = document.createElement('p');
+                    tc.textContent = 'Task content:';
+                    const frag = document.createDocumentFragment();
+                    frag.appendChild(gp);
+                    frag.appendChild(tc);
+                    ed.prepend(frag);
+                    changed = true;
+                }
+
+// 仅当 SUFFIX 非空且确实需要追加时才处理
+                if (SUFFIX && !(ed.lastElementChild && ed.lastElementChild.innerText.trim() === SUFFIX)) {
                     const p = document.createElement('p');
                     p.textContent = SUFFIX;
                     ed.appendChild(p);
+                    changed = true;
                 }
-                ed.dispatchEvent(new Event('input', {bubbles: true}));
+
+// 只有在内容确实发生变化时才触发 input
+                if (changed) {
+                    ed.dispatchEvent(new Event('input', { bubbles: true }));
+                }
             }
 
             function ensureChatRegistered() {
