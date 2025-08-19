@@ -3271,11 +3271,42 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 window.scheduleHistoryRefresh = scheduleHistoryRefresh;
 
 
+                // 生成态识别与去抖（已存在）
+                let __lastSendAt = 0;
+                function __isStopState() {
+                    const b = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]');
+                    const label = (b?.getAttribute('aria-label') || b?.innerText || '').toLowerCase();
+                    const hitLabel = /stop|停止|停止生成|停止回答|stopp|parar|detener/.test(label);
+                    const hitDom = !!document.querySelector('button[data-testid="stop-button"],button[aria-label*="Stop" i],button[aria-label*="停止"]');
+                    return hitLabel || hitDom;
+                }
+                function __tooFast() {
+                    const now = Date.now();
+                    if (now - __lastSendAt < 600) return true;
+                    __lastSendAt = now;
+                    return false;
+                }
+
+                // 新增：全局捕获回车拦截，优先于页面文档级监听执行
+                if (!window.__cgptGlobalEnterGuard) {
+                    window.__cgptGlobalEnterGuard = true;
+                    document.addEventListener('keydown', ev => {
+                        if (ev.isComposing || ev.keyCode === 229) return;
+                        if (ev.key === 'Enter' && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+                            const suppress = window.__cgptSuppressEnterUntil && Date.now() < window.__cgptSuppressEnterUntil;
+                            if (__isStopState() || suppress) {
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                            }
+                        }
+                    }, true);
+                }
+
                 // ① 发送按钮点击
                 send.addEventListener('click', () => {
                     if (isUploading()) return;
-                    const label = send.getAttribute('aria-label') || send.innerText;
-                    if (label.toLowerCase().includes('stop')) return;
+                    if (__isStopState()) return;
+                    window.__cgptSuppressEnterUntil = Date.now() + 1200; // 发送后1.2秒屏蔽 Enter
                     const hasUserInput = ed && ed.innerText.trim().length > 0;
                     if (hasUserInput) appendSuffix();
                     bumpActiveChat();
@@ -3291,15 +3322,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     ed.addEventListener('keydown', e => {
                         if (e.isComposing || e.keyCode === 229) return;
                         if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                            if (isUploading()) {
-                                e.preventDefault();
-                                return;
-                            }
-                            const btn = qs('#composer-submit-button');
-                            if (!btn) return;
-                            const label = btn.getAttribute('aria-label') || btn.innerText;
-                            if (label.toLowerCase().includes('stop')) return;
-                            const hasUserInput = ed && ed.innerText.trim().length > 0;
+                            if (isUploading()) { e.preventDefault(); return; }
+                            if (__isStopState()) { e.preventDefault(); e.stopPropagation(); return; }
+                            if (window.__cgptSuppressEnterUntil && Date.now() < window.__cgptSuppressEnterUntil) { e.preventDefault(); e.stopPropagation(); return; }
+                            const hasUserInput = ed && ed.innerText.trim() > 0;
                             if (hasUserInput) appendSuffix();
                             bumpActiveChat();
                             ensurePromptToggle();
@@ -3309,10 +3335,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             window.__cgptMonitorFirstAnswerThenReload?.();
                         }
                     }, {capture: true});
-
                 }
-
-
             }
 
             observers.add(new MutationObserver(bindSend)).observe(document.body, {childList: true, subtree: true});
