@@ -47,10 +47,18 @@
     }
 
     function init() {
-        const observeRoot =
-            document.querySelector('div#history') ||
-            document.querySelector('nav[aria-label="Chat history"]') ||
-            document.body;
+        // 新增: 统一挑选真正的侧栏根节点
+        function pickSidebarRoot() {
+            return (
+                document.querySelector('nav[aria-label="Chat history"]') ||
+                document.querySelector('#stage-slideover-sidebar nav[aria-label="Chat history"]') ||
+                document.querySelector('#stage-slideover-sidebar') ||
+                document.querySelector('div#history') ||
+                document.body
+            );
+        }
+
+        let observeRoot = pickSidebarRoot();
 
         const ensureForNode = node => {
             if (!node || node.nodeType !== 1) return;
@@ -78,7 +86,23 @@
 
         mo.observe(observeRoot, { childList: true, subtree: true, characterData: true });
 
-        window.__cgptBatchDelete.cleanup = () => mo.disconnect();
+        // 新增: 监听侧栏根节点被重建时，自动重绑到新的真正侧栏
+        const moRoot = new MutationObserver(() => {
+            const next = pickSidebarRoot();
+            if (next !== observeRoot) {
+                mo.disconnect();
+                observeRoot = next;
+                ensureForNode(observeRoot);
+                mo.observe(observeRoot, { childList: true, subtree: true, characterData: true });
+            }
+        });
+        moRoot.observe(document.body, { childList: true, subtree: true });
+
+        // 更新清理逻辑，确保两个观察器都断开
+        window.__cgptBatchDelete.cleanup = () => {
+            mo.disconnect();
+            moRoot.disconnect();
+        };
         window.addEventListener('beforeunload', window.__cgptBatchDelete.cleanup, { passive: true });
     }
 
