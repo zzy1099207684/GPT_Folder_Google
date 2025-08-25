@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Folder,Font,Prompt,Pin, Batch Delete",
-  "version": "2.0",
+  "version": "2.1",
   "description": "a simple and great tool",
   "icons": {
     "128": "icon128.png"
