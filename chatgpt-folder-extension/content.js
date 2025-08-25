@@ -274,7 +274,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         /* ===== debounced save ===== */
         let _saveFoldersTimer = null;
 
-        function scheduleSaveFolders(delay = 2000) {
+        function scheduleSaveFolders(delay = 600) {
             clearTimeout(_saveFoldersTimer);
             _saveFoldersTimer = setTimeout(async () => {
                 try {
@@ -495,7 +495,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             _writeTimer: null,
             _writeDelay: 1000,
             _lastWriteTime: 0,
-            _minInterval: 5000, // 最小写入间隔
+            _minInterval: 3000, // 最小写入间隔
             _retryCount: 0,
             _maxRetries: 3,
             _isRecovering: false,
