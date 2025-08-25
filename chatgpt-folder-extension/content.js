@@ -3276,26 +3276,33 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     async function __cgptFetchConversationsAndRefresh(explicitIdOrPath) {
                         try {
                             const headers = await __cgptGetAuthHeaders();
-                            const res = await fetch('/backend-api/conversations?offset=0&limit=30&order=updated&is_archived=false', {
+                            const res = await fetch('/backend-api/conversations?offset=0&limit=5&order=updated&is_archived=false', {
                                 headers,
                                 credentials: 'same-origin'
                             });
-                            if (res.ok) {
-                                const json = await res.json().catch(() => null);
-                                if (json) {
-                                    const opts = typeof explicitIdOrPath === 'string'
-                                        ? (explicitIdOrPath.startsWith('/c/') ? {path: explicitIdOrPath} : {id: explicitIdOrPath})
-                                        : {};
-                                    __cgptPatchChatsFromResponse(json, opts);
-                                }
-                                try {
-                                    scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
-                                } catch {
-                                }
-                            }
-                        } catch {
-                        }
+                            if (!res.ok) return;
+
+                            const json = await res.json().catch(() => null);
+                            if (!json) return;
+
+                            const list = Array.isArray(json.items) ? json.items
+                                : Array.isArray(json.conversations) ? json.conversations
+                                    : [];
+
+                            const hasNewChat = list.some(it => String(it?.title || '').trim().toLowerCase() === 'new chat');
+                            if (hasNewChat) return;
+
+                            const opts = typeof explicitIdOrPath === 'string'
+                                ? (explicitIdOrPath.startsWith('/c/') ? {path: explicitIdOrPath} : {id: explicitIdOrPath})
+                                : {};
+                            __cgptPatchChatsFromResponse(json, opts);
+
+                            try {
+                                scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
+                            } catch {}
+                        } catch {}
                     }
+
 
                     function __cgptMonitorFirstAnswerThenReload() {
                         if (!location.pathname.startsWith('/c/')) return;
