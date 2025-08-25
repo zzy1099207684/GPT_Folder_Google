@@ -880,7 +880,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     });
             }
 
-        }, 200)));
+        }, 100)));
         readyObs.observe(document.body, {childList: true, subtree: true});
 
 
