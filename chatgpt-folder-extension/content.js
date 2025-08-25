@@ -147,13 +147,19 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 // 将容器加到表单。表单通常是相对定位；若不是，也不会影响交互
                 form.appendChild(box);
 
+// 新增：保障定位上下文，避免绝对定位参照错误
+                try {
+                    const cs = getComputedStyle(form);
+                    if (cs.position === 'static') form.style.position = 'relative';
+                } catch {}
+
                 placeBox(box);
                 if (!form.__promptToggleRO) {
                     const ro = new ResizeObserver(() => placeBox(box));
                     ro.observe(form);
                     form.__promptToggleRO = ro;
                 }
-                // 新增：若能拿到麦克风按钮，同步监听它自身的尺寸与可见性变化
+// 保留：麦克风尺寸监听
                 const __mic = qs(
                     'button[aria-label*="voice" i],button[aria-label*="microphone" i],button[aria-label*="语音"],button[aria-label*="麦克风"],button[data-testid*="voice" i]',
                     form
@@ -163,10 +169,51 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const ro2 = new ResizeObserver(() => placeBox(box));
                         ro2.observe(__mic);
                         form.__promptToggleMicRO = ro2;
-                    } catch {
-                    }
+                    } catch {}
                 }
-                window.addEventListener('resize', () => placeBox(box), {passive: true});
+
+// 新增①：输入相关事件，覆盖首次换行、长行溢出、粘贴多行
+                const ed =
+                    qs('.ProseMirror', form) ||
+                    qs('#prompt-textarea', form) ||
+                    form.querySelector('[contenteditable="true"]');
+                if (ed && !form.__promptToggleInputHooked) {
+                    const update = () => placeBox(box);
+                    ed.addEventListener('input', update);
+                    ed.addEventListener('paste', () => setTimeout(update, 0));
+                    ed.addEventListener(
+                        'keydown',
+                        e => {
+                            if (e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete') {
+                                requestAnimationFrame(update);
+                            }
+                        },
+                        true
+                    );
+                    form.__promptToggleInputHooked = true;
+                }
+
+// 新增②：位置变化监听，而非仅尺寸变化
+                if (!form.__promptToggleMO) {
+                    try {
+                        // debounce 已在脚本前部定义
+                        const mo = new MutationObserver(debounce(() => placeBox(box), 16));
+                        // 优先监听 trailing 区域，取不到则退回 form
+                        const trailing =
+                            qs('[grid-area="trailing"]', form) ||
+                            qs('.[grid-area:trailing]', form) ||
+                            form;
+                        mo.observe(trailing, {
+                            attributes: true,
+                            subtree: true,
+                            attributeFilter: ['class', 'style', 'data-state', 'aria-hidden']
+                        });
+                        form.__promptToggleMO = mo;
+                    } catch {}
+                }
+
+// 保留：窗口尺寸变化
+                window.addEventListener('resize', () => placeBox(box), { passive: true });
             } else {
                 // 已存在时同步当前 key 的状态
                 const keyNow = (path === '/' && window.__cgptPendingToken)
