@@ -27,6 +27,12 @@
         if (!items.length) return;
 
         items.forEach(item => {
+            const href = item.getAttribute('href') || '';
+            if (href.includes('/g/')) {
+                const legacy = item.querySelector('input.history-checkbox');
+                if (legacy) legacy.remove();
+                return;
+            }
             if (item.querySelector('input.history-checkbox')) return;
 
             const cb = document.createElement('input');
