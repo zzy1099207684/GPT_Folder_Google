@@ -428,10 +428,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         const samePath = (a, b) => _path(a) === _path(b);
 
-        // 增强的选择器函数
+        // 增强的选择器函数（健壮化）
         const qs = (sel, root = document) => {
             try {
-                return root.querySelector(sel);
+                const base = root && typeof root.querySelector === 'function' ? root : document;
+                return base.querySelector(sel);
             } catch (e) {
                 console.warn(`[Bookmark] Error querying selector "${sel}":`, e);
                 return null;
@@ -440,12 +441,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         const qsa = (sel, root = document) => {
             try {
-                return Array.from(root.querySelectorAll(sel));
+                const base = root && typeof root.querySelectorAll === 'function' ? root : document;
+                return Array.from(base.querySelectorAll(sel));
             } catch (e) {
                 console.warn(`[Bookmark] Error querying all selector "${sel}":`, e);
                 return [];
             }
         };
+
         // ① preset prompt and group
         const hints = [
             {
