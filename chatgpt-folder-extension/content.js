@@ -200,8 +200,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const mo = new MutationObserver(debounce(() => placeBox(box), 16));
                         // 优先监听 trailing 区域，取不到则退回 form
                         const trailing =
-                            qs('[grid-area="trailing"]', form) ||
-                            qs('.[grid-area:trailing]', form) ||
+                            qs('[grid-area="trailing"]', form) ||                 // 若存在自定义属性
+                            qs('[style*="grid-area: trailing"]', form) ||         // 样式包含 grid-area: trailing
+                            qs('[style*="grid-area:trailing"]', form) ||          // 去掉空格的兼容
                             form;
                         mo.observe(trailing, {
                             attributes: true,
