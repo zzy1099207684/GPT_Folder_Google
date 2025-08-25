@@ -2544,14 +2544,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     scheduleSaveFolders();
                     arrow.textContent = f.collapsed ? '∴' : '∵';
 
-                    if (!f.collapsed && ul.childElementCount === 0) {
-                        renderChatsLocal();                     // 首次展开时懒渲染条目
+                    if (!f.collapsed) {
+                        // 关键修复：每次从收缩→展开都重绘，确保列表与计数刷新
+                        renderChatsLocal();
                     } else {
-                        ul.style.display = f.collapsed ? 'none' : '';
+                        ul.style.display = 'none';
                     }
 
                     if (typeof highlightActive === 'function') highlightActive();
                 };
+
 
                 // —— 修改后代码片段 ——
                 box.ondragover = e => {
