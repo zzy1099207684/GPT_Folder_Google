@@ -151,7 +151,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 try {
                     const cs = getComputedStyle(form);
                     if (cs.position === 'static') form.style.position = 'relative';
-                } catch {}
+                } catch {
+                }
 
                 placeBox(box);
                 if (!form.__promptToggleRO) {
@@ -169,7 +170,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const ro2 = new ResizeObserver(() => placeBox(box));
                         ro2.observe(__mic);
                         form.__promptToggleMicRO = ro2;
-                    } catch {}
+                    } catch {
+                    }
                 }
 
 // 新增①：输入相关事件，覆盖首次换行、长行溢出、粘贴多行
@@ -210,11 +212,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             attributeFilter: ['class', 'style', 'data-state', 'aria-hidden']
                         });
                         form.__promptToggleMO = mo;
-                    } catch {}
+                    } catch {
+                    }
                 }
 
 // 保留：窗口尺寸变化
-                window.addEventListener('resize', () => placeBox(box), { passive: true });
+                window.addEventListener('resize', () => placeBox(box), {passive: true});
             } else {
                 // 已存在时同步当前 key 的状态
                 const keyNow = (path === '/' && window.__cgptPendingToken)
@@ -813,6 +816,62 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }
         })();
 
+        function stopBookmarksWatchdog() {
+            try {
+                if (window.__cgptBookmarksWatchdogId) {
+                    clearInterval(window.__cgptBookmarksWatchdogId);
+                    window.__cgptBookmarksWatchdogId = null;
+                }
+            } catch {
+            }
+        }
+
+        function startBookmarksWatchdog() {
+            // 已在运行则不重复启动
+            if (window.__cgptBookmarksWatchdogId) return;
+
+            // 轻量轮询，避免过于频繁：每 800ms 检查一次
+            window.__cgptBookmarksWatchdogId = setInterval(() => {
+                try {
+                    const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                    const wrapperNow = qs('#cgpt-bookmarks-wrapper');
+
+                    // 条件满足时停止轮询
+                    if (!hist || wrapperNow) {
+                        stopBookmarksWatchdog();
+                        return;
+                    }
+
+                    // 避免并发创建
+                    if (window.__cgptCreatingBookmarks) return;
+
+                    // 尝试一次初始化
+                    window.__cgptCreatingBookmarks = true;
+                    initBookmarks(hist)
+                        .catch(err => console.error('initBookmarks error:', err))
+                        .finally(() => {
+                            window.__cgptCreatingBookmarks = false;
+
+                            // 初始化后仍做一次去重
+                            const all = qsa('#cgpt-bookmarks-wrapper');
+                            if (all.length > 1) {
+                                all.slice(1).forEach(w => {
+                                    try {
+                                        w.remove();
+                                    } catch {
+                                    }
+                                });
+                            }
+                        });
+                } catch (e) {
+                    console.warn('[Bookmark] watchdog tick error:', e);
+                }
+            }, 1000);
+        }
+
+// 页面离开时确保清理
+        window.addEventListener('pagehide', () => stopBookmarksWatchdog(), {passive: true});
+
         const readyObs = observers.add(new MutationObserver(debounce(() => {
             const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
 
@@ -856,30 +915,38 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     } catch {
                     }
                 }
+                stopBookmarksWatchdog?.();
                 return;
             }
 
-            // 仅当未在创建过程中且确实不存在 wrapper 时才初始化
-            if (hist && !wrapper && !window.__cgptCreatingBookmarks) {
-                window.__cgptCreatingBookmarks = true;               // 哨兵启动
-                initBookmarks(hist)
-                    .catch(err => console.error('initBookmarks error:', err))
-                    .finally(() => {
-                        window.__cgptCreatingBookmarks = false;      // 释放哨兵
-
-                        // 再次去重，防止并发情况下残留多余 wrapper
-                        const all = qsa('#cgpt-bookmarks-wrapper');
-                        if (all.length > 1) {
-                            all.slice(1).forEach(w => {              // 仅保留第一个
-                                try {
-                                    w.remove();
-                                } catch {
-                                }
-                            });
-                        }
-                    });
+            // 新增：若 wrapper 存在则确保停止看门狗，避免无谓轮询
+            if (hist && wrapper) {
+                stopBookmarksWatchdog?.();
             }
 
+            if (hist && !wrapper) {
+                startBookmarksWatchdog?.();
+
+                if (!window.__cgptCreatingBookmarks) {
+                    window.__cgptCreatingBookmarks = true;               // 哨兵启动
+                    initBookmarks(hist)
+                        .catch(err => console.error('initBookmarks error:', err))
+                        .finally(() => {
+                            window.__cgptCreatingBookmarks = false;      // 释放哨兵
+
+                            // 再次去重，防止并发情况下残留多余 wrapper
+                            const all = qsa('#cgpt-bookmarks-wrapper');
+                            if (all.length > 1) {
+                                all.slice(1).forEach(w => {
+                                    try {
+                                        w.remove();
+                                    } catch {
+                                    }
+                                });
+                            }
+                        });
+                }
+            }
         }, 100)));
         readyObs.observe(document.body, {childList: true, subtree: true});
 
@@ -1452,7 +1519,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             order.forEach(fid => {
                 if (!baseFolders[fid]) return;
                 const next = baseFolders[fid];
-                const old  = prevFolders?.[fid] || {};
+                const old = prevFolders?.[fid] || {};
                 const mergedGap = Number.isFinite(next.gap)
                     ? next.gap
                     : (Number.isFinite(old.gap) ? old.gap : 0);
@@ -1610,7 +1677,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const byPath = new Map();
                     for (const a of all) {
                         let p = null;
-                        try { p = new URL(a.href, location.origin).pathname; } catch {}
+                        try {
+                            p = new URL(a.href, location.origin).pathname;
+                        } catch {
+                        }
                         if (!p) continue;
 
                         const kept = byPath.get(p);
@@ -1622,10 +1692,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const keptPlaceholder = kept.hasAttribute('data-url');
                         const curPlaceholder = a.hasAttribute('data-url');
                         const winner = keptPlaceholder && !curPlaceholder ? a : kept;       // 真实优先
-                        const loser  = winner === a ? kept : a;
+                        const loser = winner === a ? kept : a;
 
                         const li = (loser.closest && loser.closest('li')) || loser;
-                        try { typeof detachLink === 'function' && detachLink(loser); } catch {}
+                        try {
+                            typeof detachLink === 'function' && detachLink(loser);
+                        } catch {
+                        }
                         if (li && li.parentElement) li.remove();
 
                         byPath.set(p, winner);
@@ -1763,7 +1836,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
 
             let prevHistoryPaths = new Set(qsa(HIST_ANCHOR).map(a => {
-                try { return new URL(a.href, location.origin).pathname; } catch { return ''; }
+                try {
+                    return new URL(a.href, location.origin).pathname;
+                } catch {
+                    return '';
+                }
             }).filter(Boolean));
             let historyCleanupDebouncer = null;
             const historyCleanupObs = observers.add(new MutationObserver(() => {
@@ -1773,7 +1850,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const histRoot = qs('div#history') || qs('nav[aria-label="Chat history"]');
                         const anchors = qsa('a[href*="/c/"]', histRoot);
                         const currentPaths = new Set(anchors.map(a => {
-                            try { return new URL(a.href, location.origin).pathname; } catch { return ''; }
+                            try {
+                                return new URL(a.href, location.origin).pathname;
+                            } catch {
+                                return '';
+                            }
                         }).filter(Boolean));
 
                         // 只依据“软删除”标记做分组同步，避免把未加载的老会话误判为删除
@@ -1784,7 +1865,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             histRoot || document
                         );
                         const softDeletedPaths = new Set(softDeletedAnchors.map(a => {
-                            try { return new URL(a.href, location.origin).pathname; } catch { return ''; }
+                            try {
+                                return new URL(a.href, location.origin).pathname;
+                            } catch {
+                                return '';
+                            }
                         }).filter(Boolean));
 
                         if (softDeletedPaths.size === 0) {
@@ -1795,7 +1880,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                         let changed = false;
                         const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
-                        if (!folderZone) { prevHistoryPaths = currentPaths; return; }
+                        if (!folderZone) {
+                            prevHistoryPaths = currentPaths;
+                            return;
+                        }
 
                         const fidList = Object.keys(folders);
                         for (const [fid, folder] of Object.entries(folders)) {
@@ -1805,7 +1893,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     const p = new URL(c.url, location.origin).pathname;
                                     // 仅当被标记软删除时从分组移除
                                     return !softDeletedPaths.has(p);
-                                } catch { return true; }
+                                } catch {
+                                    return true;
+                                }
                             });
                             if (newChats.length !== oldChats.length) {
                                 folder.chats = newChats;
@@ -1816,14 +1906,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             }
                         }
 
-                        if (changed) { safeSendMessage({type: 'save-folders', data: folders}); highlightActive(); }
+                        if (changed) {
+                            safeSendMessage({type: 'save-folders', data: folders});
+                            highlightActive();
+                        }
                         prevHistoryPaths = currentPaths;
                     } catch (err) {
                         console.warn('[Bookmark] History cleanup error:', err);
                     }
                 }, 300);
             }));
-
 
 
             historyCleanupObs.observe(historyNode, {childList: true, subtree: true});
@@ -2664,8 +2756,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     const stillExists = qsa(HIST_ANCHOR).some(a => samePath(a.href, chat.url));
                     if (!stillExists) {
-                        try { window.scheduleHistoryRefresh?.(chat.url); } catch {}
-                        try { window.__cgptEnsureHistoryRowFor?.(chat.url); } catch {}
+                        try {
+                            window.scheduleHistoryRefresh?.(chat.url);
+                        } catch {
+                        }
+                        try {
+                            window.__cgptEnsureHistoryRowFor?.(chat.url);
+                        } catch {
+                        }
                         // 不中断，继续导航
                     }
 
@@ -2914,7 +3012,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
 // 只有在内容确实发生变化时才触发 input
                 if (changed) {
-                    ed.dispatchEvent(new Event('input', { bubbles: true }));
+                    ed.dispatchEvent(new Event('input', {bubbles: true}));
                 }
             }
 
@@ -3305,8 +3403,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                             try {
                                 scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
-                            } catch {}
-                        } catch {}
+                            } catch {
+                            }
+                        } catch {
+                        }
                     }
 
 
