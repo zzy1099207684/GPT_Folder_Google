@@ -827,25 +827,25 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         }
 
         function startBookmarksWatchdog() {
-            // 已在运行则不重复启动
             if (window.__cgptBookmarksWatchdogId) return;
 
-            // 轻量轮询，避免过于频繁：每 800ms 检查一次
             window.__cgptBookmarksWatchdogId = setInterval(() => {
                 try {
                     const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                     const wrapperNow = qs('#cgpt-bookmarks-wrapper');
 
-                    // 条件满足时停止轮询
-                    if (!hist || wrapperNow) {
+                    // 仅在 wrapper 已存在时停止轮询；hist 缺席时保持等待
+                    if (wrapperNow) {
                         stopBookmarksWatchdog();
                         return;
                     }
+                    if (!hist) {
+                        // 页面暂时无 Chat history，继续等待下一轮
+                        return;
+                    }
 
-                    // 避免并发创建
                     if (window.__cgptCreatingBookmarks) return;
 
-                    // 尝试一次初始化
                     window.__cgptCreatingBookmarks = true;
                     initBookmarks(hist)
                         .catch(err => console.error('initBookmarks error:', err))
@@ -877,88 +877,81 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const readyObs = observers.add(new MutationObserver(debounce(() => {
                     const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
 
-            const wrappers = qsa('#cgpt-bookmarks-wrapper');
-            if (wrappers.length > 1) {
-                wrappers.slice(1).forEach(w => w.remove());
-            }
-
-            const wrapper = wrappers[0];
-
-            if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
-                try {
-                    hist.parentElement.insertBefore(wrapper, hist);
-                } catch (e) {
-                    console.warn('[Bookmark] Failed to relocate wrapper:', e);
-                }
-            }
-
-            const selHeader = qs('#cgpt-select-header');
-            if (hist && selHeader) {
-                const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
-                const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
-                if (selHeader.parentElement !== chatsAside || selHeader.nextSibling !== chatsH2) {
-                    try {
-                        chatsAside.insertBefore(selHeader, chatsH2);
-                    } catch (e) {
-                        console.warn('[Bookmark] Failed to relocate select header:', e);
+                    const wrappers = qsa('#cgpt-bookmarks-wrapper');
+                    if (wrappers.length > 1) {
+                        wrappers.slice(1).forEach(w => w.remove());
                     }
-                }
-            }
 
+                    const wrapper = wrappers[0];
 
-            if (!hist && wrapper) {
-                try {
-                    wrapper.remove()
-                } catch {
-                }
-                if (window.__cgptBookmarksCleanup) {
-                    try {
-                        window.__cgptBookmarksCleanup()
-                    } catch {
+                    if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
+                        try {
+                            hist.parentElement.insertBefore(wrapper, hist);
+                        } catch (e) {
+                            console.warn('[Bookmark] Failed to relocate wrapper:', e);
+                        }
                     }
-                }
-                stopBookmarksWatchdog?.();
-                return;
-            }
 
-            // 新增：若 wrapper 存在则确保停止看门狗，避免无谓轮询
-            if (hist && wrapper) {
-                stopBookmarksWatchdog?.();
-            }
+                    const selHeader = qs('#cgpt-select-header');
+                    if (hist && selHeader) {
+                        const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+                        const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+                        if (selHeader.parentElement !== chatsAside || selHeader.nextSibling !== chatsH2) {
+                            try {
+                                chatsAside.insertBefore(selHeader, chatsH2);
+                            } catch (e) {
+                                console.warn('[Bookmark] Failed to relocate select header:', e);
+                            }
+                        }
+                    }
+                    if (!hist && wrapper) {
+                        try {
+                            wrapper.remove()
+                        } catch {
+                        }
+                        startBookmarksWatchdog?.();
+                        return;
+                    }
 
-            if (hist && !wrapper) {
-                startBookmarksWatchdog?.();
+                    // 新增：若 wrapper 存在则确保停止看门狗，避免无谓轮询
+                    if (hist && wrapper) {
+                        stopBookmarksWatchdog?.();
+                    }
 
-                if (!window.__cgptCreatingBookmarks) {
-                    window.__cgptCreatingBookmarks = true;               // 哨兵启动
-                    initBookmarks(hist)
-                        .catch(err => console.error('initBookmarks error:', err))
-                        .finally(() => {
-                            window.__cgptCreatingBookmarks = false;      // 释放哨兵
+                    if (hist && !wrapper) {
+                        startBookmarksWatchdog?.();
 
-                            // 再次去重，防止并发情况下残留多余 wrapper
-                            const all = qsa('#cgpt-bookmarks-wrapper');
-                            if (all.length > 1) {
-                                all.slice(1).forEach(w => {
-                                    try {
-                                        w.remove();
-                                    } catch {
+                        if (!window.__cgptCreatingBookmarks) {
+                            window.__cgptCreatingBookmarks = true;               // 哨兵启动
+                            initBookmarks(hist)
+                                .catch(err => console.error('initBookmarks error:', err))
+                                .finally(() => {
+                                    window.__cgptCreatingBookmarks = false;      // 释放哨兵
+
+                                    // 再次去重，防止并发情况下残留多余 wrapper
+                                    const all = qsa('#cgpt-bookmarks-wrapper');
+                                    if (all.length > 1) {
+                                        all.slice(1).forEach(w => {
+                                            try {
+                                                w.remove();
+                                            } catch {
+                                            }
+                                        });
                                     }
                                 });
-                            }
-                        });
-                }
-            }
-        }, 100)));
-                readyObs.observe(document.body, { childList: true, subtree: true });
+                        }
+                    }
+                }, 100)));
+                readyObs.observe(document.body, {childList: true, subtree: true});
             };
-            const idle = (cb) => (window.requestIdleCallback || ((f)=>setTimeout(f,120)))(cb);
+            const idle = (cb) => (window.requestIdleCallback || ((f) => setTimeout(f, 120)))(cb);
             if (document.readyState === 'complete') {
                 idle(start);
             } else {
-                window.addEventListener('load', () => idle(start), { once: true, passive: true });
+                window.addEventListener('load', () => idle(start), {once: true, passive: true});
             }
         }
+
 // 替换直接 observe 的做法：延后到 load+idle 再启动
         bootAfterHydration();
 
@@ -1492,14 +1485,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             // 事件：设置字体
             fontSelect.addEventListener('change', e => {
                 document.documentElement.style.fontFamily = e.target.value;
-                if (chrome?.runtime?.id) storage.set({ pageFont: e.target.value });
+                if (chrome?.runtime?.id) storage.set({pageFont: e.target.value});
             });
 
             // 事件：设置字号
             sizeSelect.addEventListener('change', e => {
                 const v = e.target.value || '100%';
                 document.documentElement.style.fontSize = v;
-                if (chrome?.runtime?.id) storage.set({ pageFontSize: v });
+                if (chrome?.runtime?.id) storage.set({pageFontSize: v});
             });
 
             // 初始化：恢复字体与字号
@@ -3949,8 +3942,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             // 在动态内容页面可能发生的导航事件上添加清理
             document.addEventListener('spa:navigation', cleanup);
         }
-
-        window.initBookmarks = initBookmarks;
 
         window.initBookmarks = initBookmarks;
 
