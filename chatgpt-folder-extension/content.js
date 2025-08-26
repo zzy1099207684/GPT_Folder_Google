@@ -815,63 +815,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 return {};
             }
         })();
-
-        function stopBookmarksWatchdog() {
-            try {
-                if (window.__cgptBookmarksWatchdogId) {
-                    clearInterval(window.__cgptBookmarksWatchdogId);
-                    window.__cgptBookmarksWatchdogId = null;
-                }
-            } catch {
-            }
-        }
-
-        function startBookmarksWatchdog() {
-            if (window.__cgptBookmarksWatchdogId) return;
-
-            window.__cgptBookmarksWatchdogId = setInterval(() => {
-                try {
-                    const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
-                    const wrapperNow = qs('#cgpt-bookmarks-wrapper');
-
-                    // 仅在 wrapper 已存在时停止轮询；hist 缺席时保持等待
-                    if (wrapperNow) {
-                        stopBookmarksWatchdog();
-                        return;
-                    }
-                    if (!hist) {
-                        // 页面暂时无 Chat history，继续等待下一轮
-                        return;
-                    }
-
-                    if (window.__cgptCreatingBookmarks) return;
-
-                    window.__cgptCreatingBookmarks = true;
-                    initBookmarks(hist)
-                        .catch(err => console.error('initBookmarks error:', err))
-                        .finally(() => {
-                            window.__cgptCreatingBookmarks = false;
-
-                            // 初始化后仍做一次去重
-                            const all = qsa('#cgpt-bookmarks-wrapper');
-                            if (all.length > 1) {
-                                all.slice(1).forEach(w => {
-                                    try {
-                                        w.remove();
-                                    } catch {
-                                    }
-                                });
-                            }
-                        });
-                } catch (e) {
-                    console.warn('[Bookmark] watchdog tick error:', e);
-                }
-            }, 1000);
-        }
-
-// 页面离开时确保清理
-        window.addEventListener('pagehide', () => stopBookmarksWatchdog(), {passive: true});
-
         function bootAfterHydration() {
             const start = () => {
                 const readyObs = observers.add(new MutationObserver(debounce(() => {
@@ -905,28 +848,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         }
                     }
                     if (!hist && wrapper) {
-                        try {
-                            wrapper.remove()
-                        } catch {
-                        }
-                        startBookmarksWatchdog?.();
-                        return;
-                    }
-
-                    // 新增：若 wrapper 存在则确保停止看门狗，避免无谓轮询
-                    if (hist && wrapper) {
-                        stopBookmarksWatchdog?.();
+                        try { wrapper.remove() } catch {}
+                        return;                         // ← 仅删除 startBookmarksWatchdog?.()
                     }
 
                     if (hist && !wrapper) {
-                        startBookmarksWatchdog?.();
-
                         if (!window.__cgptCreatingBookmarks) {
-                            window.__cgptCreatingBookmarks = true;               // 哨兵启动
+                            window.__cgptCreatingBookmarks = true; // 哨兵启动
                             initBookmarks(hist)
                                 .catch(err => console.error('initBookmarks error:', err))
                                 .finally(() => {
-                                    window.__cgptCreatingBookmarks = false;      // 释放哨兵
+                                    window.__cgptCreatingBookmarks = false;
 
                                     // 再次去重，防止并发情况下残留多余 wrapper
                                     const all = qsa('#cgpt-bookmarks-wrapper');
@@ -1510,8 +1442,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             // 组装：Font 与 Size 并排显示
             fontBlock.append(fontLabel, fontSelect, sizeLabel, sizeSelect);
-            /* ---------- 字体与字号选择块结束 ---------- */
-
 
             const bar = Object.assign(document.createElement('div'), {
                 textContent: 'Groups', style: 'display:flex;align-items:center;font:350 13px/1 white;padding:4px 12px'
@@ -1556,6 +1486,87 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             // 重新定位多选头部块到 history 与 bookmarks wrapper 之间
             const selHeader = document.getElementById('cgpt-select-header');
+            // 新增：当“Groups”组的条目元素整体消失时，整页刷新
+            (function setupGroupLossReload() {
+                const ZONE_SEL = '#cgpt-bookmarks-wrapper > div > div:nth-child(3)';
+                let armed = false;      // 仅当曾出现过至少 1 个组条目后才“武装”
+                let reloading = false;  // 确保只刷新一次
+                let missingTimer = null; // 新增：延迟确认用
+
+                const getZone = () => document.querySelector(ZONE_SEL);
+                const countGroups = (z) => z ? z.querySelectorAll(':scope > div').length : 0;
+
+                const tryArm = () => {
+                    const z = getZone();
+                    if (z && countGroups(z) > 0) armed = true;
+                };
+
+                const reloadOnce = () => {
+                    if (reloading) return;
+                    reloading = true;
+                    location.reload();
+                };
+
+                // 新增：统一的“2秒后仍缺失才刷新”调度器
+                const cancelConfirm = () => {
+                    if (missingTimer) { clearTimeout(missingTimer); missingTimer = null; }
+                };
+                const confirmLater = (predicate) => {
+                    cancelConfirm();
+                    missingTimer = setTimeout(() => {
+                        try {
+                            if (predicate()) reloadOnce();
+                        } finally {
+                            missingTimer = null;
+                        }
+                    }, 2000);
+                };
+
+                // 监听 folderZone 自身的子列表变化（组条目缺失→延迟确认）
+                const mo = new MutationObserver(() => {
+                    const z = getZone();
+                    if (!z) return;              // zone 暂未挂载
+                    if (!armed) { tryArm(); return; }
+                    const n = countGroups(z);
+                    if (n === 0) {
+                        // 2秒后若仍为0则刷新；期间若恢复则取消
+                        confirmLater(() => {
+                            const z2 = getZone();
+                            return !!z2 && countGroups(z2) === 0;
+                        });
+                    } else {
+                        // 一旦恢复，取消可能存在的延迟刷新
+                        cancelConfirm();
+                    }
+                });
+
+                const start = () => {
+                    const z = getZone();
+                    if (!z) return;
+                    tryArm();
+                    mo.observe(z, { childList: true });
+                };
+
+                // 兜底：wrapper 自身被移除也采用“2秒确认后再刷新”
+                const moBody = new MutationObserver(() => {
+                    const stillMissingWrapper = () => !document.querySelector('#cgpt-bookmarks-wrapper');
+                    if (stillMissingWrapper()) {
+                        confirmLater(stillMissingWrapper);
+                    } else {
+                        cancelConfirm();
+                    }
+                });
+                moBody.observe(document.body, { childList: true, subtree: true });
+
+                // 初次尝试启动；若 zone 尚未就绪，短暂轮询几次
+                start();
+                let tries = 0;
+                const timer = setInterval(() => {
+                    if (getZone()) { clearInterval(timer); start(); }
+                    else if (++tries >= 10) clearInterval(timer);
+                }, 300);
+            })();
+
             if (selHeader) {
                 const chatsAside = historyNode.querySelector('aside[aria-labelledby]') || historyNode;
                 const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
