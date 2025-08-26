@@ -1329,9 +1329,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const existingWrapper = qs('#cgpt-bookmarks-wrapper');
             if (existingWrapper) {
                 // 若已有容器且位置不在 historyNode 同一父节点，则移动到正确位置
-                if (existingWrapper.parentElement !== historyNode.parentElement) {
+                const host2 = historyNode?.parentElement;
+                if (host2 && existingWrapper.parentElement !== host2) {
                     try {
-                        historyNode.parentElement.insertBefore(existingWrapper, historyNode);
+                        host2.insertBefore(existingWrapper, historyNode);
                     } catch (e) {
                         console.warn('[Bookmark] Failed to relocate existing wrapper:', e);
                     }
@@ -1478,8 +1479,19 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             inner.append(fontBlock, bar, folderZone);
             wrap.appendChild(inner);
 
-            // 插入 bookmarks wrapper 于最顶
-            historyNode.parentElement.insertBefore(wrap, historyNode);
+            // 插入 bookmarks wrapper 于最顶 —— 加防护与早退
+            const host = historyNode?.parentElement;
+            try {
+                if (host && host.isConnected && historyNode.isConnected) {
+                    host.insertBefore(wrap, historyNode);
+                } else {
+                    // 节点可能在路由/水合过程中被卸载；本轮放弃，交由上层观察器下一轮重试
+                    return;
+                }
+            } catch (e) {
+                console.warn('[Bookmark] Safe insert failed, will retry later:', e);
+                return;
+            }
 
             // 重新定位多选头部块到 history 与 bookmarks wrapper 之间
             const selHeader = document.getElementById('cgpt-select-header');
