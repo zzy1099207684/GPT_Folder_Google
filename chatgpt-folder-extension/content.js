@@ -931,8 +931,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 aside.appendChild(bar);
                 chatsAside.insertBefore(aside, chatsH2);
-
-
                 /* === 交互 === */
 
                 // ① 全选 / 取消全选
@@ -944,7 +942,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     });
                 });
 
-                // ② 弹出菜单
                 // ② 弹出菜单
                 const pop = document.createElement('div');
                 pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:120px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:9999';

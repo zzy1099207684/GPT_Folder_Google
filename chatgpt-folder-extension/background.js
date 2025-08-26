@@ -40,11 +40,10 @@ chrome.runtime.onMessage.addListener((msg) => {
         out[`f_${id}__meta`] = { ...base, parts };
         out[`f_${id}`] = undefined;
     }
-// 写入时容错处理 lastError，避免无回调沉默失败
-    chrome.storage.sync.set(out, () => { void chrome.runtime.lastError; });
-
     folderKeys.forEach(id => packOne(id, folders[id]));
-    chrome.storage.sync.set(out);
+
+    // 仅写一次；确保 out 已包含 folderKeys + 所有 f_*__meta 与分片键
+    chrome.storage.sync.set(out, () => { void chrome.runtime.lastError; });
 
 });
 
