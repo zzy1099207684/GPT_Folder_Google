@@ -1424,19 +1424,21 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const inner = Object.assign(document.createElement('div'), {style: 'padding:4px 0'});
             // …（后续创建 fontBlock、bar、folderZone 等）…
 
-            /* ---------- 新增：页面字体选择块 ---------- */
+            /* ---------- 新增：页面字体与字号选择块 ---------- */
             const fontBlock = Object.assign(document.createElement('div'), {
-                style: 'display:flex;align-items:center;padding:4px 12px 0'
+                style: 'display:flex;align-items:center;gap:8px;padding:4px 12px 0'
             });
             const fontLabel = Object.assign(document.createElement('span'), {
-                textContent: 'Font:',                          // 标签
-                style: 'margin-right:8px;font-size:14px'
+                textContent: 'Font:',
+                style: 'font-size:14px'
             });
             const fontSelect = Object.assign(document.createElement('select'), {
                 style: [
                     'flex:1',
+                    'max-width: 65px',
                     'font-size:12px',
-                    'padding:0 20px 0 0',
+                    'padding:0 20px 0 8px',
+                    'height:24px',
                     'background-color:rgb(23,22,22)',
                     'color:#fff',
                     'border:none',
@@ -1444,30 +1446,80 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     '-webkit-appearance:none',
                     '-moz-appearance:none',
                     'background-repeat:no-repeat',
-                    'background-position:right 8px center'
+                    'background-position:right 8px center',
+                    'border-radius:6px'
                 ].join(';')
             });
 
+            // 新增 Size：字号选择
+            const sizeLabel = Object.assign(document.createElement('span'), {
+                textContent: 'Size:',
+                style: 'font-size:14px'
+            });
+            const sizeSelect = Object.assign(document.createElement('select'), {
+                style: [
+                    'width:88px',
+                    'font-size:12px',
+                    'padding:0 20px 0 8px',
+                    'height:24px',
+                    'background-color:rgb(23,22,22)',
+                    'color:#fff',
+                    'border:none',
+                    'appearance:none',
+                    '-webkit-appearance:none',
+                    '-moz-appearance:none',
+                    'background-repeat:no-repeat',
+                    'background-position:right 8px center',
+                    'border-radius:6px'
+                ].join(';')
+            });
 
+            // 原有字体选项保持不变
             ['inherit', 'serif', 'SimSun', 'SimHei', 'Microsoft YaHei', 'Segoe UI', 'Arial'].forEach(f => {
                 const o = document.createElement('option');
                 o.value = f;
                 o.textContent = f;
                 fontSelect.appendChild(o);
             });
+
+            // 新增 Size：预设百分比
+            ['80%', '85%', '90%', '95%', '100%'].forEach(p => {
+                const o = document.createElement('option');
+                o.value = p;
+                o.textContent = p;
+                sizeSelect.appendChild(o);
+            });
+
+            // 事件：设置字体
             fontSelect.addEventListener('change', e => {
                 document.documentElement.style.fontFamily = e.target.value;
-                if (chrome?.runtime?.id) storage.set({pageFont: e.target.value});
+                if (chrome?.runtime?.id) storage.set({ pageFont: e.target.value });
             });
+
+            // 事件：设置字号
+            sizeSelect.addEventListener('change', e => {
+                const v = e.target.value || '100%';
+                document.documentElement.style.fontSize = v;
+                if (chrome?.runtime?.id) storage.set({ pageFontSize: v });
+            });
+
+            // 初始化：恢复字体与字号
             await (async () => {
-                const saved = await storage.get('pageFont');
-                if (saved) {
-                    fontSelect.value = saved;
-                    document.documentElement.style.fontFamily = saved;
+                const savedFont = await storage.get('pageFont');
+                if (savedFont) {
+                    fontSelect.value = savedFont;
+                    document.documentElement.style.fontFamily = savedFont;
                 }
+                const savedSize = await storage.get('pageFontSize');     // 新增 Size
+                const applied = typeof savedSize === 'string' && savedSize.endsWith('%') ? savedSize : '100%';
+                sizeSelect.value = applied;
+                document.documentElement.style.fontSize = applied;
             })();
-            fontBlock.append(fontLabel, fontSelect);
-            /* ---------- 字体选择块结束 ---------- */
+
+            // 组装：Font 与 Size 并排显示
+            fontBlock.append(fontLabel, fontSelect, sizeLabel, sizeSelect);
+            /* ---------- 字体与字号选择块结束 ---------- */
+
 
             const bar = Object.assign(document.createElement('div'), {
                 textContent: 'Groups', style: 'display:flex;align-items:center;font:350 13px/1 white;padding:4px 12px'
@@ -3429,8 +3481,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         if (!id) return;
                         window.__cgptFirstReplyDoneMap = window.__cgptFirstReplyDoneMap || {};
                         if (window.__cgptFirstReplyDoneMap[id]) return;
-
-                        const startAt = Date.now();
+                        Date.now();
                         const sel = '#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]';
                         const int = setInterval(() => {
                             const btn = qs(sel);
