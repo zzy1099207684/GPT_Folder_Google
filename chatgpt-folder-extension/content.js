@@ -2165,7 +2165,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const box = document.createElement('div');
                 box.style.marginTop = '4px';
                 const header = document.createElement('div');
-                header.style.cssText = `position:relative;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:4px 6px;background:${COLOR.bgLight};border-radius:6px`;
+                header.style.cssText = `position:relative;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:1.5px 6px;background:${COLOR.bgLight};border-radius:10px`;
                 const corner = document.createElement('div');
                 corner.className = 'cgpt-folder-corner';
                 corner.dataset.fid = fid;
