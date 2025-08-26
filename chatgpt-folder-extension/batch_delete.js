@@ -112,9 +112,16 @@
         window.addEventListener('beforeunload', window.__cgptBatchDelete.cleanup, { passive: true });
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    // 延后到页面完全加载后，再在空闲帧启动，避开 React 水合窗口
+    function afterHydration(fn){
+        const runner = () => (window.requestIdleCallback || ((cb)=>setTimeout(cb,120)))(fn);
+        if (document.readyState === 'complete') {
+            runner();
+        } else {
+            window.addEventListener('load', runner, { once: true, passive: true });
+        }
     }
+
+    afterHydration(init);
+
 })();

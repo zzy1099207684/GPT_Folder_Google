@@ -872,8 +872,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 // 页面离开时确保清理
         window.addEventListener('pagehide', () => stopBookmarksWatchdog(), {passive: true});
 
-        const readyObs = observers.add(new MutationObserver(debounce(() => {
-            const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+        function bootAfterHydration() {
+            const start = () => {
+                const readyObs = observers.add(new MutationObserver(debounce(() => {
+                    const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
 
             const wrappers = qsa('#cgpt-bookmarks-wrapper');
             if (wrappers.length > 1) {
@@ -948,7 +950,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
             }
         }, 100)));
-        readyObs.observe(document.body, {childList: true, subtree: true});
+                readyObs.observe(document.body, { childList: true, subtree: true });
+            };
+            const idle = (cb) => (window.requestIdleCallback || ((f)=>setTimeout(f,120)))(cb);
+            if (document.readyState === 'complete') {
+                idle(start);
+            } else {
+                window.addEventListener('load', () => idle(start), { once: true, passive: true });
+            }
+        }
+// 替换直接 observe 的做法：延后到 load+idle 再启动
+        bootAfterHydration();
 
 
         /* ===== 初始化收藏夹 ===== */

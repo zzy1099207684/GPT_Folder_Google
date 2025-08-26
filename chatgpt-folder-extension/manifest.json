@@ -16,7 +16,8 @@
     {
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
       "js": ["content.js", "batch_delete.js"],
-      "css": ["style.css"]
+      "css": ["style.css"],
+      "run_at": "document_idle"
     }
   ]
 }
