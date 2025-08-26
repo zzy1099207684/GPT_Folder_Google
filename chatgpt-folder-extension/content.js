@@ -1451,7 +1451,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 ].join(';')
             });
 
-            // 新增 Size：字号选择
             const sizeLabel = Object.assign(document.createElement('span'), {
                 textContent: 'Size:',
                 style: 'font-size:14px'
