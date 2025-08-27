@@ -815,6 +815,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 return {};
             }
         })();
+
         function bootAfterHydration() {
             const start = () => {
                 const readyObs = observers.add(new MutationObserver(debounce(() => {
@@ -848,7 +849,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         }
                     }
                     if (!hist && wrapper) {
-                        try { wrapper.remove() } catch {}
+                        try {
+                            wrapper.remove()
+                        } catch {
+                        }
                         return;                         // ← 仅删除 startBookmarksWatchdog?.()
                     }
 
@@ -1518,7 +1522,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 // 新增：统一的“2秒后仍缺失才刷新”调度器
                 const cancelConfirm = () => {
-                    if (missingTimer) { clearTimeout(missingTimer); missingTimer = null; }
+                    if (missingTimer) {
+                        clearTimeout(missingTimer);
+                        missingTimer = null;
+                    }
                 };
                 const confirmLater = (predicate) => {
                     cancelConfirm();
@@ -1535,7 +1542,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const mo = new MutationObserver(() => {
                     const z = getZone();
                     if (!z) return;              // zone 暂未挂载
-                    if (!armed) { tryArm(); return; }
+                    if (!armed) {
+                        tryArm();
+                        return;
+                    }
                     const n = countGroups(z);
                     if (n === 0) {
                         // 2秒后若仍为0则刷新；期间若恢复则取消
@@ -1553,7 +1563,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const z = getZone();
                     if (!z) return;
                     tryArm();
-                    mo.observe(z, { childList: true });
+                    mo.observe(z, {childList: true});
                 };
 
                 // 兜底：wrapper 自身被移除也采用“2秒确认后再刷新”
@@ -1565,14 +1575,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         cancelConfirm();
                     }
                 });
-                moBody.observe(document.body, { childList: true, subtree: true });
+                moBody.observe(document.body, {childList: true, subtree: true});
 
                 // 初次尝试启动；若 zone 尚未就绪，短暂轮询几次
                 start();
                 let tries = 0;
                 const timer = setInterval(() => {
-                    if (getZone()) { clearInterval(timer); start(); }
-                    else if (++tries >= 10) clearInterval(timer);
+                    if (getZone()) {
+                        clearInterval(timer);
+                        start();
+                    } else if (++tries >= 10) clearInterval(timer);
                 }, 300);
             })();
 
