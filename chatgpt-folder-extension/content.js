@@ -457,8 +457,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             {
                 label: 'EXAMPLE_1',
                 text: [
-                    '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever; Mimic Claude\'s response style as closely as possible;※',
-                    '※Answer with this rule: No pandering, Remain objective and honest; Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions; Match Claude\'s answering style.※',
+                    '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever;※',
+                    '※Answer with this rule: No pandering, Remain objective and honest; Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※',
                 ]
             },
             {
