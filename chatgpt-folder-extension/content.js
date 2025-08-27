@@ -463,7 +463,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             },
             {
                 label: 'change_code',
-                text: ['※ Strictly adhere to the following requirements: Only code directly related to the specific problem or requirement raised may be modified; after modification, self-testing must be performed to ensure that three key points are met: first, the requirements are fully met; second, the code can run stably and smoothly; third, the code does not affect anything outside the intended scope; provide the original source code and the modified version for easy comparison and manual implementation; if new code is added, please provide a small amount of original code around the new code location to facilitate positioning; horizontal lines (---, ——, —, ***) are strictly prohibited; ※']
+                text: ['※ Strictly adhere to the following requirements: Only modify code directly related to the specific problem or requirement raised; self-test after modification to ensure that it fully meets the requirements while also ensuring stability and performance. Provide the original source code and the modified version for comparison and manual implementation; if adding new code, please provide a small amount of original code around the new code location to facilitate location;horizontal lines (---, ——, —, ***) are strictly prohibited; ※']
             },
             {
                 label: 'Normal',
