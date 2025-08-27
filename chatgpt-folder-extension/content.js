@@ -254,23 +254,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         const liveSyncMap = new Map();
 
-        /* ===== 通用工具 ===== */
-        function getDebugInfo() {
-            return {
-                observers: observers.list.length,
-                mapSize: liveSyncMap.size,
-                folderCount: Object.keys(folders).length,
-                totalChats: Object.values(folders).reduce((sum, f) => sum + f.chats.length, 0),
-                wrapperExists: !!qs('#cgpt-bookmarks-wrapper'),
-                historyExists: !!qs('div#history') || !!qs('nav[aria-label="Chat history"]')
-            };
-        }
-
-        window.dumpFolderExtensionDebug = () => {
-            console.table(getDebugInfo());
-            return getDebugInfo();
-        };
-
         /* ===== debounced save ===== */
         let _saveFoldersTimer = null;
 
@@ -342,28 +325,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             };
         }
 
-        /* ===== 动态帧率监控 ===== */
-        let CHUNK_BUDGET_MS = 8;                     // 默认单帧预算
-        (() => {
-            const samples = [];
-            let last = performance.now();
-
-            function loop(now) {
-                const dt = now - last;
-                last = now;
-                samples.push(dt);
-                if (samples.length > 60) samples.shift();
-                if (samples.length === 60) {
-                    const fps = 1000 / (samples.reduce((a, b) => a + b, 0) / 60);
-                    if (fps < 55 && CHUNK_BUDGET_MS > 4) CHUNK_BUDGET_MS = 4;
-                    else if (fps > 58 && CHUNK_BUDGET_MS < 12) CHUNK_BUDGET_MS = 8;
-                }
-                requestAnimationFrame(loop);
-            }
-
-            requestAnimationFrame(loop);
-        })();
-
+        let CHUNK_BUDGET_MS = 4;                     // 默认单帧预算
 
         /* ===== 通用工具 ===== */
         const CLS = {tip: 'cgpt-tip'};
