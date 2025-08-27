@@ -873,7 +873,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 });
                         }
                     }
-                }, 100)));
+                }, 0)));
                 readyObs.observe(document.body, {childList: true, subtree: true});
             };
             const idle = (cb) => (window.requestIdleCallback || ((f) => setTimeout(f, 120)))(cb);
