@@ -419,7 +419,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             {
                 label: 'EXAMPLE_1',
                 text: [
-                    '※Follow this rule: No flattery,Be truthful only; Absolutely under no circumstances should horizontal dividers (---, ——, —, ***) be permitted whatsoever;※',
+                    '※Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed;※',
                     '※Answer with this rule: No pandering, Remain objective and honest; Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※',
                 ]
             },
@@ -1483,7 +1483,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         } finally {
                             missingTimer = null;
                         }
-                    }, 2000);
+                    }, 1500);
                 };
 
                 // 监听 folderZone 自身的子列表变化（组条目缺失→延迟确认）
