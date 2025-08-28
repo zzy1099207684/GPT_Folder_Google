@@ -2621,7 +2621,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     });
 
-                    observer.observe(qs('div#history') || qs('nav[aria-label="Chat history"]'), {childList: true});
+                    observer.observe(qs('div#history') || qs('nav[aria-label="Chat history"]'), {childList: true, subtree: true});
                     currentNewChatObserver = observer;
                 };
                 const ul = document.createElement('ul');
@@ -3184,7 +3184,19 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     safeSendMessage({type: 'save-folders', data: folders});
 
-                    if (needRender) render();               // 根据标志决定是否重绘
+                    if (needRender) {
+                        // 精准更新：只替换当前分组节点，避免等待整块异步分帧渲染
+                        const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                        const fidList = Object.keys(folders);
+                        const idx = fidList.indexOf(folderFid);
+                        const oldBox = folderZone && folderZone.children && folderZone.children[idx];
+                        if (folderZone && oldBox) {
+                            const newBox = renderFolder(folderFid, folders[folderFid]);
+                            folderZone.replaceChild(newBox, oldBox);
+                        } else {
+                            render(); // 兜底：若定位失败，再走全量渲染
+                        }
+                    }              // 根据标志决定是否重绘
                     highlightActive();                      // 始终保持高亮状态
 
                     if (window.__cgptPendingFid === folderFid) {
