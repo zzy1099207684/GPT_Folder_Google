@@ -2493,6 +2493,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         qsa(HIST_ANCHOR).map(a => new URL(a.href).pathname)
                     );
                     const globalNewBtn = qs('button[aria-label="New chat"]');
+
+// 统一：组内新开会话也默认 Normal
+                    try {
+                        sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({
+                            label: 'Normal',
+                            text: '※horizontal lines (---, ——, —, ***) strictly prohibited※'
+                        }));
+                    } catch {}
+
                     if (globalNewBtn) {
                         // ↓ 避免全局按钮把刚设好的组高亮清掉
                         window.__cgptSuppressGroupClear = true;
@@ -3670,6 +3679,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     );
                     if (!btn) return;
 
+                    // 统一：新开会话默认 Normal
+                    try {
+                        sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({
+                            label: 'Normal',
+                            text: '※horizontal lines (---, ——, —, ***) strictly prohibited※'
+                        }));
+                    } catch {}
+
                     // 若由组内“New chat”间接触发，则跳过本次清除并重置标志
                     if (window.__cgptSuppressGroupClear) {
                         delete window.__cgptSuppressGroupClear;
@@ -3682,8 +3699,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     delete lastActiveMap['/'];
                     try {
                         if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                    } catch {
-                    }
+                    } catch {}
                     setTimeout(highlightActive, 0);
                     setTimeout(() => {
                         try {
@@ -3694,6 +3710,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 }, true);
             }
+
 
 
             function checkMemoryUsage() {

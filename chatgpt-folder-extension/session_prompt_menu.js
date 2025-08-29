@@ -74,22 +74,23 @@
                 pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 180)) + 'px';
                 pop.style.top  = (rect.bottom + 6) + 'px';
 
-                // 当前已选；若未设置则默认 Normal（只用于显示）
-                const currentLabel = (() => {
+                // 当前已选；严格以 sessionStorage 为准；未设置时为 null（不默认高亮 Normal）
+                const storedPrompt = (() => {
                     try {
                         const raw = sessionStorage.getItem('cgptSessionPrompt');
-                        if (!raw) return 'Normal';
-                        const obj = JSON.parse(raw);
-                        return String(obj.label || 'Normal');
-                    } catch { return 'Normal'; }
+                        return raw ? JSON.parse(raw) : null;
+                    } catch { return null; }
                 })();
+                const currentLabel = (storedPrompt && typeof storedPrompt.label === 'string')
+                    ? String(storedPrompt.label).trim()
+                    : null;
 
                 opts.forEach(o => {
                     const row = document.createElement('div');
                     row.textContent = String(o.label || '').trim() || 'Unnamed';
                     row.style.cssText = 'padding:6px 12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:space-between';
                     // 选中态渲染：高亮 + √
-                    if (String(o.label).trim() === currentLabel) {
+                    if (currentLabel && String(o.label).trim() === currentLabel) {
                         row.style.background = 'rgba(255,255,255,0.08)';
                         const tick = document.createElement('span');
                         tick.textContent = '√';
@@ -99,11 +100,19 @@
                     row.addEventListener('click', (e2) => {
                         e2.stopPropagation();
                         try {
-                            sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: o.label, text: o.text }));
-                            toast('Start Prompt：' + (String(o.label || '').trim() || 'Unnamed'));
+                            const chosen = String(o.label || '').trim();
+                            const isSame = currentLabel && chosen === currentLabel; // 同项则取反为 off
+                            if (isSame) {
+                                sessionStorage.removeItem('cgptSessionPrompt');
+                                toast('Start Prompt：off');
+                            } else {
+                                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: o.label, text: o.text }));
+                                toast('Start Prompt：' + (chosen || 'Unnamed'));
+                            }
                         } catch {}
                         pop.remove();
                     });
+
                     pop.appendChild(row);
                 });
 
