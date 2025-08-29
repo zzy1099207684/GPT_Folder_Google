@@ -413,7 +413,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         const hints = [
             {
                 label: 'change_code',
-                text: ['※ Strictly adhere to the following requirements: Only modify code directly related to the specific problem or requirement raised; self-test after modification to ensure that it fully meets the requirements while also ensuring stability and performance. Provide the original source code and the modified version for comparison and manual implementation; if adding new code, please provide a small amount of original code around the new code location to facilitate location※']
+                text: ['※Strictly adhere to the following requirements: Only modify code directly related to the specific problem or requirement raised; self-test after modification to ensure that it fully meets the requirements while also ensuring stability and performance. Provide the original source code and the modified version for comparison and manual implementation; if adding new code, please provide a small amount of original code around the new code location to facilitate location※']
             }
         ];         // 自行增删
         // 修改后的存储逻辑
@@ -1545,7 +1545,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             const presetFlag = (await storage.get('presetInitialized')) || 0;
             if (presetFlag === 0) {
-                for (let i = 0; i < 2; i++) {
+                for (let i = 0; i < 1; i++) {
                     if (!Object.values(folders).some(f => f.name === hints[i].label)) {
                         const id = 'preset_' + hints[i].label;
                         folders[id] = {

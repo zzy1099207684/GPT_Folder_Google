@@ -2,13 +2,13 @@
  * 选择后将 {label, text} 写入 sessionStorage.cGPTSessionPrompt，与 content.js 的注入逻辑对接。
  */
 (function () {
-    const Normal_text = '※horizontal lines (---, ——, —, ***) are strictly prohibited※';
+    const Normal_text = '※horizontal lines (---, ——, —, ***) strictly prohibited※';
     const Concise = 'Concise';
-    const Concise_text = '※Shorter responses & more messages;horizontal lines (---, ——, —, ***) are strictly prohibited※';
+    const Concise_text = '※Shorter responses & more messages;horizontal lines (---, ——, —, ***) strictly prohibited※';
     const Explanatory = 'Explanatory';
-    const Explanatory_text = 'Explain thoroughly;horizontal lines (---, ——, —, ***) are strictly prohibited';
+    const Explanatory_text = '※Explain thoroughly;horizontal lines (---, ——, —, ***) strictly prohibited※';
 
-    // 若需要日后扩展，可在页面任意脚本设置 window.__cgptPromptOptions = [{label,text},...]
+    // 若需要日后扩展，可在页面任意脚本设置
     function getOptions() {
         const ext = Array.isArray(window.__cgptPromptOptions) ? window.__cgptPromptOptions : [];
         const hasNormal = ext.some(o => String(o.label || '').toLowerCase() === 'normal');
@@ -16,7 +16,7 @@
         const hasExplanatory = ext.some(o => String(o.label || '').toLowerCase() === Explanatory);
         const base = [];
         if (!hasNormal) base.push({ label: 'Normal', text: Normal_text});   // 默认选项
-        if (!hasBasic)  base.push({ label: Concise,  text: Concise_text  });
+        if (!hasBasic)  base.push({ label: Concise,  text: Concise_text});
         if (!hasExplanatory)  base.push({ label: Explanatory,  text: Explanatory_text});
         return base.concat(ext);
     }
@@ -100,7 +100,7 @@
                         e2.stopPropagation();
                         try {
                             sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: o.label, text: o.text }));
-                            toast('已启用会话 Prompt：' + (String(o.label || '').trim() || 'Unnamed'));
+                            toast('Start Prompt：' + (String(o.label || '').trim() || 'Unnamed'));
                         } catch {}
                         pop.remove();
                     });
