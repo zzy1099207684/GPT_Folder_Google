@@ -3024,8 +3024,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     let merged = mainPrompt;
                     if (groupPrompt && inputPrompt) {
                         const clean = s => String(s).replace(/^※+/, '').replace(/※+$/, '').trim();
-                        const left  = clean(groupPrompt).replace(/[;；:。!? \t]+$/, '');
-                        const right = clean(inputPrompt).replace(/^[;；:。!? \t]+/, '');
+                        const left  = clean(inputPrompt).replace(/[;；:。!? \t]+$/, '');
+                        const right = clean(groupPrompt).replace(/^[;；:。!? \t]+/, '');
                         const inner = left && right ? `${left}; ${right}` : (left || right);
                         merged = `※${inner}※`;
                     }
