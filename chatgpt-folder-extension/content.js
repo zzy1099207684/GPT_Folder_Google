@@ -37,8 +37,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             // 非组内会话也显示开关
             const path = location.pathname;
-            const shouldShow = true;
-
             let box = form.querySelector('#cgpt-prompt-toggle');
             // 去掉隐藏早退分支，始终渲染
 
