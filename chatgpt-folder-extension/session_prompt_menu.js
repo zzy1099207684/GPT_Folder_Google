@@ -2,17 +2,22 @@
  * 选择后将 {label, text} 写入 sessionStorage.cGPTSessionPrompt，与 content.js 的注入逻辑对接。
  */
 (function () {
-    const BASIC_TEXT = '※请用清晰、准确、简洁的中文回答。优先给出结论，再给出必要的推理与要点。不要使用横向分隔线。保持客观，避免无依据推断；不确定时直接说明并给出可验证思路。※';
-    const NORMAL_TEXT = '';
+    const Normal_text = '※horizontal lines (---, ——, —, ***) are strictly prohibited※';
+    const Concise = 'Concise';
+    const Concise_text = '※Shorter responses & more messages;horizontal lines (---, ——, —, ***) are strictly prohibited※';
+    const Explanatory = 'Explanatory';
+    const Explanatory_text = 'Explain thoroughly;horizontal lines (---, ——, —, ***) are strictly prohibited';
 
     // 若需要日后扩展，可在页面任意脚本设置 window.__cgptPromptOptions = [{label,text},...]
     function getOptions() {
         const ext = Array.isArray(window.__cgptPromptOptions) ? window.__cgptPromptOptions : [];
-        const hasBasic = ext.some(o => String(o.label || '').toLowerCase() === 'basic');
         const hasNormal = ext.some(o => String(o.label || '').toLowerCase() === 'normal');
+        const hasBasic = ext.some(o => String(o.label || '').toLowerCase() === Concise);
+        const hasExplanatory = ext.some(o => String(o.label || '').toLowerCase() === Explanatory);
         const base = [];
-        if (!hasNormal) base.push({ label: 'Normal', text: NORMAL_TEXT });   // 默认选项
-        if (!hasBasic)  base.push({ label: 'Basic',  text: BASIC_TEXT  });
+        if (!hasNormal) base.push({ label: 'Normal', text: Normal_text});   // 默认选项
+        if (!hasBasic)  base.push({ label: Concise,  text: Concise_text  });
+        if (!hasExplanatory)  base.push({ label: Explanatory,  text: Explanatory_text});
         return base.concat(ext);
     }
 

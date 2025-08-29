@@ -412,29 +412,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         // ① preset prompt and group
         const hints = [
             {
-                label: 'EXAMPLE_1',
-                text: [
-                    '※Answer with this rule: No pandering, Remain objective and honest; Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※',
-                ]
-            },
-            {
                 label: 'change_code',
-                text: ['※ Strictly adhere to the following requirements: Only modify code directly related to the specific problem or requirement raised; self-test after modification to ensure that it fully meets the requirements while also ensuring stability and performance. Provide the original source code and the modified version for comparison and manual implementation; if adding new code, please provide a small amount of original code around the new code location to facilitate location;horizontal lines (---, ——, —, ***) are strictly prohibited; ※']
-            },
-            {
-                label: 'EXAMPLE_2',
-                text: [
-                    '※Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed;※',
-                ]
-            },
-            {
-                label: 'Normal',
-                text: '※You are an intelligent, helpful, and honest AI assistant. Please use clear and natural Chinese answers, maintain a professional but friendly tone, and respond directly to questions without using polite opening remarks. Prioritize paragraph format, use list format only when the user explicitly requests it, and maintain a natural flow in daily conversations. Always provide accurate and useful information, honestly acknowledge uncertainty, do not fabricate content, provide kind but direct corrections to incorrect views, and maintain objectivity and critical thinking. Adjust the length of your answers according to the complexity of the question, avoid overusing questions that burden the user, explain complex concepts with examples or analogies when appropriate, and maintain a consistent personality without over-accommodating. When using professional terms, codes, or English proper nouns, retain the original text, and proactively explain limitations when unsure. Always prioritize the user\'s actual needs and long-term interests, and communicate in a natural, helpful, and honest manner.※'
-            },
-            {
-                label: 'Explanatory',
-                text: '※Please adopt the following answering style: You are a patient teacher. When answering questions, you should break down complex concepts into easily understandable parts, starting from the basics and gradually going deeper. Use analogies and specific examples to illustrate abstract concepts, and provide sufficient background information to help build a complete knowledge framework. Maintain a patient and encouraging tone, express yourself in complete paragraphs rather than lists, anticipate possible points of confusion and proactively clarify them, and add explanatory notes to technical content to illustrate key ideas. Ask guiding questions to promote thinking, suggest relevant practical activities, and encourage deep understanding rather than superficial memorization. Make sure to provide sufficient context to make the logical connections between concepts clear, and connect to knowledge in related fields when necessary. The goal is to help the questioner not only get an answer, but also truly understand the essence of the problem and the inherent connection between related concepts.※'
-            },
+                text: ['※ Strictly adhere to the following requirements: Only modify code directly related to the specific problem or requirement raised; self-test after modification to ensure that it fully meets the requirements while also ensuring stability and performance. Provide the original source code and the modified version for comparison and manual implementation; if adding new code, please provide a small amount of original code around the new code location to facilitate location※']
+            }
         ];         // 自行增删
         // 修改后的存储逻辑
         // Enhanced storage implementation with better error handling - replace storage object
