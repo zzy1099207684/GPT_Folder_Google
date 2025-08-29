@@ -35,18 +35,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const form = qs('form[data-type="unified-composer"]');
             if (!form) return;
 
-            // 仅在“组内 new chat”或“点击组内会话”两类场景显示
+            // 非组内会话也显示开关
             const path = location.pathname;
-            const fromPending = !!(window.__cgptPendingFid && folders[window.__cgptPendingFid]);
-            const mappedFid = lastActiveMap[path];
-            const fromMapped = !!(mappedFid && mappedFid !== '__history__' && folders[mappedFid]);
-            const shouldShow = fromPending || fromMapped;
+            const shouldShow = true;
 
             let box = form.querySelector('#cgpt-prompt-toggle');
-            if (!shouldShow) {
-                if (box) box.remove();
-                return;
-            }
+            // 去掉隐藏早退分支，始终渲染
+
 
             // 计算与发送前计数器一致的 key（根路径首条消息用临时 token 键）
             const key = (path === '/' && window.__cgptPendingToken)
@@ -419,13 +414,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             {
                 label: 'EXAMPLE_1',
                 text: [
-                    '※Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed;※',
                     '※Answer with this rule: No pandering, Remain objective and honest; Horizontal separators (---, ——, —, ***) are absolutely forbidden without any exceptions;※',
                 ]
             },
             {
                 label: 'change_code',
                 text: ['※ Strictly adhere to the following requirements: Only modify code directly related to the specific problem or requirement raised; self-test after modification to ensure that it fully meets the requirements while also ensuring stability and performance. Provide the original source code and the modified version for comparison and manual implementation; if adding new code, please provide a small amount of original code around the new code location to facilitate location;horizontal lines (---, ——, —, ***) are strictly prohibited; ※']
+            },
+            {
+                label: 'EXAMPLE_2',
+                text: [
+                    '※Use this rule: Never flatter,Stay truthful and neutral;Absolutely no horizontal lines (---,——,—,***) are allowed;※',
+                ]
             },
             {
                 label: 'Normal',
@@ -2944,21 +2944,33 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     currentFid = null;   // 阻断后续 prompt 注入
                 }
 
-                const promptList = currentFid ? (folders[currentFid].prompts || []) : [];
+                // 会话级 prompt 与组内 prompt 不再区分优先级；单独计算两者
+                const sessionPrompt = (() => {
+                    try { const raw = sessionStorage.getItem('cgptSessionPrompt'); const obj = raw ? JSON.parse(raw) : null;
+                        return (obj && String(obj.text || '').trim()) || '';
+                    } catch { return ''; }
+                })();
+
+                const groupPrompts = currentFid ? (folders[currentFid].prompts || []) : [];
+
                 const indices = window.__cgptPromptIndexMap;
-                const counterKey =                                   // ✅ 先计算
-                    (path === '/' && window.__cgptPendingToken)
-                        ? `/${window.__cgptPendingToken}`
-                        : path;
-                const idx = indices[counterKey] || 0;                // 再使用
-                const groupPrompt = promptList.length
-                    ? (promptList[idx % promptList.length] || '').trim()
+                const counterKey = (path === '/' && window.__cgptPendingToken) ? `/${window.__cgptPendingToken}` : path;
+                const idx = indices[counterKey] || 0;
+
+                const groupPrompt = groupPrompts.length
+                    ? (groupPrompts[idx % groupPrompts.length] || '').trim()
                     : '';
 
-                // 先读取当前分组的间隔值，默认为 3
-                const gap = currentFid && Number.isFinite(folders[currentFid].gap)
-                    ? Math.max(0, folders[currentFid].gap)
-                    : 3;
+                const inputPrompt = sessionPrompt;                   // 输入框设置的 prompt（可能为空）
+                const mainPrompt = groupPrompt || inputPrompt;       // 至少保证注入其一
+
+                // 会话级 prompt 默认每轮都注入；否则沿用分组的间隔设置（默认 3）
+                const gap = sessionPrompt
+                    ? 0
+                    : (currentFid && Number.isFinite(folders[currentFid].gap)
+                        ? Math.max(0, folders[currentFid].gap)
+                        : 3);
+
 
                 const gapCounters = window.__cgptPromptGapCounters;
                 let cnt = gapCounters[counterKey];
@@ -2979,64 +2991,47 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
                 gapCounters[counterKey] = cnt;
 
-                if (injectNow && promptList.length) {
-                    indices[counterKey] = (idx + 1) % promptList.length;
-                    try {
-                        sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices));
-                    } catch {
-                    }
+                if (injectNow && groupPrompts.length) {
+                    indices[counterKey] = (idx + 1) % groupPrompts.length;
+                    try { sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices)); } catch {}
                 }
 
-                if (injectNow && groupPrompt) {
+                if (injectNow && mainPrompt) {
                     qsa('p', ed).forEach((p, i, arr) => {
                         const txt = p.innerText.trim();
-                        if (txt === groupPrompt && i !== arr.length - 1) p.remove();
+                        if ((txt === groupPrompt || txt === inputPrompt) && i !== arr.length - 1) p.remove();
                     });
                 }
-
                 const toggles = window.__cgptPromptTogglePerPath || {};
                 const toggleOn = toggles[counterKey] !== false;
 
-                if (injectNow && groupPrompt && toggleOn) {
+                // 若本次需要注入 prompt（组内、输入框二者合并）
+                if (injectNow && mainPrompt && toggleOn) {
                     qsa('p', ed).forEach((p, i, arr) => {
                         const txt = p.innerText.trim();
-                        if ((txt === groupPrompt || txt === 'Task content:') && i !== arr.length - 1) p.remove();
+                        if ((txt === groupPrompt || txt === inputPrompt || txt === 'Task content:') && i !== arr.length - 1) p.remove();
                     });
-                    const gp = document.createElement('p');
-                    gp.textContent = groupPrompt;
-                    const tc = document.createElement('p');
-                    tc.textContent = 'Task content:';
                     const frag = document.createDocumentFragment();
-                    frag.appendChild(gp);
-                    frag.appendChild(tc);
-                    ed.prepend(frag);
-                }
+                    const gp = document.createElement('p');
 
-                if (SUFFIX) {                              // SUFFIX 为空时不追加空段落
-                    let last = ed.lastElementChild;
-                    if (!(last && last.innerText.trim() === SUFFIX)) {
-                        const p = document.createElement('p');
-                        p.textContent = SUFFIX;
-                        ed.appendChild(p);
+                    let merged = mainPrompt;
+                    if (groupPrompt && inputPrompt) {
+                        const clean = s => String(s).replace(/^※+/, '').replace(/※+$/, '').trim();
+                        const left  = clean(groupPrompt).replace(/[;；:。!? \t]+$/, '');   // 去末尾标点与空白
+                        const right = clean(inputPrompt).replace(/^[;；:。!? \t]+/, '');   // 去开头标点与空白
+                        const inner = left && right ? `${left}; ${right}` : (left || right);
+                        merged = `※${inner}※`;
                     }
-                }
+                    gp.textContent = merged;
+                    frag.appendChild(gp);
 
-// 若本次需要注入组 prompt
-                if (injectNow && groupPrompt && toggleOn) {
-                    qsa('p', ed).forEach((p, i, arr) => {
-                        const txt = p.innerText.trim();
-                        if ((txt === groupPrompt || txt === 'Task content:') && i !== arr.length - 1) p.remove();
-                    });
-                    const gp = document.createElement('p');
-                    gp.textContent = groupPrompt;
                     const tc = document.createElement('p');
                     tc.textContent = 'Task content:';
-                    const frag = document.createDocumentFragment();
-                    frag.appendChild(gp);
                     frag.appendChild(tc);
                     ed.prepend(frag);
                     changed = true;
                 }
+
 
 // 仅当 SUFFIX 非空且确实需要追加时才处理
                 if (SUFFIX && !(ed.lastElementChild && ed.lastElementChild.innerText.trim() === SUFFIX)) {
