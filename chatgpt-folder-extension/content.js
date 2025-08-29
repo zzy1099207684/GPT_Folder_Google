@@ -346,6 +346,23 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         // 页面初始化后立即尝试一次
         requestAnimationFrame(restorePointerEvents);
 
+        // 复制/粘贴/右键 在捕获阶段放行，避免被其它脚本拦截导致输入框内无法使用
+        const __cgptAllowClipboard = (e) => {
+            const t = e.target;
+            if (!(t instanceof Element)) return;
+            const isEditable =
+                t.matches('input,textarea,[contenteditable="true"]') ||
+                t.closest('[role="dialog"] input,[role="dialog"] textarea,[role="dialog"] [contenteditable="true"]');
+            if (isEditable) {
+                // 不改变默认行为，只阻止继续冒泡到可能会拦截的监听
+                e.stopPropagation();
+            }
+        };
+        window.addEventListener('copy', __cgptAllowClipboard, true);
+        window.addEventListener('cut', __cgptAllowClipboard, true);
+        window.addEventListener('paste', __cgptAllowClipboard, true);
+        window.addEventListener('contextmenu', __cgptAllowClipboard, true);
+
         window.addEventListener('pagehide', () => {
             try {
                 observers.disconnectAll();
@@ -356,6 +373,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             } catch {
             }
         }, {passive: true});
+
 
         // 关键场景下再检查一次，确保后续状态同步
         window.addEventListener('resize', restorePointerEvents, {passive: true});
