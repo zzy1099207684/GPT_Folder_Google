@@ -1,6 +1,3 @@
-/* 会话级 Prompt 选择菜单：在“Add photos & files”所在的下拉菜单中插入“Prompt”项，并提供“Basic”选项。
- * 选择后将 {label, text} 写入 sessionStorage.cGPTSessionPrompt，与 content.js 的注入逻辑对接。
- */
 (function () {
     const Normal_text = '※horizontal lines (---, ——, —, ***) strictly prohibited※';
     const Concise = 'Concise';
