@@ -3,7 +3,7 @@
  */
 (function () {
     const BASIC_TEXT = '※请用清晰、准确、简洁的中文回答。优先给出结论，再给出必要的推理与要点。不要使用横向分隔线。保持客观，避免无依据推断；不确定时直接说明并给出可验证思路。※';
-    const NORMAL_TEXT = '※※';
+    const NORMAL_TEXT = '';
 
     // 若需要日后扩展，可在页面任意脚本设置 window.__cgptPromptOptions = [{label,text},...]
     function getOptions() {

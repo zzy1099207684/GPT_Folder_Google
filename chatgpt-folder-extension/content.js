@@ -3017,20 +3017,26 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     let merged = mainPrompt;
                     if (groupPrompt && inputPrompt) {
                         const clean = s => String(s).replace(/^※+/, '').replace(/※+$/, '').trim();
-                        const left  = clean(groupPrompt).replace(/[;；:。!? \t]+$/, '');   // 去末尾标点与空白
-                        const right = clean(inputPrompt).replace(/^[;；:。!? \t]+/, '');   // 去开头标点与空白
+                        const left  = clean(groupPrompt).replace(/[;；:。!? \t]+$/, '');
+                        const right = clean(inputPrompt).replace(/^[;；:。!? \t]+/, '');
                         const inner = left && right ? `${left}; ${right}` : (left || right);
                         merged = `※${inner}※`;
                     }
-                    gp.textContent = merged;
-                    frag.appendChild(gp);
 
-                    const tc = document.createElement('p');
-                    tc.textContent = 'Task content:';
-                    frag.appendChild(tc);
-                    ed.prepend(frag);
-                    changed = true;
+                    const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
+                    if (mergedClean) {
+                        gp.textContent = merged;
+                        frag.appendChild(gp);
+
+                        const tc = document.createElement('p');
+                        tc.textContent = 'Task content:';
+                        frag.appendChild(tc);
+
+                        ed.prepend(frag);
+                        changed = true;
+                    }
                 }
+
 
 
 // 仅当 SUFFIX 非空且确实需要追加时才处理
