@@ -453,55 +453,56 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     // 新增：分片重组逻辑
                     // 兼容新老格式：优先按 meta.parts 聚合，否则退回 f_<id> 单块或 legacy
                     if (key === 'folders') {
-                        const {folderKeys = []} = await chrome.storage.sync.get('folderKeys');
-                        const folders = {};
-                        if (folderKeys.length) {
-                            const metaKeys = folderKeys.map(id => `f_${id}__meta`);
-                            const metas = await chrome.storage.sync.get(metaKeys);
-                            // 先找出所有需要的分片键
-                            const allPartKeys = [];
-                            folderKeys.forEach(id => {
-                                const meta = metas[`f_${id}__meta`];
-                                if (meta && Number.isInteger(meta.parts) && meta.parts > 0) {
-                                    for (let i = 0; i < meta.parts; i++) allPartKeys.push(`f_${id}__p${i}`);
-                                }
-                            });
-                            const partsObj = allPartKeys.length ? await chrome.storage.sync.get(allPartKeys) : {};
-                            // 聚合
-                            // 聚合
-                            for (const id of folderKeys) {
-                                const meta = metas[`f_${id}__meta`];
-                                if (meta && Number.isInteger(meta.parts)) {
-                                    let chats = [];
-                                    if (meta.parts > 0) {
-                                        for (let i = 0; i < meta.parts; i++) {
-                                            const part = partsObj[`f_${id}__p${i}`];
-                                            if (part && Array.isArray(part.chats)) chats.push(...part.chats);
-                                        }
-                                    }
-                                    // 读取独立 gap 映射
-                                    const gapObj = await chrome.storage.sync.get('folderGaps');
-                                    const gapMap = gapObj.folderGaps || {};
-
-                                    folders[id] = {
-                                        name: meta.name || 'Group',
-                                        collapsed: !!meta.collapsed,
-                                        prompts: Array.isArray(meta.prompts) ? meta.prompts : [],
-                                        gap: Number.isFinite(gapMap[id]) ? gapMap[id]
-                                            : (Number.isFinite(meta.gap) ? meta.gap : 0),
-                                        chats
-                                    };
-                                } else {
-                                    const single = await chrome.storage.sync.get('f_' + id);
-                                    folders[id] = single['f_' + id] || {};
-                                }
-                            }
-
-                            return folders;
+                        const { folderKeys = [] } = await chrome.storage.sync.get('folderKeys');
+                        if (!folderKeys.length) {
+                            const legacy = await chrome.storage.sync.get('folders');
+                            return legacy.folders || {};
                         }
-                        const legacy = await chrome.storage.sync.get('folders');
-                        return legacy.folders || {};
+
+                        const metaKeys = folderKeys.map(id => `f_${id}__meta`);
+                        const metas = await chrome.storage.sync.get(metaKeys);
+
+                        // 预组装全部分片键
+                        const allPartKeys = [];
+                        folderKeys.forEach(id => {
+                            const meta = metas[`f_${id}__meta`];
+                            if (meta && Number.isInteger(meta.parts) && meta.parts > 0) {
+                                for (let i = 0; i < meta.parts; i++) allPartKeys.push(`f_${id}__p${i}`);
+                            }
+                        });
+
+                        // 一次性并发取回：分片、gap 映射、以及所有可能的单块键
+                        const [partsObj, gapObj, singlesObj] = await Promise.all([
+                            allPartKeys.length ? chrome.storage.sync.get(allPartKeys) : Promise.resolve({}),
+                            chrome.storage.sync.get('folderGaps'),
+                            chrome.storage.sync.get(folderKeys.map(id => 'f_' + id))
+                        ]);
+                        const gapMap = (gapObj && gapObj.folderGaps) || {};
+
+                        const folders = {};
+                        for (const id of folderKeys) {
+                            const meta = metas[`f_${id}__meta`];
+                            if (meta && Number.isInteger(meta.parts)) {
+                                let chats = [];
+                                for (let i = 0; i < (meta.parts || 0); i++) {
+                                    const part = partsObj[`f_${id}__p${i}`];
+                                    if (part && Array.isArray(part.chats)) chats = chats.concat(part.chats);
+                                }
+                                folders[id] = {
+                                    name: meta.name || 'Group',
+                                    collapsed: !!meta.collapsed,
+                                    prompts: Array.isArray(meta.prompts) ? meta.prompts : [],
+                                    gap: Number.isFinite(gapMap[id]) ? gapMap[id]
+                                        : (Number.isFinite(meta.gap) ? meta.gap : 0),
+                                    chats
+                                };
+                            } else {
+                                folders[id] = singlesObj['f_' + id] || {};
+                            }
+                        }
+                        return folders;
                     }
+
 
 
                     const obj = await chrome.storage.sync.get(key);
@@ -2015,7 +2016,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
 
             const unifiedObs = observers.add(new MutationObserver(unifiedObsCallback));
-            unifiedObs.observe(document.body, {childList: true, subtree: true});
+            // 优先使用 initBookmarks 传入的 historyNode，其次侧栏 nav，再退 body
+            const unifiedRoot =
+                historyNode ||
+                qs('nav[aria-label="Chat history"]') ||
+                qs('div#history') ||
+                document.body;
+            unifiedObs.observe(unifiedRoot, {childList: true, subtree: true});
 
             // ① 新增：让附件条显示可见的横向滚动条
             function enableAttachStripScroll() {
@@ -2045,10 +2052,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
             }
 
-// 首次与后续动态渲染都处理
             enableAttachStripScroll();
             const attachObs = observers.add(new MutationObserver(() => enableAttachStripScroll()));
-            attachObs.observe(document.body, {childList: true, subtree: true});
+            const attachRoot = qs('form[data-type="unified-composer"]') || document.body;
+            attachObs.observe(attachRoot, {childList: true, subtree: true});
 
 
             /* ---------- 渲染 ---------- */

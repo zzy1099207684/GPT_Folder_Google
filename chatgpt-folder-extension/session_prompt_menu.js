@@ -29,21 +29,22 @@
         } catch {}
     }
 
-    // 观察下拉菜单的出现
-    const mo = new MutationObserver(() => {
-        // 查找包含“Add photos & files”的菜单群组
-        const groups = document.querySelectorAll('div[role="group"]');
-        groups.forEach(g => {
-            if (g.__cgptPromptMenuPatched) return;
-            const item = g.querySelector('div[role="menuitem"]');
-            if (!item) return;
+    // 观察下拉菜单的出现（仅处理新增节点，避免全局扫描）
+    const mo = new MutationObserver((mutations) => {
+        const patchGroup = (g) => {
+            if (!g || g.__cgptPromptMenuPatched) return;
 
-            const hasAddFiles = Array.from(g.querySelectorAll('div[role="menuitem"]'))
+            // 组内需至少有一个 menuitem
+            const firstItem = g.querySelector('div[role="menuitem"]');
+            if (!firstItem) return;
+
+            // 仅在该组内判断是否包含 “Add photos & files”
+            const hasAddFiles = Array
+                .from(g.querySelectorAll('div[role="menuitem"]'))
                 .some(n => /Add photos\s*&\s*files/i.test(n.textContent || ''));
 
             if (!hasAddFiles) return;
 
-            // 插入我们的“Prompt”菜单项
             const mi = document.createElement('div');
             mi.setAttribute('role', 'menuitem');
             mi.setAttribute('tabindex', '0');
@@ -61,7 +62,7 @@
             mi.appendChild(icon);
             mi.appendChild(text);
 
-            // 二级子菜单（简单弹层）
+            // 保持原有点击逻辑不变
             mi.addEventListener('click', (ev) => {
                 ev.stopPropagation();
                 const opts = getOptions();
@@ -71,22 +72,17 @@
                 pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 180)) + 'px';
                 pop.style.top  = (rect.bottom + 6) + 'px';
 
-                // 当前已选；严格以 sessionStorage 为准；未设置时为 null（不默认高亮 Normal）
-                const storedPrompt = (() => {
-                    try {
-                        const raw = sessionStorage.getItem('cgptSessionPrompt');
-                        return raw ? JSON.parse(raw) : null;
-                    } catch { return null; }
-                })();
+                const storedPrompt = (() => { try {
+                    const raw = sessionStorage.getItem('cgptSessionPrompt');
+                    return raw ? JSON.parse(raw) : null;
+                } catch { return null; } })();
                 const currentLabel = (storedPrompt && typeof storedPrompt.label === 'string')
-                    ? String(storedPrompt.label).trim()
-                    : null;
+                    ? String(storedPrompt.label).trim() : null;
 
                 opts.forEach(o => {
                     const row = document.createElement('div');
                     row.textContent = String(o.label || '').trim() || 'Unnamed';
                     row.style.cssText = 'padding:6px 12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:space-between';
-                    // 选中态渲染：高亮 + √
                     if (currentLabel && String(o.label).trim() === currentLabel) {
                         row.style.background = 'rgba(255,255,255,0.08)';
                         const tick = document.createElement('span');
@@ -98,7 +94,7 @@
                         e2.stopPropagation();
                         try {
                             const chosen = String(o.label || '').trim();
-                            const isSame = currentLabel && chosen === currentLabel; // 同项则取反为 off
+                            const isSame = currentLabel && chosen === currentLabel;
                             if (isSame) {
                                 sessionStorage.removeItem('cgptSessionPrompt');
                                 toast('Start Prompt：off');
@@ -109,7 +105,6 @@
                         } catch {}
                         pop.remove();
                     });
-
                     pop.appendChild(row);
                 });
 
@@ -120,19 +115,25 @@
                 }, 0);
             });
 
-            // 插入到现有组的第一个 menuitem 之前，或末尾
+            // 插入到该组的首个 menuitem 之前或末尾
             const anchor = g.querySelector('div[role="menuitem"]');
-            if (anchor && anchor.parentNode === g) {
-                g.insertBefore(mi, anchor);
-            } else {
-                g.appendChild(mi);
-            }
+            if (anchor && anchor.parentNode === g) g.insertBefore(mi, anchor);
+            else g.appendChild(mi);
 
             g.__cgptPromptMenuPatched = true;
-        });
-    });
+        };
 
+        for (const m of mutations) {
+            if (m.type !== 'childList') continue;
+            m.addedNodes.forEach(node => {
+                if (node.nodeType !== 1) return;
+                if (node.matches?.('div[role="group"]')) patchGroup(node);
+                node.querySelectorAll?.('div[role="group"]').forEach(patchGroup);
+            });
+        }
+    });
     mo.observe(document.body, { childList: true, subtree: true });
+
 
     // 页面卸载清理
     window.addEventListener('pagehide', () => { try { mo.disconnect(); } catch {} }, { passive: true });
