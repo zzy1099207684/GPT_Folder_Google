@@ -211,17 +211,20 @@
                             const chosen = String(o.label || '').trim();
                             const isSame = currentLabel && chosen === currentLabel;
                             if (isSame) {
+                                // 第二次点击同一项 → 关闭，不计入“切换”，不打标记
                                 sessionStorage.removeItem('cgptSessionPrompt');
                                 toast('Start Prompt：off');
                             } else {
+                                // 确实切换到不同样式 → 记录样式并打“一次性提示”标记
                                 sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: o.label, text: o.text }));
+                                try { sessionStorage.setItem('cgptPromptStyleSwitchPending', '1'); } catch {}
                                 toast('Start Prompt：' + (chosen || 'Unnamed'));
                             }
                         } catch {}
                         pop.remove();
-                        // 新增：菜单选择后刷新输入框处胶囊
                         updatePromptPill();
                     });
+
                     pop.appendChild(row);
                 });
 

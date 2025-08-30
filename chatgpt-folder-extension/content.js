@@ -3090,6 +3090,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         merged = `※${inner}※`;
                     }
 
+                    // ★ 修改点：若刚刚手动切换样式，则把提示词拼进 ※…※ 的最前面（而非单独一行）
+                    try {
+                        const pending = sessionStorage.getItem('cgptPromptStyleSwitchPending') === '1';
+                        if (pending) {
+                            const prepend = 'Switch to a different style for responses from now on.';
+                            const inner = String(merged).replace(/^※+/, '').replace(/※+$/, '');
+                            merged = `※${prepend}${inner}※`;
+                            sessionStorage.removeItem('cgptPromptStyleSwitchPending'); // 仅一次
+                        }
+                    } catch {}
+
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
                     if (mergedClean) {
                         gp.textContent = merged;
@@ -3103,6 +3114,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         changed = true;
                     }
                 }
+
 
 
 // 仅当 SUFFIX 非空且确实需要追加时才处理
