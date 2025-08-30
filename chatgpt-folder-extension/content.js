@@ -2107,8 +2107,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             enableAttachStripScroll();
             const attachObs = observers.add(new MutationObserver(() => enableAttachStripScroll()));
-            const attachRoot = qs('form[data-type="unified-composer"]') || document.body;
-            attachObs.observe(attachRoot, {childList: true, subtree: true});
+            attachObs.observe(document.body, {childList: true, subtree: true});
+
 
 
             /* ---------- 渲染 ---------- */
