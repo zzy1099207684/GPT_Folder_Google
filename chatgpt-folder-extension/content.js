@@ -2937,15 +2937,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             /* ---------- 输入尾部提示 ---------- */
             function appendSuffix() {
-                // 若是从 history 面板点击进入，清除本次标记，不插入任何提示
+                // 若是从 history 面板点击进入，只跳过“尾部提示（SUFFIX）”，但仍允许插入 prompt
+                let skipSuffixOnce = false;
                 if (clearActiveOnHistoryClick) {
                     clearActiveOnHistoryClick = false;
-                    return;
+                    skipSuffixOnce = true;
                 }
                 if (isUploading()) return;
                 const ed = qs('.ProseMirror');
                 if (!ed) return;
-                const SUFFIX = ''; // 定义尾缀常量
+                const SUFFIX = '';
                 let changed = false;
 
                 const path = location.pathname;                                         // 当前会话路径
@@ -3115,17 +3116,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }
                 }
 
-
-
-// 仅当 SUFFIX 非空且确实需要追加时才处理
-                if (SUFFIX && !(ed.lastElementChild && ed.lastElementChild.innerText.trim() === SUFFIX)) {
+                if (!skipSuffixOnce && SUFFIX && !(ed.lastElementChild && ed.lastElementChild.innerText.trim() === SUFFIX)) {
                     const p = document.createElement('p');
                     p.textContent = SUFFIX;
                     ed.appendChild(p);
                     changed = true;
                 }
 
-// 只有在内容确实发生变化时才触发 input
                 if (changed) {
                     ed.dispatchEvent(new Event('input', {bubbles: true}));
                 }
