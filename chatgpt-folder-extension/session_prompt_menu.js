@@ -211,21 +211,22 @@
                             const chosen = String(o.label || '').trim();
                             const isSame = currentLabel && chosen === currentLabel;
                             if (isSame) {
-                                // 第二次点击同一项 → 关闭，不计入“切换”，清理标记
+                                // 关闭：清理所有一次性 / 周期标记
                                 sessionStorage.removeItem('cgptSessionPrompt');
                                 try {
                                     sessionStorage.removeItem('cgptPromptStyleSwitchPending');
-                                    sessionStorage.removeItem('cgptPromptStyleCrossPending');   // ← 新增：清理跨会话一次性标记
-                                    sessionStorage.removeItem('cgptStyleSwitchOrigin');        // ← 新增：清理来源路径
+                                    sessionStorage.removeItem('cgptPromptStyleCrossToken');  // ← 新增：清理周期 token
+                                    sessionStorage.removeItem('cgptCrossLastPath');          // ← 新增：清理上次路径
                                 } catch {}
                                 toast('Start Prompt：off');
                             } else {
-                                // 切换到不同样式 → 记录样式，并打两个一次性标记
+                                // 切换到不同样式：本会话一次性 + 跨会话“按切换动作”触发
                                 sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: o.label, text: o.text }));
                                 try {
-                                    sessionStorage.setItem('cgptPromptStyleSwitchPending', '1');   // 原有：本会话立即提示
-                                    sessionStorage.setItem('cgptPromptStyleCrossPending', '1');    // ← 新增：跨会话第一次提示
-                                    sessionStorage.setItem('cgptStyleSwitchOrigin', location.pathname || ''); // ← 新增：记录来源
+                                    sessionStorage.setItem('cgptPromptStyleSwitchPending', '1');                 // 本会话首次插入
+                                    const token = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                                    sessionStorage.setItem('cgptPromptStyleCrossToken', token);                  // ← 新增：周期 token
+                                    sessionStorage.setItem('cgptCrossLastPath', location.pathname || '');        // ← 新增：记住当前路径
                                 } catch {}
                                 toast('Start Prompt：' + (chosen || 'Unnamed'));
                             }
@@ -233,6 +234,7 @@
                         pop.remove();
                         updatePromptPill();
                     });
+
 
 
                     pop.appendChild(row);

@@ -3092,17 +3092,21 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }
 
                     // ★ 增强：除本会话立即提示外，若跨会话第一次发送也需前置提示（排除 New chat）
+                    // ★ 改为“按切换动作触发”：每次切换到任意会话（/c/），首次发送前置提示；New chat ('/') 不算
                     try {
                         const localPending = sessionStorage.getItem('cgptPromptStyleSwitchPending') === '1';
+
                         let crossShouldPrepend = false;
-                        const crossPending = sessionStorage.getItem('cgptPromptStyleCrossPending') === '1';
-                        if (crossPending) {
-                            const origin = sessionStorage.getItem('cgptStyleSwitchOrigin') || '';
+                        const token = sessionStorage.getItem('cgptPromptStyleCrossToken'); // ← 周期 token 是否存在
+                        if (token) {
                             const here = location.pathname || '';
-                            // 仅当切到“其它已有会话”时触发；New chat ('/') 不触发，也不会消耗标记
-                            if (here.startsWith('/c/') && here !== origin && here !== '/') {
+                            const last = sessionStorage.getItem('cgptCrossLastPath') || '';
+                            // 只要路径变化且是已有会话（/c/），就视为一次“切会话动作”
+                            if (here.startsWith('/c/') && here !== '/' && here !== last) {
                                 crossShouldPrepend = true;
                             }
+                            // 无论是否插入，都更新“上次发送路径”，用于下一次判断
+                            try { sessionStorage.setItem('cgptCrossLastPath', here); } catch {}
                         }
 
                         if (localPending || crossShouldPrepend) {
@@ -3110,16 +3114,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             const inner = String(merged).replace(/^※+/, '').replace(/※+$/, '');
                             merged = `※${prepend}${inner}※`;
 
-                            // 清理一次性标记：各自只消费一次
                             if (localPending) {
-                                sessionStorage.removeItem('cgptPromptStyleSwitchPending');
+                                sessionStorage.removeItem('cgptPromptStyleSwitchPending'); // 本会话一次性仍然只用一次
                             }
-                            if (crossShouldPrepend) {
-                                sessionStorage.removeItem('cgptPromptStyleCrossPending');
-                                sessionStorage.removeItem('cgptStyleSwitchOrigin');
-                            }
+                            // 注意：不要清理 crossToken，让后续“切换动作”还能继续生效
                         }
                     } catch {}
+
 
 
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
