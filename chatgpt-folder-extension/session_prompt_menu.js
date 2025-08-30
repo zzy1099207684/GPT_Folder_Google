@@ -1,19 +1,27 @@
 (function () {
-    const Normal_text = '※horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Normal_text = '※Balanced responses with natural flow; horizontal lines (---, ——, —, ***) are absolutely forbidden※';
     const Concise = 'Concise';
     const Concise_text = '※Shorter responses & more messages;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
     const Explanatory = 'Explanatory';
     const Explanatory_text = '※Explain thoroughly;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Educational  = 'Educational';
+    const Educational_text = '※Educational responses for learning;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Formal  = 'Formal';
+    const Formal_text = '※Clear and well-structured responses;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
 
     function getOptions() {
         const ext = Array.isArray(window.__cgptPromptOptions) ? window.__cgptPromptOptions : [];
         const hasNormal = ext.some(o => String(o.label || '').toLowerCase() === 'normal');
         const hasBasic = ext.some(o => String(o.label || '').toLowerCase() === Concise);
         const hasExplanatory = ext.some(o => String(o.label || '').toLowerCase() === Explanatory);
+        const hasEducational = ext.some(o => String(o.label || '').toLowerCase() === Educational);
+        const hasFormal = ext.some(o => String(o.label || '').toLowerCase() === Formal);
         const base = [];
         if (!hasNormal) base.push({ label: 'Normal', text: Normal_text});
         if (!hasBasic)  base.push({ label: Concise,  text: Concise_text});
         if (!hasExplanatory)  base.push({ label: Explanatory,  text: Explanatory_text});
+        if (!hasEducational)  base.push({ label: Educational,  text: Educational_text});
+        if (!hasFormal)  base.push({ label: Formal,  text: Formal_text});
         return base.concat(ext);
     }
 
