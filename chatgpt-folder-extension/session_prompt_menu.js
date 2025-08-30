@@ -1,9 +1,9 @@
 (function () {
-    const Normal_text = '※horizontal lines (---, ——, —, ***) strictly prohibited※';
+    const Normal_text = '※horizontal lines (---, ——, —, ***) are absolutely forbidden※';
     const Concise = 'Concise';
-    const Concise_text = '※Shorter responses & more messages;horizontal lines (---, ——, —, ***) strictly prohibited※';
+    const Concise_text = '※Shorter responses & more messages;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
     const Explanatory = 'Explanatory';
-    const Explanatory_text = '※Explain thoroughly;horizontal lines (---, ——, —, ***) strictly prohibited※';
+    const Explanatory_text = '※Explain thoroughly;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
 
     // 若需要日后扩展，可在页面任意脚本设置
     function getOptions() {
