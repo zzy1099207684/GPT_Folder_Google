@@ -4082,6 +4082,54 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             obs.observe(document.body, {childList: true, subtree: true});
         })();
 
+        /* ===== 移除回答中的 <hr data-start data-end> 分隔线（新增） ===== */
+        (function stripAnswerHrSeparators() {
+            // 兜底样式：即刻隐藏目标 <hr>
+            const STYLE_ID = 'cgpt-hide-hr-sep';
+            if (!document.getElementById(STYLE_ID)) {
+                const s = document.createElement('style');
+                s.id = STYLE_ID;
+                s.textContent = [
+                    'article hr[data-start][data-end],',
+                    '[data-message-author-role] hr[data-start][data-end],',
+                    '.markdown hr[data-start][data-end]{display:none!important;}'
+                ].join('');
+                document.head.appendChild(s);
+            }
+
+            // 仅认为出现在消息气泡/回答容器内的 <hr> 为“需移除对象”
+            const isAnswerPiece = (el) =>
+                !!(el.closest?.('[data-testid^="conversation-turn-"]') ||
+                    el.closest?.('[data-message-author-role]') ||
+                    el.closest?.('article'));
+
+            // 初次清理 + 供增量清理复用
+            function sweep(root = document) {
+                root.querySelectorAll?.('hr[data-start][data-end]').forEach(hr => {
+                    if (isAnswerPiece(hr)) hr.remove();
+                });
+            }
+
+            // 首次进入页面即清理一次
+            sweep(document);
+
+            // 监听后续新增节点，做增量清理（性能友好）
+            const mo = new MutationObserver(muts => {
+                for (const m of muts) {
+                    for (const n of m.addedNodes) {
+                        if (!(n instanceof Element)) continue;
+                        if (n.tagName === 'HR' && n.hasAttribute('data-start') && n.hasAttribute('data-end')) {
+                            if (isAnswerPiece(n)) n.remove();
+                        } else {
+                            sweep(n); // 只在新增分支里局部扫描
+                        }
+                    }
+                }
+            });
+            mo.observe(document.body, {childList: true, subtree: true});
+            window.observers?.add?.(mo); // 交由现有 observers 统一管理
+        })();
+
     })();
 // ==== event-loop stall monitor (NEW) ====
     (function monitorEventLoop(interval = 10_000, threshold = 500, cooldown = 30_000) {
