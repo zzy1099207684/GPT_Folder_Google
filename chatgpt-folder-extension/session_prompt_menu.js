@@ -128,7 +128,7 @@
     // 把胶囊插入到 + 按钮右侧；Normal 或空则移除
     function updatePromptPill() {
         const label = readStoredPromptLabel();
-        const shouldShow = label === Concise || label === Explanatory;
+        const shouldShow = label === Concise || label === Explanatory || label === Educational || label === Formal;
 
         // 找到所有输入框的 + 按钮（精确选择器来自页面结构）:contentReference[oaicite:2]{index=2}
         const plusButtons = Array.from(document.querySelectorAll('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]'));
