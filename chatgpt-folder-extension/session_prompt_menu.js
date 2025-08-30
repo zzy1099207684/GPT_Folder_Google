@@ -4,7 +4,7 @@
     const Concise = 'Concise';
     const Concise_text = '※Shorter responses & more messages;※';
     const Explanatory = 'Explanatory';
-    const Explanatory_text = '※Detailed responses with thorough explanations;※';
+    const Explanatory_text = '※Detailed explanations & comprehensive context;※';
     const Educational  = 'Educational';
     const Educational_text = '※Educational responses for learning;※';
     const Formal  = 'Formal';
