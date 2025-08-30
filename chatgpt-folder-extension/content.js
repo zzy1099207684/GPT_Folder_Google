@@ -2570,15 +2570,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     );
                     const globalNewBtn = qs('button[aria-label="New chat"]');
 
-// 统一：组内新开会话也默认 Normal
-                    try {
-                        sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({
-                            label: 'Normal',
-                            text: '※horizontal lines (---, ——, —, ***) strictly prohibited※'
-                        }));
-                    } catch {
-                    }
-
                     if (globalNewBtn) {
                         // ↓ 避免全局按钮把刚设好的组高亮清掉
                         window.__cgptSuppressGroupClear = true;
@@ -3784,15 +3775,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
                     );
                     if (!btn) return;
-
-                    // 统一：新开会话默认 Normal
-                    try {
-                        sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({
-                            label: 'Normal',
-                            text: '※horizontal lines (---, ——, —, ***) strictly prohibited※'
-                        }));
-                    } catch {
-                    }
 
                     // 若由组内“New chat”间接触发，则跳过本次清除并重置标志
                     if (window.__cgptSuppressGroupClear) {

@@ -1,29 +1,59 @@
 (function () {
-    const Normal_text = '※Balanced responses with natural flow; horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Normal = 'Normal';
+    const Normal_text = '※Balanced responses with natural flow;※';
     const Concise = 'Concise';
-    const Concise_text = '※Shorter responses & more messages;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Concise_text = '※Shorter responses & more messages;※';
     const Explanatory = 'Explanatory';
-    const Explanatory_text = '※Explain thoroughly;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Explanatory_text = '※Explain thoroughly;※';
     const Educational  = 'Educational';
-    const Educational_text = '※Educational responses for learning;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Educational_text = '※Educational responses for learning;※';
     const Formal  = 'Formal';
-    const Formal_text = '※Clear and well-structured responses;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
+    const Formal_text = '※Clear and well-structured responses;※';
 
     function getOptions() {
         const ext = Array.isArray(window.__cgptPromptOptions) ? window.__cgptPromptOptions : [];
-        const hasNormal = ext.some(o => String(o.label || '').toLowerCase() === 'normal');
+        const hasNormal = ext.some(o => String(o.label || '').toLowerCase() === Normal);
         const hasBasic = ext.some(o => String(o.label || '').toLowerCase() === Concise);
         const hasExplanatory = ext.some(o => String(o.label || '').toLowerCase() === Explanatory);
         const hasEducational = ext.some(o => String(o.label || '').toLowerCase() === Educational);
         const hasFormal = ext.some(o => String(o.label || '').toLowerCase() === Formal);
         const base = [];
-        if (!hasNormal) base.push({ label: 'Normal', text: Normal_text});
+        if (!hasNormal) base.push({ label: Normal, text: Normal_text});
         if (!hasBasic)  base.push({ label: Concise,  text: Concise_text});
         if (!hasExplanatory)  base.push({ label: Explanatory,  text: Explanatory_text});
         if (!hasEducational)  base.push({ label: Educational,  text: Educational_text});
         if (!hasFormal)  base.push({ label: Formal,  text: Formal_text});
         return base.concat(ext);
     }
+
+    // 新增：集中设置“默认 Normal”
+    function __cgptSetDefaultNormal() {
+        try {
+            sessionStorage.setItem(
+                'cgptSessionPrompt',
+                JSON.stringify({ label: Normal, text: Normal_text })
+            );
+        } catch {}
+    }
+
+    // 新增：捕获“New chat”点击（全局/原生入口）
+    // 与 content.js 里原选择器一致，确保触发时机完全对齐
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest(
+            'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
+        );
+        if (btn) __cgptSetDefaultNormal();
+    }, true);
+
+    // 新增：组内 New chat 的兜底分支（pushState('/') 后触发的 popstate）
+    // 仅在组内新建挂起态存在时生效，避免影响其它导航
+    window.addEventListener('popstate', () => {
+        try {
+            if (window.__cgptPendingToken && location.pathname === '/') {
+                __cgptSetDefaultNormal();
+            }
+        } catch {}
+    }, { passive: true });
 
     function toast(msg) {
         try {
