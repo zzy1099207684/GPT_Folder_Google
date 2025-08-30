@@ -5,20 +5,18 @@
     const Explanatory = 'Explanatory';
     const Explanatory_text = '※Explain thoroughly;horizontal lines (---, ——, —, ***) are absolutely forbidden※';
 
-    // 若需要日后扩展，可在页面任意脚本设置
     function getOptions() {
         const ext = Array.isArray(window.__cgptPromptOptions) ? window.__cgptPromptOptions : [];
         const hasNormal = ext.some(o => String(o.label || '').toLowerCase() === 'normal');
         const hasBasic = ext.some(o => String(o.label || '').toLowerCase() === Concise);
         const hasExplanatory = ext.some(o => String(o.label || '').toLowerCase() === Explanatory);
         const base = [];
-        if (!hasNormal) base.push({ label: 'Normal', text: Normal_text});   // 默认选项
+        if (!hasNormal) base.push({ label: 'Normal', text: Normal_text});
         if (!hasBasic)  base.push({ label: Concise,  text: Concise_text});
         if (!hasExplanatory)  base.push({ label: Explanatory,  text: Explanatory_text});
         return base.concat(ext);
     }
 
-    // 简易提示
     function toast(msg) {
         try {
             const el = document.createElement('div');
@@ -29,16 +27,96 @@
         } catch {}
     }
 
-    // 观察下拉菜单的出现（仅处理新增节点，避免全局扫描）
+    // 新增：读取/更新输入框处的 Prompt 胶囊
+    const PILL_CLASS = 'cgpt-prompt-pill';
+
+    function readStoredPromptLabel() {
+        try {
+            const raw = sessionStorage.getItem('cgptSessionPrompt');
+            const obj = raw ? JSON.parse(raw) : null;
+            return obj && typeof obj.label === 'string' ? obj.label.trim() : null;
+        } catch { return null; }
+    }
+
+    // 构建胶囊元素，放在 + 按钮右侧
+    function buildPill(label) {
+        const pill = document.createElement('span');
+        pill.className = PILL_CLASS;
+        pill.style.cssText = [
+            'display:inline-flex',
+            'align-items:center',
+            'gap:6px',
+            'margin-left:8px',
+            'padding:4px 10px',
+            'border-radius:12px',
+            'font-size:15px',
+            'line-height:1',
+            'background:rgba(255,255,255,.08)',
+            'color:inherit',
+            'border:1px solid rgba(255,255,255,.12)',
+            'user-select:none',
+            'transform:scale(0.7)',
+            'transform-origin:left center',
+        ].join(';');
+
+        const icon = document.createElement('span');
+        icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 14.5c4-4.2 7.2-7 9.5-8.3.5-.3 1.2.2 1 .8-1 2.9-4 7.4-9.1 9.5-.6.2-1.2-.4-1-1z"></path></svg>';
+        icon.style.opacity = '.85';
+
+        const text = document.createElement('span');
+        text.textContent = label;
+
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.textContent = '×';
+        close.style.cssText = 'margin-left:4px;border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1';
+
+        // 点击 × 恢复到 Normal
+        close.addEventListener('click', (e) => {
+            e.stopPropagation();
+            try {
+                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: 'Normal', text: Normal_text }));
+                toast('Start Prompt：off');
+            } catch {}
+            updatePromptPill();
+        });
+
+        pill.appendChild(icon);
+        pill.appendChild(text);
+        pill.appendChild(close);
+        return pill;
+    }
+
+    // 把胶囊插入到 + 按钮右侧；Normal 或空则移除
+    function updatePromptPill() {
+        const label = readStoredPromptLabel();
+        const shouldShow = label === Concise || label === Explanatory;
+
+        // 找到所有输入框的 + 按钮（精确选择器来自页面结构）:contentReference[oaicite:2]{index=2}
+        const plusButtons = Array.from(document.querySelectorAll('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]'));
+        plusButtons.forEach(btn => {
+            const host = btn && btn.parentElement; // <span class="flex"> 包裹 + 按钮
+            if (!host) return;
+
+            // 清理旧的
+            host.querySelectorAll('.' + PILL_CLASS).forEach(n => n.remove());
+
+            if (shouldShow) {
+                const pill = buildPill(label);
+                // 插入到 + 号右侧
+                host.insertBefore(pill, btn.nextSibling);
+            }
+        });
+    }
+
+    // 观察下拉菜单出现，并注入「Prompt」入口
     const mo = new MutationObserver((mutations) => {
         const patchGroup = (g) => {
             if (!g || g.__cgptPromptMenuPatched) return;
 
-            // 组内需至少有一个 menuitem
             const firstItem = g.querySelector('div[role="menuitem"]');
             if (!firstItem) return;
 
-            // 仅在该组内判断是否包含 “Add photos & files”
             const hasAddFiles = Array
                 .from(g.querySelectorAll('div[role="menuitem"]'))
                 .some(n => /Add photos\s*&\s*files/i.test(n.textContent || ''));
@@ -62,7 +140,6 @@
             mi.appendChild(icon);
             mi.appendChild(text);
 
-            // 保持原有点击逻辑不变
             mi.addEventListener('click', (ev) => {
                 ev.stopPropagation();
                 const opts = getOptions();
@@ -104,6 +181,8 @@
                             }
                         } catch {}
                         pop.remove();
+                        // 新增：菜单选择后刷新输入框处胶囊
+                        updatePromptPill();
                     });
                     pop.appendChild(row);
                 });
@@ -115,7 +194,6 @@
                 }, 0);
             });
 
-            // 插入到该组的首个 menuitem 之前或末尾
             const anchor = g.querySelector('div[role="menuitem"]');
             if (anchor && anchor.parentNode === g) g.insertBefore(mi, anchor);
             else g.appendChild(mi);
@@ -123,18 +201,26 @@
             g.__cgptPromptMenuPatched = true;
         };
 
+        // 保持原逻辑，并在 DOM 有新增时轻量刷新一次胶囊
+        let needRefresh = false;
         for (const m of mutations) {
             if (m.type !== 'childList') continue;
             m.addedNodes.forEach(node => {
                 if (node.nodeType !== 1) return;
                 if (node.matches?.('div[role="group"]')) patchGroup(node);
                 node.querySelectorAll?.('div[role="group"]').forEach(patchGroup);
+                if (!needRefresh && node.querySelector?.('form[data-type="unified-composer"]')) needRefresh = true;
             });
         }
+        if (needRefresh) requestAnimationFrame(updatePromptPill);
     });
     mo.observe(document.body, { childList: true, subtree: true });
 
+    // 进入页面先渲染一次；跨 tab 变化也同步
+    updatePromptPill();
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'cgptSessionPrompt') updatePromptPill();
+    }, { passive: true });
 
-    // 页面卸载清理
     window.addEventListener('pagehide', () => { try { mo.disconnect(); } catch {} }, { passive: true });
 })();
