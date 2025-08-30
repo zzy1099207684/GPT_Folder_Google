@@ -3091,16 +3091,36 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         merged = `※${inner}※`;
                     }
 
-                    // ★ 修改点：若刚刚手动切换样式，则把提示词拼进 ※…※ 的最前面（而非单独一行）
+                    // ★ 增强：除本会话立即提示外，若跨会话第一次发送也需前置提示（排除 New chat）
                     try {
-                        const pending = sessionStorage.getItem('cgptPromptStyleSwitchPending') === '1';
-                        if (pending) {
+                        const localPending = sessionStorage.getItem('cgptPromptStyleSwitchPending') === '1';
+                        let crossShouldPrepend = false;
+                        const crossPending = sessionStorage.getItem('cgptPromptStyleCrossPending') === '1';
+                        if (crossPending) {
+                            const origin = sessionStorage.getItem('cgptStyleSwitchOrigin') || '';
+                            const here = location.pathname || '';
+                            // 仅当切到“其它已有会话”时触发；New chat ('/') 不触发，也不会消耗标记
+                            if (here.startsWith('/c/') && here !== origin && here !== '/') {
+                                crossShouldPrepend = true;
+                            }
+                        }
+
+                        if (localPending || crossShouldPrepend) {
                             const prepend = 'Switch to a different style for responses from now on.';
                             const inner = String(merged).replace(/^※+/, '').replace(/※+$/, '');
                             merged = `※${prepend}${inner}※`;
-                            sessionStorage.removeItem('cgptPromptStyleSwitchPending'); // 仅一次
+
+                            // 清理一次性标记：各自只消费一次
+                            if (localPending) {
+                                sessionStorage.removeItem('cgptPromptStyleSwitchPending');
+                            }
+                            if (crossShouldPrepend) {
+                                sessionStorage.removeItem('cgptPromptStyleCrossPending');
+                                sessionStorage.removeItem('cgptStyleSwitchOrigin');
+                            }
                         }
                     } catch {}
+
 
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
                     if (mergedClean) {
