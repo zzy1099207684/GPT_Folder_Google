@@ -80,10 +80,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             boxNow.classList.add('__zzy-fixed-composer');
                         }
                     });
-                    mo.observe(form, { childList:true, subtree:true });
+                    mo.observe(form, {childList: true, subtree: true});
                     form.__zzyFixedComposerMO = mo;
                 }
-            } catch {}
+            } catch {
+            }
             // ===== 新增结束 =====
 
             // 非组内会话也显示开关
@@ -506,7 +507,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     // 新增：分片重组逻辑
                     // 兼容新老格式：优先按 meta.parts 聚合，否则退回 f_<id> 单块或 legacy
                     if (key === 'folders') {
-                        const { folderKeys = [] } = await chrome.storage.sync.get('folderKeys');
+                        const {folderKeys = []} = await chrome.storage.sync.get('folderKeys');
                         if (!folderKeys.length) {
                             const legacy = await chrome.storage.sync.get('folders');
                             return legacy.folders || {};
@@ -555,7 +556,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         }
                         return folders;
                     }
-
 
 
                     const obj = await chrome.storage.sync.get(key);
@@ -2576,7 +2576,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             label: 'Normal',
                             text: '※horizontal lines (---, ——, —, ***) strictly prohibited※'
                         }));
-                    } catch {}
+                    } catch {
+                    }
 
                     if (globalNewBtn) {
                         // ↓ 避免全局按钮把刚设好的组高亮清掉
@@ -2686,7 +2687,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     });
 
-                    observer.observe(qs('div#history') || qs('nav[aria-label="Chat history"]'), {childList: true, subtree: true});
+                    observer.observe(qs('div#history') || qs('nav[aria-label="Chat history"]'), {
+                        childList: true,
+                        subtree: true
+                    });
                     currentNewChatObserver = observer;
                 };
                 const ul = document.createElement('ul');
@@ -3011,9 +3015,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 // 会话级 prompt 与组内 prompt 不再区分优先级；单独计算两者
                 const sessionPrompt = (() => {
-                    try { const raw = sessionStorage.getItem('cgptSessionPrompt'); const obj = raw ? JSON.parse(raw) : null;
+                    try {
+                        const raw = sessionStorage.getItem('cgptSessionPrompt');
+                        const obj = raw ? JSON.parse(raw) : null;
                         return (obj && String(obj.text || '').trim()) || '';
-                    } catch { return ''; }
+                    } catch {
+                        return '';
+                    }
                 })();
 
                 const groupPrompts = currentFid ? (folders[currentFid].prompts || []) : [];
@@ -3058,7 +3066,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 if (injectNow && groupPrompts.length) {
                     indices[counterKey] = (idx + 1) % groupPrompts.length;
-                    try { sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices)); } catch {}
+                    try {
+                        sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices));
+                    } catch {
+                    }
                 }
 
                 if (injectNow && mainPrompt) {
@@ -3082,7 +3093,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     let merged = mainPrompt;
                     if (groupPrompt && inputPrompt) {
                         const clean = s => String(s).replace(/^※+/, '').replace(/※+$/, '').trim();
-                        const left  = clean(inputPrompt).replace(/[;；:。!? \t]+$/, '');
+                        const left = clean(inputPrompt).replace(/[;；:。!? \t]+$/, '');
                         const right = clean(groupPrompt).replace(/^[;；:。!? \t]+/, '');
                         const inner = left && right ? `${left}; ${right}` : (left || right);
                         merged = `※${inner}※`;
@@ -3101,7 +3112,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         changed = true;
                     }
                 }
-
 
 
 // 仅当 SUFFIX 非空且确实需要追加时才处理
@@ -3146,7 +3156,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }
 
             function bindSend() {
-                const ed = qs('.ProseMirror');
+                // 新增：统一获取编辑器，兼容 ProseMirror 与 textarea
+                const getEditor = () =>
+                    qs('.ProseMirror') || qs('#prompt-textarea') || qs('[contenteditable="true"]');
+
                 // 兼容新版界面多种发送按钮写法
                 const send = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]');
 
@@ -3155,324 +3168,327 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 } catch {
                 }
 
-                if (!ed || !send || send.dataset.hooked) return;
-                send.dataset.hooked = "1";
+                // 修改：不再依赖先找到编辑器才挂钩发送按钮
+                if (!send) return;
 
-                // 修改后版本：新增 i === -1 时插入逻辑，只对 activeFid 生效
-                const bumpActiveChat = () => {
-                    if (!location.pathname.startsWith('/c/')) return;
-                    const cur = location.href;
-                    // 优先从 history 里取标题，取不到就用“new chat”
-                    const histRoot = qs('div#history') || qs('nav[aria-label="Chat history"]');
-                    const title = histRoot?.querySelector(`a[href*="${location.pathname}"]`)?.textContent.trim() || 'New chat';
-                    const curPath = new URL(cur).pathname;
+                if (!send.dataset.hooked) {
+                    send.dataset.hooked = "1";
 
-                    if (window.__cgptPendingToken) {
-                        const oldKey = '/' + window.__cgptPendingToken;
-                        const counters = window.__cgptPromptGapCounters;
-                        if (counters[oldKey] !== undefined && counters[curPath] === undefined) {
-                            counters[curPath] = counters[oldKey];
-                        }
-                        delete counters[oldKey];
+                    // 修改后版本：新增 i === -1 时插入逻辑，只对 activeFid 生效
+                    const bumpActiveChat = () => {
+                        if (!location.pathname.startsWith('/c/')) return;
+                        const cur = location.href;
+                        // 优先从 history 里取标题，取不到就用“new chat”
+                        const histRoot = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                        const title = histRoot?.querySelector(`a[href*="${location.pathname}"]`)?.textContent.trim() || 'New chat';
+                        const curPath = new URL(cur).pathname;
 
-                        const idxMap = window.__cgptPromptIndexMap;
-                        if (idxMap[oldKey] !== undefined && idxMap[curPath] === undefined) {
-                            idxMap[curPath] = idxMap[oldKey];
-                        }
-                        delete idxMap[oldKey];
+                        if (window.__cgptPendingToken) {
+                            const oldKey = '/' + window.__cgptPendingToken;
+                            const counters = window.__cgptPromptGapCounters;
+                            if (counters[oldKey] !== undefined && counters[curPath] === undefined) {
+                                counters[curPath] = counters[oldKey];
+                            }
+                            delete counters[oldKey];
 
-                        // 新增：迁移 prompt 开关映射
-                        const toggles = window.__cgptPromptTogglePerPath || {};
-                        if (toggles[oldKey] !== undefined && toggles[curPath] === undefined) {
-                            toggles[curPath] = toggles[oldKey];
-                        }
-                        delete toggles[oldKey];
+                            const idxMap = window.__cgptPromptIndexMap;
+                            if (idxMap[oldKey] !== undefined && idxMap[curPath] === undefined) {
+                                idxMap[curPath] = idxMap[oldKey];
+                            }
+                            delete idxMap[oldKey];
 
-                        try {
-                            sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
-                            sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(idxMap));
-                            sessionStorage.setItem('cgptPromptToggle', JSON.stringify(toggles));
-                        } catch {
-                        }
-                    }
+                            // 新增：迁移 prompt 开关映射
+                            const toggles = window.__cgptPromptTogglePerPath || {};
+                            if (toggles[oldKey] !== undefined && toggles[curPath] === undefined) {
+                                toggles[curPath] = toggles[oldKey];
+                            }
+                            delete toggles[oldKey];
 
-
-                    let folderFid = activeFid && folders[activeFid] ? activeFid : null;
-                    if (!folderFid) {
-                        const cand = lastActiveMap[curPath];
-                        if (cand && cand !== '__history__' && folders[cand]) {
-                            folderFid = cand;
-                            activeFid = cand;
-                        }
-                    }
-
-                    if (!folderFid && window.__cgptPendingFid &&
-                        folders[window.__cgptPendingFid]) {
-                        folderFid = window.__cgptPendingFid;
-                        activeFid = folderFid;
-                    }
-                    if (!folderFid) {
-                        for (const [fid, folder] of Object.entries(folders)) {
-                            if (folder.chats.some(c => samePath(c.url, cur))) {
-                                folderFid = fid;
-                                activeFid = fid;
-                                break;
+                            try {
+                                sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
+                                sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(idxMap));
+                                sessionStorage.setItem('cgptPromptToggle', JSON.stringify(toggles));
+                            } catch {
                             }
                         }
-                    }
-
-                    const folder = folderFid ? folders[folderFid] : null;
-                    if (!folder) return;
-                    if (folderFid && !lastActiveMap[curPath]) {
-                        lastActiveMap[curPath] = folderFid;
-                        if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                    }
-                    const i = folder.chats.findIndex(c => samePath(c.url, cur));
-                    let needRender;
-
-                    // 识别当前三角标是否确实指向该组
-                    const cornerEl = document.querySelector(`.cgpt-folder-corner[data-fid="${activeFid}"]`);
-                    const triangleOn = !!cornerEl && cornerEl.style && cornerEl.style.borderTopColor && cornerEl.style.borderTopColor !== 'transparent';
-                    const triangleOwnsThis = triangleOn && activeFid && folderFid === activeFid;
-
-                    if (i >= 0) {                           // 已在当前分组
-                        const [chat] = folder.chats.splice(i, 1);
-                        folder.chats.unshift(chat);
-                        needRender = i > 0;
-                    } else if (window.__cgptPendingFid === folderFid || triangleOwnsThis) {
-                        // 新建流程或三角标明确选中该组时，将新会话纳入该组
-                        folder.chats.unshift({url: cur, title});
-                        needRender = true;
-                    } else {
-                        return;                             // 其余场景保持原有保护
-                    }
 
 
-                    safeSendMessage({type: 'save-folders', data: folders});
-
-                    if (needRender) {
-                        // 精准更新：只替换当前分组节点，避免等待整块异步分帧渲染
-                        const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
-                        const fidList = Object.keys(folders);
-                        const idx = fidList.indexOf(folderFid);
-                        const oldBox = folderZone && folderZone.children && folderZone.children[idx];
-                        if (folderZone && oldBox) {
-                            const newBox = renderFolder(folderFid, folders[folderFid]);
-                            folderZone.replaceChild(newBox, oldBox);
-                        } else {
-                            render(); // 兜底：若定位失败，再走全量渲染
+                        let folderFid = activeFid && folders[activeFid] ? activeFid : null;
+                        if (!folderFid) {
+                            const cand = lastActiveMap[curPath];
+                            if (cand && cand !== '__history__' && folders[cand]) {
+                                folderFid = cand;
+                                activeFid = cand;
+                            }
                         }
-                    }              // 根据标志决定是否重绘
-                    highlightActive();                      // 始终保持高亮状态
 
-                    if (window.__cgptPendingFid === folderFid) {
-                        window.__cgptPendingFid = null;
-                        window.__cgptPendingToken = null;
-                    }
-                    ensurePromptToggle();
-                };
-
-                window.bumpActiveChat = bumpActiveChat;
-
-                // 等待窗口改为 15 s，刷新间隔固定 500 ms
-                function scheduleHistoryRefresh(targetPath) {
-                    const getHist = () => qs('div#history') || qs('nav[aria-label="Chat history"]');
-
-                    const insertHistoryEntry = () => {
-                        const hist = getHist();
-                        if (!hist) return;
-
-                        const target = targetPath || location.pathname;   // 允许外部显式指定目标
-                        if (hist.querySelector(`a[href*="${target}"]`)) return;
-                        const a = document.createElement('a');
-                        a.href = target;
-                        a.dataset.url = target;                           // 占位标记
-                        a.textContent = 'New chat';
-                        a.style.cssText = 'display:block;padding:6px 12px;font-size:13px;line-height:1.25;border-radius:6px;color:#b2b2b2;text-decoration:none;';
-                        const li = document.createElement('li');
-                        li.style.display = 'none';
-                        li.dataset.cgptPlaceholder = '1';
-                        li.appendChild(a);
-                        hist.insertBefore(li, hist.firstChild);
-                    };
-
-                    const watch = () => {
-                        insertHistoryEntry();
-                        const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
-                        if (!hist) return;
-                        const target = targetPath || location.pathname;
-                        const moveIfReady = () => {
-                            const ok =
-                                qs(`div#history a[href*="${target}"]:not([data-url])`) ||
-                                qs(`nav[aria-label="Chat history"] a[href*="${target}"]:not([data-url])`);
-                            if (ok) {
-                                const placeholder =
-                                    qs(`div#history a[data-url="${target}"]`) ||
-                                    qs(`nav[aria-label="Chat history"] a[data-url="${target}"]`);
-                                if (placeholder && placeholder !== ok) {
-                                    try {
-                                        (typeof detachLink === 'function') && detachLink(placeholder);
-                                    } catch (e) {
-                                    }
-                                    placeholder.closest('li')?.remove();
+                        if (!folderFid && window.__cgptPendingFid &&
+                            folders[window.__cgptPendingFid]) {
+                            folderFid = window.__cgptPendingFid;
+                            activeFid = folderFid;
+                        }
+                        if (!folderFid) {
+                            for (const [fid, folder] of Object.entries(folders)) {
+                                if (folder.chats.some(c => samePath(c.url, cur))) {
+                                    folderFid = fid;
+                                    activeFid = fid;
+                                    break;
                                 }
-                                refreshHistoryOrder();
-                                return true;
                             }
-                            return false;
-                        };
-                        if (moveIfReady()) return;
-                        const ob = new MutationObserver(() => {
-                            if (moveIfReady()) ob.disconnect();
-                        });
-                        ob.observe(hist, {childList: true, subtree: true});
-                        setTimeout(() => ob.disconnect(), 60000);
+                        }
+
+                        const folder = folderFid ? folders[folderFid] : null;
+                        if (!folder) return;
+                        if (folderFid && !lastActiveMap[curPath]) {
+                            lastActiveMap[curPath] = folderFid;
+                            if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                        }
+                        const i = folder.chats.findIndex(c => samePath(c.url, cur));
+                        let needRender;
+
+                        // 识别当前三角标是否确实指向该组
+                        const cornerEl = document.querySelector(`.cgpt-folder-corner[data-fid="${activeFid}"]`);
+                        const triangleOn = !!cornerEl && cornerEl.style && cornerEl.style.borderTopColor && cornerEl.style.borderTopColor !== 'transparent';
+                        const triangleOwnsThis = triangleOn && activeFid && folderFid === activeFid;
+
+                        if (i >= 0) {                           // 已在当前分组
+                            const [chat] = folder.chats.splice(i, 1);
+                            folder.chats.unshift(chat);
+                            needRender = i > 0;
+                        } else if (window.__cgptPendingFid === folderFid || triangleOwnsThis) {
+                            // 新建流程或三角标明确选中该组时，将新会话纳入该组
+                            folder.chats.unshift({url: cur, title});
+                            needRender = true;
+                        } else {
+                            return;                             // 其余场景保持原有保护
+                        }
+
+
+                        safeSendMessage({type: 'save-folders', data: folders});
+
+                        if (needRender) {
+                            // 精准更新：只替换当前分组节点，避免等待整块异步分帧渲染
+                            const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                            const fidList = Object.keys(folders);
+                            const idx = fidList.indexOf(folderFid);
+                            const oldBox = folderZone && folderZone.children && folderZone.children[idx];
+                            if (folderZone && oldBox) {
+                                const newBox = renderFolder(folderFid, folders[folderFid]);
+                                folderZone.replaceChild(newBox, oldBox);
+                            } else {
+                                render(); // 兜底：若定位失败，再走全量渲染
+                            }
+                        }              // 根据标志决定是否重绘
+                        highlightActive();                      // 始终保持高亮状态
+
+                        if (window.__cgptPendingFid === folderFid) {
+                            window.__cgptPendingFid = null;
+                            window.__cgptPendingToken = null;
+                        }
+                        ensurePromptToggle();
                     };
 
-                    if ((targetPath || location.pathname).startsWith('/c/')) {
-                        watch();
-                    } else {
-                        const once = () => {
-                            if (!location.pathname.startsWith('/c/')) return;
-                            window.removeEventListener('popstate', once);
-                            watch();
-                        };
-                        window.addEventListener('popstate', once);
-                    }
+                    window.bumpActiveChat = bumpActiveChat;
 
-                    setTimeout(() => {
-                        try {
-                            const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
-                            const target = targetPath || location.pathname;
-                            if (hist && !qs(`div#history a[href*="${target}"]`, hist)) {
-                                scheduleHistoryRefresh(targetPath);        // 递归时继续盯同一个目标
-                                refreshHistoryOrder();
-                            }
-                        } catch (e) {
-                        }
-                    }, 1500);
-                }
+                    // 等待窗口改为 15 s，刷新间隔固定 500 ms
+                    function scheduleHistoryRefresh(targetPath) {
+                        const getHist = () => qs('div#history') || qs('nav[aria-label="Chat history"]');
 
-
-                // 新增：首次回答结束→3秒→调用conversations→局部刷新
-                (function () {
-                    function __cgptBuildAcceptLanguage() {
-                        const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
-                            .map(s => String(s || '').split(';')[0]).filter(Boolean);
-                        const uniq = [...new Set(ls)].slice(0, 4);
-                        if (!uniq.length) return 'en-US,en;q=0.9';
-                        const qs = [1.0, 0.9, 0.8, 0.7];
-                        return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
-                    }
-
-                    async function __cgptGetAuthHeaders() { // 授权参考Batch Delete中的getHeaders实现:contentReference[oaicite:1]{index=1}
-                        const h = {
-                            accept: '*/*',
-                            'accept-language': __cgptBuildAcceptLanguage(),
-                            'content-type': 'application/json'
-                        };
-                        try {
-                            const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
-                            if (r.ok) {
-                                const j = await r.json();
-                                if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
-                            }
-                        } catch {
-                        }
-                        return h;
-                    }
-
-                    // 新增：把返回数据用于最小 DOM 补丁，确保 Chats 可见
-                    function __cgptPatchChatsFromResponse(data, opts = {}) {
-                        try {
-                            const explicitPath = opts.path || null;
-                            const idFromOpt = opts.id || (explicitPath ? (/\/c\/([^/?#]+)/.exec(explicitPath) || [])[1] : null);
-                            const idMatch = /\/c\/([^/?#]+)/.exec(location.pathname);
-                            const curId = idFromOpt || (idMatch && idMatch[1]);
-                            if (!curId || !data) return;
-
-                            const list = Array.isArray(data.items) ? data.items
-                                : Array.isArray(data.conversations) ? data.conversations : [];
-                            const item = list.find(it => it?.id === curId || it?.conversation_id === curId);
-                            if (!item) return;
-
-                            const title = String(item.title || 'New chat');
-                            const hist = document.querySelector('div#history') || document.querySelector('nav[aria-label="Chat history"]');
+                        const insertHistoryEntry = () => {
+                            const hist = getHist();
                             if (!hist) return;
 
-                            const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
-                            const path = '/c/' + curId;
-                            let row = chatsAside.querySelector(`a[href*="${path}"]`);
-                            if (!row) {
-                                const tplLink = chatsAside.querySelector('a[href^="/c/"]');
-                                const tplItem = tplLink && (tplLink.closest('li') || tplLink);
-                                if (tplItem) {
-                                    const clone = tplItem.cloneNode(true);
-                                    const link = clone.querySelector('a[href^="/c/"]') || clone;
-                                    link.href = path;
-                                    if (link.hasAttribute('data-url')) link.setAttribute('data-url', path); else link.removeAttribute('data-url');
-                                    link.removeAttribute('aria-current');
-                                    link.removeAttribute('target');
-                                    link.setAttribute('data-discover', 'true');
-                                    const titleEl =
-                                        link.querySelector('.truncate') ||
-                                        link.querySelector('[data-testid="conversation-item-title"]') ||
-                                        link;
-                                    titleEl.textContent = title;
-                                    clone.querySelectorAll('[class]').forEach(n => {
-                                        if (/\bbg-token-/.test(n.className)) n.className = n.className.replace(/\bbg-token-[^\s]+/g, '').trim();
-                                    });
-                                    const listEl = tplItem.parentElement && /^(UL|OL)$/.test(tplItem.parentElement.tagName) ? tplItem.parentElement : null;
-                                    if (listEl) listEl.insertBefore(clone, listEl.firstChild);
-                                    else chatsAside.insertBefore(clone, tplItem);
-                                    row = link;
-                                } else {
-                                    const li = document.createElement('li');
-                                    const a = document.createElement('a');
-                                    a.href = path;
-                                    a.setAttribute('data-url', path);
-                                    a.setAttribute('data-discover', 'true');
-                                    a.className = 'group __menu-item hoverable gap-1.5';
-                                    a.textContent = title;
-                                    li.appendChild(a);
-                                    const ul = chatsAside.querySelector('ul,ol');
-                                    if (ul) ul.insertBefore(li, ul.firstChild);
-                                    else chatsAside.insertBefore(li, chatsAside.firstChild);
-                                    row = a;
+                            const target = targetPath || location.pathname;   // 允许外部显式指定目标
+                            if (hist.querySelector(`a[href*="${target}"]`)) return;
+                            const a = document.createElement('a');
+                            a.href = target;
+                            a.dataset.url = target;                           // 占位标记
+                            a.textContent = 'New chat';
+                            a.style.cssText = 'display:block;padding:6px 12px;font-size:13px;line-height:1.25;border-radius:6px;color:#b2b2b2;text-decoration:none;';
+                            const li = document.createElement('li');
+                            li.style.display = 'none';
+                            li.dataset.cgptPlaceholder = '1';
+                            li.appendChild(a);
+                            hist.insertBefore(li, hist.firstChild);
+                        };
+
+                        const watch = () => {
+                            insertHistoryEntry();
+                            const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                            if (!hist) return;
+                            const target = targetPath || location.pathname;
+                            const moveIfReady = () => {
+                                const ok =
+                                    qs(`div#history a[href*="${target}"]:not([data-url])`) ||
+                                    qs(`nav[aria-label="Chat history"] a[href*="${target}"]:not([data-url])`);
+                                if (ok) {
+                                    const placeholder =
+                                        qs(`div#history a[data-url="${target}"]`) ||
+                                        qs(`nav[aria-label="Chat history"] a[data-url="${target}"]`);
+                                    if (placeholder && placeholder !== ok) {
+                                        try {
+                                            (typeof detachLink === 'function') && detachLink(placeholder);
+                                        } catch (e) {
+                                        }
+                                        placeholder.closest('li')?.remove();
+                                    }
+                                    refreshHistoryOrder();
+                                    return true;
                                 }
-                            } else {
-                                const textEl = row.querySelector('.truncate') || row;
-                                if (textEl.textContent !== title) textEl.textContent = title;
-                                const li = row.closest('li');
-                                if (li && li.style.display === 'none') li.style.display = '';
+                                return false;
+                            };
+                            if (moveIfReady()) return;
+                            const ob = new MutationObserver(() => {
+                                if (moveIfReady()) ob.disconnect();
+                            });
+                            ob.observe(hist, {childList: true, subtree: true});
+                            setTimeout(() => ob.disconnect(), 60000);
+                        };
+
+                        if ((targetPath || location.pathname).startsWith('/c/')) {
+                            watch();
+                        } else {
+                            const once = () => {
+                                if (!location.pathname.startsWith('/c/')) return;
+                                window.removeEventListener('popstate', once);
+                                watch();
+                            };
+                            window.addEventListener('popstate', once);
+                        }
+
+                        setTimeout(() => {
+                            try {
+                                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                                const target = targetPath || location.pathname;
+                                if (hist && !qs(`div#history a[href*="${target}"]`, hist)) {
+                                    scheduleHistoryRefresh(targetPath);        // 递归时继续盯同一个目标
+                                    refreshHistoryOrder();
+                                }
+                            } catch (e) {
                             }
+                        }, 1500);
+                    }
 
-                            /* 新增：给条目绑定一次性 SPA 导航，避免整页刷新 */
-                            if (row && !row.__cgptSpaBound) {
-                                row.__cgptSpaBound = 1;
-                                row.addEventListener('click', e => {
-                                    if (e.defaultPrevented) return;
-                                    // 放行复选框、按钮等交互控件
-                                    if (e.target.closest('input[type="checkbox"], [data-radix-popper-content-wrapper], [data-radix-focus-guard]')) {
-                                        return;
+
+                    // 新增：首次回答结束→3秒→调用conversations→局部刷新
+                    (function () {
+                        function __cgptBuildAcceptLanguage() {
+                            const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
+                                .map(s => String(s || '').split(';')[0]).filter(Boolean);
+                            const uniq = [...new Set(ls)].slice(0, 4);
+                            if (!uniq.length) return 'en-US,en;q=0.9';
+                            const qs = [1.0, 0.9, 0.8, 0.7];
+                            return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
+                        }
+
+                        async function __cgptGetAuthHeaders() { // 授权参考Batch Delete中的getHeaders实现:contentReference[oaicite:1]{index=1}
+                            const h = {
+                                accept: '*/*',
+                                'accept-language': __cgptBuildAcceptLanguage(),
+                                'content-type': 'application/json'
+                            };
+                            try {
+                                const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
+                                if (r.ok) {
+                                    const j = await r.json();
+                                    if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
+                                }
+                            } catch {
+                            }
+                            return h;
+                        }
+
+                        // 新增：把返回数据用于最小 DOM 补丁，确保 Chats 可见
+                        function __cgptPatchChatsFromResponse(data, opts = {}) {
+                            try {
+                                const explicitPath = opts.path || null;
+                                const idFromOpt = opts.id || (explicitPath ? (/\/c\/([^/?#]+)/.exec(explicitPath) || [])[1] : null);
+                                const idMatch = /\/c\/([^/?#]+)/.exec(location.pathname);
+                                const curId = idFromOpt || (idMatch && idMatch[1]);
+                                if (!curId || !data) return;
+
+                                const list = Array.isArray(data.items) ? data.items
+                                    : Array.isArray(data.conversations) ? data.conversations : [];
+                                const item = list.find(it => it?.id === curId || it?.conversation_id === curId);
+                                if (!item) return;
+
+                                const title = String(item.title || 'New chat');
+                                const hist = document.querySelector('div#history') || document.querySelector('nav[aria-label="Chat history"]');
+                                if (!hist) return;
+
+                                const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+                                const path = '/c/' + curId;
+                                let row = chatsAside.querySelector(`a[href*="${path}"]`);
+                                if (!row) {
+                                    const tplLink = chatsAside.querySelector('a[href^="/c/"]');
+                                    const tplItem = tplLink && (tplLink.closest('li') || tplLink);
+                                    if (tplItem) {
+                                        const clone = tplItem.cloneNode(true);
+                                        const link = clone.querySelector('a[href^="/c/"]') || clone;
+                                        link.href = path;
+                                        if (link.hasAttribute('data-url')) link.setAttribute('data-url', path); else link.removeAttribute('data-url');
+                                        link.removeAttribute('aria-current');
+                                        link.removeAttribute('target');
+                                        link.setAttribute('data-discover', 'true');
+                                        const titleEl =
+                                            link.querySelector('.truncate') ||
+                                            link.querySelector('[data-testid="conversation-item-title"]') ||
+                                            link;
+                                        titleEl.textContent = title;
+                                        clone.querySelectorAll('[class]').forEach(n => {
+                                            if (/\bbg-token-/.test(n.className)) n.className = n.className.replace(/\bbg-token-[^\s]+/g, '').trim();
+                                        });
+                                        const listEl = tplItem.parentElement && /^(UL|OL)$/.test(tplItem.parentElement.tagName) ? tplItem.parentElement : null;
+                                        if (listEl) listEl.insertBefore(clone, listEl.firstChild);
+                                        else chatsAside.insertBefore(clone, tplItem);
+                                        row = link;
+                                    } else {
+                                        const li = document.createElement('li');
+                                        const a = document.createElement('a');
+                                        a.href = path;
+                                        a.setAttribute('data-url', path);
+                                        a.setAttribute('data-discover', 'true');
+                                        a.className = 'group __menu-item hoverable gap-1.5';
+                                        a.textContent = title;
+                                        li.appendChild(a);
+                                        const ul = chatsAside.querySelector('ul,ol');
+                                        if (ul) ul.insertBefore(li, ul.firstChild);
+                                        else chatsAside.insertBefore(li, chatsAside.firstChild);
+                                        row = a;
                                     }
-                                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-                                    const href = row.getAttribute('href');
-                                    if (!href) return;
-                                    e.preventDefault();
-                                    history.pushState({}, '', href);
-                                    window.dispatchEvent(new Event('popstate'));
-                                }, {passive: false});
+                                } else {
+                                    const textEl = row.querySelector('.truncate') || row;
+                                    if (textEl.textContent !== title) textEl.textContent = title;
+                                    const li = row.closest('li');
+                                    if (li && li.style.display === 'none') li.style.display = '';
+                                }
 
-                                // 防止上层其他捕获监听抢走
-                                row.addEventListener('mousedown', e => {
-                                    if (e.target.closest('input[type="checkbox"], [data-radix-popper-content-wrapper], [data-radix-focus-guard]')) {
-                                        e.stopPropagation();
-                                    }
-                                }, true); // capture
+                                /* 新增：给条目绑定一次性 SPA 导航，避免整页刷新 */
+                                if (row && !row.__cgptSpaBound) {
+                                    row.__cgptSpaBound = 1;
+                                    row.addEventListener('click', e => {
+                                        if (e.defaultPrevented) return;
+                                        // 放行复选框、按钮等交互控件
+                                        if (e.target.closest('input[type="checkbox"], [data-radix-popper-content-wrapper], [data-radix-focus-guard]')) {
+                                            return;
+                                        }
+                                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                                        const href = row.getAttribute('href');
+                                        if (!href) return;
+                                        e.preventDefault();
+                                        history.pushState({}, '', href);
+                                        window.dispatchEvent(new Event('popstate'));
+                                    }, {passive: false});
 
-                                // 兜底样式，避免遮罩挡点
-                                document.head.insertAdjacentHTML('beforeend', `
+                                    // 防止上层其他捕获监听抢走
+                                    row.addEventListener('mousedown', e => {
+                                        if (e.target.closest('input[type="checkbox"], [data-radix-popper-content-wrapper], [data-radix-focus-guard]')) {
+                                            e.stopPropagation();
+                                        }
+                                    }, true); // capture
+
+                                    // 兜底样式，避免遮罩挡点
+                                    document.head.insertAdjacentHTML('beforeend', `
                                 <style>
                                   a [data-radix-popper-content-wrapper],
                                   a [data-radix-focus-guard],
@@ -3480,118 +3496,128 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 </style>
                                 `);
 
-                            }
+                                }
 
-                            // 维持选中态与顺序
-                            try {
-                                refreshHistoryOrder();
+                                // 维持选中态与顺序
+                                try {
+                                    refreshHistoryOrder();
+                                } catch {
+                                }
                             } catch {
                             }
-                        } catch {
                         }
-                    }
 
-                    async function __cgptFetchConversationsAndRefresh(explicitIdOrPath) {
-                        try {
-                            const headers = await __cgptGetAuthHeaders();
-                            const res = await fetch('/backend-api/conversations?offset=0&limit=5&order=updated&is_archived=false', {
-                                headers,
-                                credentials: 'same-origin'
-                            });
-                            if (!res.ok) return;
-
-                            const json = await res.json().catch(() => null);
-                            if (!json) return;
-
-                            const list = Array.isArray(json.items) ? json.items
-                                : Array.isArray(json.conversations) ? json.conversations
-                                    : [];
-
-                            const hasNewChat = list.some(it => String(it?.title || '').trim().toLowerCase() === 'new chat');
-                            if (hasNewChat) return;
-
-                            const opts = typeof explicitIdOrPath === 'string'
-                                ? (explicitIdOrPath.startsWith('/c/') ? {path: explicitIdOrPath} : {id: explicitIdOrPath})
-                                : {};
-                            __cgptPatchChatsFromResponse(json, opts);
-
+                        async function __cgptFetchConversationsAndRefresh(explicitIdOrPath) {
                             try {
-                                scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
+                                const headers = await __cgptGetAuthHeaders();
+                                const res = await fetch('/backend-api/conversations?offset=0&limit=5&order=updated&is_archived=false', {
+                                    headers,
+                                    credentials: 'same-origin'
+                                });
+                                if (!res.ok) return;
+
+                                const json = await res.json().catch(() => null);
+                                if (!json) return;
+
+                                const list = Array.isArray(json.items) ? json.items
+                                    : Array.isArray(json.conversations) ? json.conversations
+                                        : [];
+
+                                const hasNewChat = list.some(it => String(it?.title || '').trim().toLowerCase() === 'new chat');
+                                if (hasNewChat) return;
+
+                                const opts = typeof explicitIdOrPath === 'string'
+                                    ? (explicitIdOrPath.startsWith('/c/') ? {path: explicitIdOrPath} : {id: explicitIdOrPath})
+                                    : {};
+                                __cgptPatchChatsFromResponse(json, opts);
+
+                                try {
+                                    scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
+                                } catch {
+                                }
                             } catch {
                             }
-                        } catch {
                         }
-                    }
 
 
-                    function __cgptMonitorFirstAnswerThenReload() {
-                        if (!location.pathname.startsWith('/c/')) return;
-                        const m = /\/c\/([^/?#]+)/.exec(location.pathname);
-                        const id = m && m[1];
-                        if (!id) return;
-                        window.__cgptFirstReplyDoneMap = window.__cgptFirstReplyDoneMap || {};
-                        if (window.__cgptFirstReplyDoneMap[id]) return;
-                        Date.now();
-                        const sel = '#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]';
-                        const int = setInterval(() => {
-                            const btn = qs(sel);
-                            const label = btn ? ((btn.getAttribute('aria-label') || btn.innerText || '') + '').toLowerCase() : '';
-                            const stopOn = label.includes('stop');
-                            const hasAssistant = !!document.querySelector('[data-message-author-role="assistant"],[data-testid="assistant"],[data-message-role="assistant"]');
-                            if (!stopOn && hasAssistant) {
-                                clearInterval(int);
-                                window.__cgptFirstReplyDoneMap[id] = 1;
-                                setTimeout(__cgptFetchConversationsAndRefresh, 3000);
-                            }
-                        }, 300);
-                    }
-
-                    // 小兜底：盯住某个/c/...，先做DOM占位监听，再在4s与10s各拉一次conversations列表以补条目
-                    function __cgptEnsureHistoryRowFor(path) {
-                        if (!path || !path.startsWith('/c/')) return;
-                        try {
-                            scheduleHistoryRefresh?.(path);
-                        } catch {
+                        function __cgptMonitorFirstAnswerThenReload() {
+                            if (!location.pathname.startsWith('/c/')) return;
+                            const m = /\/c\/([^/?#]+)/.exec(location.pathname);
+                            const id = m && m[1];
+                            if (!id) return;
+                            window.__cgptFirstReplyDoneMap = window.__cgptFirstReplyDoneMap || {};
+                            if (window.__cgptFirstReplyDoneMap[id]) return;
+                            Date.now();
+                            const sel = '#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]';
+                            const int = setInterval(() => {
+                                const btn = qs(sel);
+                                const label = btn ? ((btn.getAttribute('aria-label') || btn.innerText || '') + '').toLowerCase() : '';
+                                const stopOn = label.includes('stop');
+                                const hasAssistant = !!document.querySelector('[data-message-author-role="assistant"],[data-testid="assistant"],[data-message-role="assistant"]');
+                                if (!stopOn && hasAssistant) {
+                                    clearInterval(int);
+                                    window.__cgptFirstReplyDoneMap[id] = 1;
+                                    setTimeout(__cgptFetchConversationsAndRefresh, 3000);
+                                }
+                            }, 300);
                         }
-                        const id = (/\/c\/([^/?#]+)/.exec(path) || [])[1];
-                        setTimeout(() => {
+
+                        // 小兜底：盯住某个/c/...，先做DOM占位监听，再在4s与10s各拉一次conversations列表以补条目
+                        function __cgptEnsureHistoryRowFor(path) {
+                            if (!path || !path.startsWith('/c/')) return;
                             try {
-                                __cgptFetchConversationsAndRefresh?.(id);
+                                scheduleHistoryRefresh?.(path);
                             } catch {
                             }
-                        }, 4000);
-                        setTimeout(() => {
-                            try {
-                                __cgptFetchConversationsAndRefresh?.(id);
-                            } catch {
-                            }
-                        }, 10000);
-                    }
+                            const id = (/\/c\/([^/?#]+)/.exec(path) || [])[1];
+                            setTimeout(() => {
+                                try {
+                                    __cgptFetchConversationsAndRefresh?.(id);
+                                } catch {
+                                }
+                            }, 4000);
+                            setTimeout(() => {
+                                try {
+                                    __cgptFetchConversationsAndRefresh?.(id);
+                                } catch {
+                                }
+                            }, 10000);
+                        }
 
-                    window.__cgptEnsureHistoryRowFor = __cgptEnsureHistoryRowFor;
+                        window.__cgptEnsureHistoryRowFor = __cgptEnsureHistoryRowFor;
 
-                    window.__cgptMonitorFirstAnswerThenReload = __cgptMonitorFirstAnswerThenReload;
-                })();
+                        window.__cgptMonitorFirstAnswerThenReload = __cgptMonitorFirstAnswerThenReload;
+                    })();
 
-                window.scheduleHistoryRefresh = scheduleHistoryRefresh;
+                    window.scheduleHistoryRefresh = scheduleHistoryRefresh;
 
 
-                // ① 发送按钮点击
-                send.addEventListener('click', () => {
-                    if (isUploading()) return;
-                    const label = send.getAttribute('aria-label') || send.innerText;
-                    if (label.toLowerCase().includes('stop')) return;
-                    const hasUserInput = ed && ed.innerText.trim().length > 0;
-                    if (hasUserInput) appendSuffix();
-                    bumpActiveChat();
-                    scheduleHistoryRefresh();
-                    ensureChatRegistered();
-                    ensureFrostedBG();
-                    window.__cgptMonitorFirstAnswerThenReload?.();
-                }, {capture: true});
+                    // ① 发送按钮点击
+                    send.addEventListener('click', () => {
+                        if (isUploading()) return;
+                        const label = send.getAttribute('aria-label') || send.innerText;
+                        if ((label || '').toLowerCase().includes('stop')) return;
 
-                // ② 回车快捷发送
-                if (!ed.dataset.keyhooked) {
+                        // 运行时再取编辑器，并区分 textarea 与 ProseMirror
+                        const edNow = getEditor();
+                        const hasUserInput = edNow
+                            ? (edNow.tagName === 'TEXTAREA'
+                                ? edNow.value.trim().length > 0
+                                : (edNow.innerText || '').trim().length > 0)
+                            : false;
+
+                        if (hasUserInput) appendSuffix();
+                        bumpActiveChat();
+                        scheduleHistoryRefresh();
+                        ensureChatRegistered();
+                        ensureFrostedBG();
+                        window.__cgptMonitorFirstAnswerThenReload?.();
+                    }, {capture: true});
+                }
+
+                // ② 回车快捷发送：分别尝试对当前编辑器挂钩
+                const ed = getEditor();
+                if (ed && !ed.dataset.keyhooked) {
                     ed.dataset.keyhooked = '1';
                     ed.addEventListener('keydown', e => {
                         if (e.isComposing || e.keyCode === 229) return;
@@ -3603,8 +3629,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             const btn = qs('#composer-submit-button');
                             if (!btn) return;
                             const label = btn.getAttribute('aria-label') || btn.innerText;
-                            if (label.toLowerCase().includes('stop')) return;
-                            const hasUserInput = ed && ed.innerText.trim().length > 0;
+                            if ((label || '').toLowerCase().includes('stop')) return;
+
+                            const edNow = getEditor();
+                            const hasUserInput = edNow
+                                ? (edNow.tagName === 'TEXTAREA'
+                                    ? edNow.value.trim().length > 0
+                                    : (edNow.innerText || '').trim().length > 0)
+                                : false;
+
                             if (hasUserInput) appendSuffix();
                             bumpActiveChat();
                             ensurePromptToggle();
@@ -3614,10 +3647,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             window.__cgptMonitorFirstAnswerThenReload?.();
                         }
                     }, {capture: true});
-
                 }
-
-
             }
 
             observers.add(new MutationObserver(bindSend)).observe(document.body, {childList: true, subtree: true});
@@ -3761,7 +3791,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             label: 'Normal',
                             text: '※horizontal lines (---, ——, —, ***) strictly prohibited※'
                         }));
-                    } catch {}
+                    } catch {
+                    }
 
                     // 若由组内“New chat”间接触发，则跳过本次清除并重置标志
                     if (window.__cgptSuppressGroupClear) {
@@ -3775,7 +3806,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     delete lastActiveMap['/'];
                     try {
                         if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                    } catch {}
+                    } catch {
+                    }
                     setTimeout(highlightActive, 0);
                     setTimeout(() => {
                         try {
@@ -3786,7 +3818,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 }, true);
             }
-
 
 
             function checkMemoryUsage() {
