@@ -35,9 +35,62 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const form = qs('form[data-type="unified-composer"]');
             if (!form) return;
 
+            // ===== 新增：把输入框固定为图一样式（默认保持展开态外观） =====
+            try {
+                const STYLE_ID = 'cgpt-fixed-composer-style';
+                if (!document.getElementById(STYLE_ID)) {
+                    const s = document.createElement('style');
+                    s.id = STYLE_ID;
+                    s.textContent = `
+                    form[data-type="unified-composer"] .__zzy-fixed-composer{
+                      background:#2b2b2b !important;            
+                      border-radius:28px !important;            
+                      box-shadow:var(--shadow-short,0 4px 12px rgba(0,0,0,.25)) !important;
+                      display:grid !important;
+                      grid-template-columns:auto 1fr auto !important;
+                      grid-template-areas:
+                        "header header header"
+                        "primary primary primary"
+                        "leading footer trailing" !important;  
+                      overflow:clip !important;
+                      padding:10px !important;                  
+                    }
+                    form[data-type="unified-composer"] .__zzy-fixed-composer [grid-area="primary"],
+                    form[data-type="unified-composer"] .__zzy-fixed-composer [style*="grid-area: primary"]{
+                      min-height:56px;      
+                      margin-top:0 !important;
+                    }
+                    `;
+                    document.head.appendChild(s);
+                }
+                // 选中输入框外层容器：优先按你页面中的 bg-token-bg-primary
+                const composerBox =
+                    form.querySelector('.bg-token-bg-primary') ||   // 典型外层容器类
+                    form.querySelector('[style*="grid-template-areas"]'); // 兜底
+                if (composerBox && !composerBox.classList.contains('__zzy-fixed-composer')) {
+                    composerBox.classList.add('__zzy-fixed-composer');
+                }
+                // 监听 DOM 变化，若组件重渲染则自动补涂一次
+                if (!form.__zzyFixedComposerMO) {
+                    const mo = new MutationObserver(() => {
+                        const boxNow =
+                            form.querySelector('.bg-token-bg-primary') ||
+                            form.querySelector('[style*="grid-template-areas"]');
+                        if (boxNow && !boxNow.classList.contains('__zzy-fixed-composer')) {
+                            boxNow.classList.add('__zzy-fixed-composer');
+                        }
+                    });
+                    mo.observe(form, { childList:true, subtree:true });
+                    form.__zzyFixedComposerMO = mo;
+                }
+            } catch {}
+            // ===== 新增结束 =====
+
             // 非组内会话也显示开关
             const path = location.pathname;
             let box = form.querySelector('#cgpt-prompt-toggle');
+            // 去掉隐藏早退分支，始终渲染
+
             // 去掉隐藏早退分支，始终渲染
 
 
