@@ -3128,12 +3128,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
                     if (mergedClean) {
+                        // 新增：在修改 DOM 前先判断“是否已有用户文本”
+                        const hadUserText = ((ed.innerText || '').trim().length > 0);
+
                         gp.textContent = merged;
                         frag.appendChild(gp);
 
-                        const tc = document.createElement('p');
-                        tc.textContent = 'Task content:';
-                        frag.appendChild(tc);
+                        // 修改：只有当“已有用户文本”时，才插入 Task content:
+                        if (hadUserText) {
+                            const tc = document.createElement('p');
+                            tc.textContent = 'Task content:';
+                            frag.appendChild(tc);
+                        }
 
                         ed.prepend(frag);
                         changed = true;
@@ -3177,6 +3183,20 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const buttonBusy = !!(btn && (btn.disabled || btn.getAttribute('aria-disabled') === 'true'));
                 const hasProgress = !!form.querySelector('[role="progressbar"],progress,[data-state="uploading"],[aria-busy="true"]');
                 return buttonBusy || hasProgress;
+            }
+
+            function hasAttachments() {
+                const form = qs('form[data-type="unified-composer"]');
+                if (!form) return false;
+
+                const strip = form.querySelector('.cgpt-attach-strip, .horizontal-scroll-fade-mask');
+                if (strip && strip.childElementCount > 0) return true;
+
+                return !!form.querySelector(
+                    '[data-testid*="file" i], [data-testid*="attach" i], ' +
+                    '[aria-label*="file" i], [aria-label*="附件"], [aria-label*="文件"], ' +
+                    '[data-state="complete"][role="img"]'
+                );
             }
 
             function bindSend() {
@@ -3630,7 +3650,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 : (edNow.innerText || '').trim().length > 0)
                             : false;
 
-                        if (hasUserInput) appendSuffix();
+                        if (hasUserInput || hasAttachments()) appendSuffix();
                         bumpActiveChat();
                         scheduleHistoryRefresh();
                         ensureChatRegistered();
@@ -3662,7 +3682,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     : (edNow.innerText || '').trim().length > 0)
                                 : false;
 
-                            if (hasUserInput) appendSuffix();
+                            if (hasUserInput || hasAttachments()) appendSuffix();
                             bumpActiveChat();
                             ensurePromptToggle();
                             scheduleHistoryRefresh();
