@@ -9,7 +9,7 @@
 
 
     function getOptions() {
-        return optionsList.filter(opt => opt.label !== 'Normal');
+        return optionsList;
     }
 
     // 新增：集中设置“默认 Normal”
