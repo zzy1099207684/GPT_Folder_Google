@@ -9,10 +9,7 @@
 
 
     function getOptions() {
-        const ext = Array.isArray(window.__cgptPromptOptions) ? window.__cgptPromptOptions : [];
-        const existingLabels = ext.map(o => String(o.label || '').toLowerCase());
-        const base = optionsList.filter(opt => !existingLabels.includes(opt.label.toLowerCase()));
-        return base.concat(ext);
+        return optionsList.filter(opt => opt.label !== 'Normal');
     }
 
     // 新增：集中设置“默认 Normal”
