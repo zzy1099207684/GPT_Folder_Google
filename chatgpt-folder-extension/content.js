@@ -3109,8 +3109,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             try { sessionStorage.setItem('cgptCrossLastPath', here); } catch {}
                         }
 
-                        if (localPending || crossShouldPrepend) {
-                            const prepend = 'Switch to a different style for responses from now on.';
+                        // 仅在“已有会话（/c/）”里才前置那句英文提示；新建对话页（/）不加
+                        const isExistingChat = location.pathname.startsWith('/c/');
+
+                        if ((localPending || crossShouldPrepend) && isExistingChat) {
+                            const prepend = 'Switch style:';
                             const inner = String(merged).replace(/^※+/, '').replace(/※+$/, '');
                             merged = `※${prepend}${inner}※`;
 
