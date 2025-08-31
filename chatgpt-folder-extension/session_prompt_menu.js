@@ -7,11 +7,6 @@
         { label: 'Formal', text: '※Clear and well-structured responses;※' }
     ];
 
-
-    function getOptions() {
-        return optionsList;
-    }
-
     // 新增：集中设置“默认 Normal”
     function __cgptSetDefaultNormal() {
         try {
@@ -168,7 +163,6 @@
 
             mi.addEventListener('click', (ev) => {
                 ev.stopPropagation();
-                const opts = getOptions();
                 const pop = document.createElement('div');
                 pop.style.cssText = 'position:fixed;z-index:2147483647;min-width:160px;background:#2b2b2b;color:#e7d8c5;border-radius:8px;padding:6px 0;box-shadow:0 4px 10px rgba(0,0,0,2)';
                 const rect = mi.getBoundingClientRect();
@@ -182,7 +176,7 @@
                 const currentLabel = (storedPrompt && typeof storedPrompt.label === 'string')
                     ? String(storedPrompt.label).trim() : null;
 
-                opts.forEach(o => {
+                optionsList.forEach(o => {
                     const row = document.createElement('div');
                     row.textContent = String(o.label || '').trim() || 'Unnamed';
                     row.style.cssText = 'padding:6px 12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:space-between';
