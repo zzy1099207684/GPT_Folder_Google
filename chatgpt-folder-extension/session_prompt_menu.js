@@ -2,6 +2,7 @@
     const optionsList = [
         { label: 'Normal', text: '※Balanced responses with natural flow;※' },
         { label: 'Concise', text: '※Shorter responses & more messages;※' },
+        { label: 'Clear', text: '※Simple,clear explanations that anyone can understand easily;※' },
         { label: 'Explanatory', text: '※Detailed responses & comprehensive context;※' },
         { label: 'Learning', text: '※Patient, educational responses that build understanding※' },
         { label: 'Formal', text: '※Clear and well-structured responses;※' }
