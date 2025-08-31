@@ -1,28 +1,17 @@
 (function () {
-    const Normal = 'Normal';
-    const Normal_text = '※Balanced responses with natural flow;※';
-    const Concise = 'Concise';
-    const Concise_text = '※Shorter responses & more messages;※';
-    const Explanatory = 'Explanatory';
-    const Explanatory_text = '※Detailed explanations & comprehensive context;※';
-    const Educational  = 'Educational';
-    const Educational_text = '※Educational responses for learning;※';
-    const Formal  = 'Formal';
-    const Formal_text = '※Clear and well-structured responses;※';
+    const optionsList = [
+        { label: 'Normal', text: '※Balanced responses with natural flow;※' },
+        { label: 'Concise', text: '※Shorter responses & more messages;※' },
+        { label: 'Explanatory', text: '※Detailed explanations & comprehensive context;※' },
+        { label: 'Learning', text: '※Patient, educational responses that build understanding※' },
+        { label: 'Formal', text: '※Clear and well-structured responses;※' }
+    ];
+
 
     function getOptions() {
         const ext = Array.isArray(window.__cgptPromptOptions) ? window.__cgptPromptOptions : [];
-        const hasNormal = ext.some(o => String(o.label || '').toLowerCase() === Normal);
-        const hasBasic = ext.some(o => String(o.label || '').toLowerCase() === Concise);
-        const hasExplanatory = ext.some(o => String(o.label || '').toLowerCase() === Explanatory);
-        const hasEducational = ext.some(o => String(o.label || '').toLowerCase() === Educational);
-        const hasFormal = ext.some(o => String(o.label || '').toLowerCase() === Formal);
-        const base = [];
-        if (!hasNormal) base.push({ label: Normal, text: Normal_text});
-        if (!hasBasic)  base.push({ label: Concise,  text: Concise_text});
-        if (!hasExplanatory)  base.push({ label: Explanatory,  text: Explanatory_text});
-        if (!hasEducational)  base.push({ label: Educational,  text: Educational_text});
-        if (!hasFormal)  base.push({ label: Formal,  text: Formal_text});
+        const existingLabels = ext.map(o => String(o.label || '').toLowerCase());
+        const base = optionsList.filter(opt => !existingLabels.includes(opt.label.toLowerCase()));
         return base.concat(ext);
     }
 
@@ -31,7 +20,7 @@
         try {
             sessionStorage.setItem(
                 'cgptSessionPrompt',
-                JSON.stringify({ label: Normal, text: Normal_text })
+                JSON.stringify({ label: optionsList[0].label, text: optionsList[0].text })
             );
         } catch {}
     }
@@ -113,7 +102,7 @@
         close.addEventListener('click', (e) => {
             e.stopPropagation();
             try {
-                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: 'Normal', text: Normal_text }));
+                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: optionsList[0].label, text: optionsList[0].text }));
                 toast('Start Prompt：off');
             } catch {}
             updatePromptPill();
@@ -128,7 +117,9 @@
     // 把胶囊插入到 + 按钮右侧；Normal 或空则移除
     function updatePromptPill() {
         const label = readStoredPromptLabel();
-        const shouldShow = label === Concise || label === Explanatory || label === Educational || label === Formal;
+        const shouldShow = optionsList
+            .filter(opt => opt.label !== 'Normal')
+            .some(opt => opt.label === label);
 
         // 找到所有输入框的 + 按钮（精确选择器来自页面结构）:contentReference[oaicite:2]{index=2}
         const plusButtons = Array.from(document.querySelectorAll('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]'));
