@@ -3091,8 +3091,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         merged = `※${inner}※`;
                     }
 
-                    // ★ 增强：除本会话立即提示外，若跨会话第一次发送也需前置提示（排除 New chat）
-                    // ★ 改为“按切换动作触发”：每次切换到任意会话（/c/），首次发送前置提示；New chat ('/') 不算
                     try {
                         const localPending = sessionStorage.getItem('cgptPromptStyleSwitchPending') === '1';
 
@@ -3118,7 +3116,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             if (localPending) {
                                 sessionStorage.removeItem('cgptPromptStyleSwitchPending'); // 本会话一次性仍然只用一次
                             }
-                            // 注意：不要清理 crossToken，让后续“切换动作”还能继续生效
                         }
                     } catch {}
 
