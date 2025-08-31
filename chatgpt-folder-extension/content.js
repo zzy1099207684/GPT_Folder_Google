@@ -3101,11 +3101,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         if (token) {
                             const here = location.pathname || '';
                             const last = sessionStorage.getItem('cgptCrossLastPath') || '';
-                            // 只要路径变化且是已有会话（/c/），就视为一次“切会话动作”
-                            if (here.startsWith('/c/') && here !== '/' && here !== last) {
+                            if (here.startsWith('/c/') && last.startsWith('/c/') && here !== last) {
                                 crossShouldPrepend = true;
                             }
-                            // 无论是否插入，都更新“上次发送路径”，用于下一次判断
                             try { sessionStorage.setItem('cgptCrossLastPath', here); } catch {}
                         }
 
