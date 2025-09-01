@@ -1446,19 +1446,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const bar = Object.assign(document.createElement('div'), {
                 textContent: 'Groups', style: 'display:flex;align-items:center;font:350 13px/1 white;padding:4px 12px'
             });
-            // 保留原有两行
+
+// 三点菜单按钮
             const addBtn = Object.assign(document.createElement('span'), {
-                textContent: '十', style: 'cursor:pointer;margin-left:auto;font-size:10px'
+                textContent: '⋯',
+                style: 'color: white; cursor: pointer; margin-left: 154px; font-size: 18px; line-height: 1;'
             });
             bar.appendChild(addBtn);
 
-            addBtn.addEventListener('click', () => {
+// —— 把原来 “+” 的逻辑封装为函数 ——
+            function addGroup() {
                 const raw = prompt('Group name', '');
                 if (!raw) return;
                 const name = raw.trim();
                 if (!name) return;
 
-                const fid = 'grp_' + nanoid()
+                const fid = 'grp_' + nanoid();
                 folders[fid] = {
                     name: name.length > 20 ? name.slice(0, 20) + '…' : name,
                     chats: [],
@@ -1467,13 +1470,110 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     gap: 0
                 };
 
-                const order = Object.keys(folders);           // 维持渲染顺序
+                const order = Object.keys(folders);
                 if (chrome?.runtime?.id) {
                     storage.set({folders, folderOrder: order});
                     safeSendMessage({type: 'save-folders', data: folders});
                 }
-                render();                                     // 刷新 UI
+                render();
+            }
+
+// —— 导出 / 导入 ——
+            async function doExport() {
+                // 取当前页面实时 Font/Size，若为空再回退存储
+                const font = document.documentElement.style.fontFamily || (await storage.get('pageFont')) || '';
+                const size = document.documentElement.style.fontSize || (await storage.get('pageFontSize')) || '100%';
+                const payload = {
+                    type: 'cgpt-groups-backup',
+                    version: 1,
+                    exportedAt: new Date().toISOString(),
+                    pageFont: font,
+                    pageFontSize: size,
+                    folders
+                };
+                const blob = new Blob([JSON.stringify(payload)], {type: 'application/json'});
+                const a = document.createElement('a');
+                const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                a.download = `cgpt_groups_backup_${ts}.json`;
+                a.href = URL.createObjectURL(blob);
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+            }
+
+            function doImport() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'application/json';
+                input.onchange = async () => {
+                    const file = input.files && input.files[0];
+                    if (!file) return;
+                    try {
+                        const text = await file.text();
+                        const obj = JSON.parse(text);
+                        if (!obj || obj.type !== 'cgpt-groups-backup' || typeof obj.folders !== 'object') {
+                            alert('Invalid backup file');
+                            return;
+                        }
+
+                        // 应用分组
+                        folders = obj.folders || {};
+                        const order = Object.keys(folders);
+
+                        // 应用 Font/Size 到页面与下拉框
+                        const fnt = obj.pageFont || 'inherit';
+                        const sz  = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
+                        document.documentElement.style.fontFamily = fnt;
+                        document.documentElement.style.fontSize   = sz;
+                        try { fontSelect.value = fnt; } catch {}
+                        try { sizeSelect.value = sz; }  catch {}
+
+                        if (chrome?.runtime?.id) {
+                            await storage.set({folders, folderOrder: order});
+                            await storage.set({pageFont: fnt, pageFontSize: sz});
+                            safeSendMessage({type: 'save-folders', data: folders});
+                        }
+                        render();
+                    } catch {
+                        alert('Import failed');
+                    }
+                };
+                input.click();
+            }
+
+// —— 弹出菜单（add group / Export / Import）——
+            const pop = document.createElement('div');
+            pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:140px;background:#2b2b2b;border-radius:8px;padding:6px 0;z-index:2147483647';
+            document.body.appendChild(pop);
+
+            function hideMenu(){ pop.style.display = 'none'; }
+            window.addEventListener('click', e => {
+                if (!addBtn.contains(e.target) && !pop.contains(e.target)) hideMenu();
+            }, true);
+
+            addBtn.addEventListener('click', async () => {
+                if (pop.style.display === 'block') { hideMenu(); return; }
+                pop.innerHTML = '';
+
+                const mkItem = (txt, handler, danger) => {
+                    const d = document.createElement('div');
+                    d.textContent = txt;
+                    d.style.cssText = `padding:6px 12px;cursor:pointer;white-space:nowrap${danger ? ';color:#e66' : ''}`;
+                    d.onclick = () => { handler(); hideMenu(); };
+                    return d;
+                };
+
+                pop.appendChild(mkItem('add group',  addGroup));
+                pop.appendChild(mkItem('Export',     doExport));
+                pop.appendChild(mkItem('Import',     doImport));
+
+                const r = addBtn.getBoundingClientRect();
+                const left = Math.max(0, Math.min(r.right - 160, window.innerWidth - 160));
+                pop.style.left = `${left}px`;
+                pop.style.top  = `${r.bottom + 4}px`;
+                pop.style.display = 'block';
             });
+
 
 
             const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
