@@ -422,8 +422,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const obj = raw ? JSON.parse(raw) : null;
                     const t = obj && typeof obj.text === 'string' ? obj.text.trim() : null;
                     return t && t.length ? t : null;
-                } catch { return null; }
+                } catch {
+                    return null;
+                }
             }
+
             function isLikelySend(btn) {
                 if (!btn) return false;
                 if (btn.id === 'composer-submit-button') return false; // 排除主输入框发送
@@ -431,6 +434,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 // 覆盖常见按钮文案
                 return /(send|提交|保存|确定)/.test(label);
             }
+
             function findEditContainer(start) {
                 let n = start, hop = 0;
                 while (n && hop < 10) {
@@ -447,8 +451,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const raw = sessionStorage.getItem('cgptPromptOptions');
                     const arr = raw ? JSON.parse(raw) : null;
                     return Array.isArray(arr) ? arr : [];
-                } catch { return []; }
+                } catch {
+                    return [];
+                }
             }
+
             // 新增：去掉首尾 ※ 的对比辅助
             const stripMarkers = (s) => String(s || '').replace(/^※/, '').replace(/※$/, '');
             document.addEventListener('click', function (ev) {
@@ -468,7 +475,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const setText = (el, val) => {
                     if (el.tagName === 'TEXTAREA') el.value = val;
                     else el.innerText = val;
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
                 };
 
                 const text = getText(editor);
@@ -1357,8 +1364,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             if (toggleAll) toggleAll.checked = false;
 
                             if (chrome?.runtime?.id) {
-                                storage.set({ folders });                    // 新增：真正写入 storage
-                                safeSendMessage({ type: 'save-folders', data: folders }); // 保持与后台同步
+                                storage.set({folders});                    // 新增：真正写入 storage
+                                safeSendMessage({type: 'save-folders', data: folders}); // 保持与后台同步
                             }
 
                             render();
@@ -1590,7 +1597,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 a.href = URL.createObjectURL(blob);
                 document.body.appendChild(a);
                 a.click();
-                setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+                setTimeout(() => {
+                    URL.revokeObjectURL(a.href);
+                    a.remove();
+                }, 0);
             }
 
             function doImport() {
@@ -1614,11 +1624,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                         // 应用 Font/Size 到页面与下拉框
                         const fnt = obj.pageFont || 'inherit';
-                        const sz  = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
+                        const sz = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
                         document.documentElement.style.fontFamily = fnt;
-                        document.documentElement.style.fontSize   = sz;
-                        try { fontSelect.value = fnt; } catch {}
-                        try { sizeSelect.value = sz; }  catch {}
+                        document.documentElement.style.fontSize = sz;
+                        try {
+                            fontSelect.value = fnt;
+                        } catch {
+                        }
+                        try {
+                            sizeSelect.value = sz;
+                        } catch {
+                        }
 
                         if (chrome?.runtime?.id) {
                             await storage.set({folders, folderOrder: order});
@@ -1638,34 +1654,42 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:140px;background:#2b2b2b;border-radius:8px;padding:6px 0;z-index:2147483647';
             document.body.appendChild(pop);
 
-            function hideMenu(){ pop.style.display = 'none'; }
+            function hideMenu() {
+                pop.style.display = 'none';
+            }
+
             window.addEventListener('click', e => {
                 if (!addBtn.contains(e.target) && !pop.contains(e.target)) hideMenu();
             }, true);
 
             addBtn.addEventListener('click', async () => {
-                if (pop.style.display === 'block') { hideMenu(); return; }
+                if (pop.style.display === 'block') {
+                    hideMenu();
+                    return;
+                }
                 pop.innerHTML = '';
 
                 const mkItem = (txt, handler, danger) => {
                     const d = document.createElement('div');
                     d.textContent = txt;
                     d.style.cssText = `padding:6px 12px;cursor:pointer;white-space:nowrap${danger ? ';color:#e66' : ''}`;
-                    d.onclick = () => { handler(); hideMenu(); };
+                    d.onclick = () => {
+                        handler();
+                        hideMenu();
+                    };
                     return d;
                 };
 
-                pop.appendChild(mkItem('add group',  addGroup));
-                pop.appendChild(mkItem('Export',     doExport));
-                pop.appendChild(mkItem('Import',     doImport));
+                pop.appendChild(mkItem('add group', addGroup));
+                pop.appendChild(mkItem('Export', doExport));
+                pop.appendChild(mkItem('Import', doImport));
 
                 const r = addBtn.getBoundingClientRect();
                 const left = Math.max(0, Math.min(r.right - 160, window.innerWidth - 160));
                 pop.style.left = `${left}px`;
-                pop.style.top  = `${r.bottom + 4}px`;
+                pop.style.top = `${r.bottom + 4}px`;
                 pop.style.display = 'block';
             });
-
 
 
             const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
@@ -2300,7 +2324,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             enableAttachStripScroll();
             const attachObs = observers.add(new MutationObserver(() => enableAttachStripScroll()));
             attachObs.observe(document.body, {childList: true, subtree: true});
-
 
 
             /* ---------- 渲染 ---------- */
@@ -3294,7 +3317,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             if (here.startsWith('/c/') && last.startsWith('/c/') && here !== last) {
                                 crossShouldPrepend = true;
                             }
-                            try { sessionStorage.setItem('cgptCrossLastPath', here); } catch {}
+                            try {
+                                sessionStorage.setItem('cgptCrossLastPath', here);
+                            } catch {
+                            }
                         }
 
                         // 仅在“已有会话（/c/）”里才前置那句英文提示；新建对话页（/）不加
@@ -3309,8 +3335,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 sessionStorage.removeItem('cgptPromptStyleSwitchPending'); // 本会话一次性仍然只用一次
                             }
                         }
-                    } catch {}
-
+                    } catch {
+                    }
 
 
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
