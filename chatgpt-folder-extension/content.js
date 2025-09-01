@@ -385,12 +385,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                   #history.__cgpt-chats-collapsed a.__menu-item[href*="/c/"] { display:none !important; }
                   /* 角标布局 */
                   #history h2.__menu-label, nav[aria-label="Chat history"] h2.__menu-label {
-                    position:relative;
-                  }
-                  .__cgpt-chats-toggle {
-                    position:absolute; left:225px; top:50%; transform:translateY(-50%);
-                    cursor:pointer; user-select:none; font-weight:700; opacity:.9;
-                  }
+                      position:relative;
+                    }
+                    .__cgpt-chats-toggle {
+                      position:absolute; right:12px; top:50%; transform:translateY(-50%);
+                      cursor:pointer; user-select:none; font-weight:700; opacity:.9;
+                    }
                 `;
                 document.head.appendChild(st);
             };
@@ -1653,7 +1653,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 // 三点菜单按钮
             const addBtn = Object.assign(document.createElement('span'), {
                 textContent: '⋯',
-                style: 'color: white; cursor: pointer; margin-left: 154px; font-size: 18px; line-height: 1;'
+                style: 'color:white;cursor:pointer;margin-left:auto;font-size:18px;line-height:1'
             });
             bar.appendChild(addBtn);
 
