@@ -14,9 +14,24 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
-      "js": ["content.js", "batch_delete.js","background.js","session_prompt_menu.js"],
-      "css": ["style.css"],
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "modules/tip.js",
+        "modules/util_runtime.js",
+        "modules/edit_prompt_sync.js",
+        "modules/input_safety_patch.js",
+        "modules/bookmark_backup_menu.js",
+        "content.js",
+        "batch_delete.js",
+        "background.js",
+        "session_prompt_menu.js"
+      ],
+      "css": [
+        "style.css"
+      ],
       "run_at": "document_idle"
     }
   ]

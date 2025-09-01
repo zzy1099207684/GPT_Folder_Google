@@ -319,218 +319,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }, delay);
         }
 
-
-        // 在observers对象中添加新方法
-        const observers = {
-            list: [],
-            add(observer) {
-                this.list.push(observer);
-                return observer;
-            },
-            disconnectAll() {
-                this.list.forEach(obs => {
-                    try {
-                        obs.disconnect();
-                    } catch (e) {
-                        console.warn('[Bookmark] Error disconnecting observer:', e);
-                    }
-                });
-                this.list = [];
-            },
-            cleanup() {
-                // 移除页面中不存在的观察者
-                const initialLength = this.list.length;
-                this.list = this.list.filter(obs => {
-                    try {
-                        return obs && typeof obs.disconnect === 'function';
-                    } catch (e) {
-                        return false;
-                    }
-                });
-                if (initialLength !== this.list.length) {
-                    console.log(`[Bookmark] Cleaned up ${initialLength - this.list.length} broken observers`);
-                }
-            }
-        };
-        window.observers = observers;
-
-        function enqueueIdleTask(fn, timeout = 1000) {
-            if (typeof requestIdleCallback === 'function') {
-                requestIdleCallback(fn, {timeout});
-            } else {
-                setTimeout(fn, 0);
-            }
-        }
-
-        window.enqueueIdleTask = enqueueIdleTask;
-
-        function debounce(fn, wait = 200) {
-            let t;
-            return (...args) => {
-                clearTimeout(t);
-                t = setTimeout(() => fn.apply(this, args), wait);
-            };
-        }
-
         let CHUNK_BUDGET_MS = 4;                     // 默认单帧预算
 
         /* ===== 通用工具 ===== */
         const CLS = {tip: 'cgpt-tip'};
         const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'};
-
-        /* ---------- pointerEvents 失效修复 ---------- */
-        function isBlockingOverlayExist() {
-            // 任意仍在屏幕上的全屏遮罩都会令函数返回 true
-            return !!document.querySelector(
-                '[data-state="open"][role="dialog"],' +           // Radix 弹窗 / 侧边栏
-                '.fixed.inset-0[data-aria-hidden="true"],' +      // ChatGPT 本身的全屏层
-                '.immersive-translate-modal[style*="display: flex"]'
-            );
-        }
-
-        function restorePointerEvents() {
-            const b = document.body;
-            if (b && b.style.pointerEvents === 'none' && !isBlockingOverlayExist()) {
-                b.style.pointerEvents = '';
-            }
-        }
-
-        // 页面初始化后立即尝试一次
-        requestAnimationFrame(restorePointerEvents);
-
-        // 复制/粘贴/右键 在捕获阶段放行，避免被其它脚本拦截导致输入框内无法使用
-        const __cgptAllowClipboard = (e) => {
-            const t = e.target;
-            if (!(t instanceof Element)) return;
-            const isEditable =
-                t.matches('input,textarea,[contenteditable="true"]') ||
-                t.closest('[role="dialog"] input,[role="dialog"] textarea,[role="dialog"] [contenteditable="true"]');
-            if (isEditable) {
-                // 不改变默认行为，只阻止继续冒泡到可能会拦截的监听
-                e.stopPropagation();
-            }
-        };
-        window.addEventListener('copy', __cgptAllowClipboard, true);
-        window.addEventListener('cut', __cgptAllowClipboard, true);
-        window.addEventListener('paste', __cgptAllowClipboard, true);
-        window.addEventListener('contextmenu', __cgptAllowClipboard, true);
-        // === NEW: Edit message 发送前将首段 ※…※ 同步为当前选中 Prompt ===
-        (function syncEditPromptOnSend() {
-            function readCurrentPromptText() {
-                try {
-                    const raw = sessionStorage.getItem('cgptSessionPrompt');
-                    const obj = raw ? JSON.parse(raw) : null;
-                    const t = obj && typeof obj.text === 'string' ? obj.text.trim() : null;
-                    return t && t.length ? t : null;
-                } catch { return null; }
-            }
-            function isLikelySend(btn) {
-                if (!btn) return false;
-                if (btn.id === 'composer-submit-button') return false; // 排除主输入框发送
-                const label = (btn.getAttribute('aria-label') || btn.textContent || '').trim().toLowerCase();
-                // 覆盖常见按钮文案
-                return /(send|提交|保存|确定)/.test(label);
-            }
-            function findEditContainer(start) {
-                let n = start, hop = 0;
-                while (n && hop < 10) {
-                    if (n.querySelector && n.querySelector('textarea,[contenteditable="true"]')) return n;
-                    n = n.parentElement;
-                    hop++;
-                }
-                return null;
-            }
-
-            function readPromptOptions() {
-                try {
-                    if (Array.isArray(window.__cgptPromptOptions)) return window.__cgptPromptOptions;
-                    const raw = sessionStorage.getItem('cgptPromptOptions');
-                    const arr = raw ? JSON.parse(raw) : null;
-                    return Array.isArray(arr) ? arr : [];
-                } catch { return []; }
-            }
-            // 新增：去掉首尾 ※ 的对比辅助
-            const stripMarkers = (s) => String(s || '').replace(/^※/, '').replace(/※$/, '');
-            document.addEventListener('click', function (ev) {
-                const btn = ev.target && ev.target.closest('button,[role="button"]');
-                if (!isLikelySend(btn)) return;
-
-                const box = findEditContainer(btn);
-                if (!box) return;
-
-                const editor = box.querySelector('textarea,[contenteditable="true"]');
-                if (!editor || editor.id === 'prompt-textarea') return;
-
-                const selected = readCurrentPromptText();
-                if (!selected) return;
-
-                const getText = (el) => el.tagName === 'TEXTAREA' ? el.value : (el.innerText || '');
-                const setText = (el, val) => {
-                    if (el.tagName === 'TEXTAREA') el.value = val;
-                    else el.innerText = val;
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                };
-
-                const text = getText(editor);
-                // 按区块扫描：※…※
-                const BLOCK_RE = /※([\s\S]*?)※/g;
-                const opts = readPromptOptions();
-                const optionInners = opts.map(o => stripMarkers(o.text));
-                const selectedInner = stripMarkers(selected);
-
-                let m, replaced = false, out = '', last = 0;
-                while ((m = BLOCK_RE.exec(text))) {
-                    const blockStart = m.index;
-                    const blockEnd = BLOCK_RE.lastIndex;
-                    const inner = m[1];
-
-                    // 优先：区块以某个菜单片段为前缀
-                    let hit = optionInners.find(opt => inner.startsWith(opt));
-                    if (hit) {
-                        const innerNext = selectedInner + inner.slice(hit.length);
-                        out += text.slice(last, blockStart) + '※' + innerNext + '※';
-                        last = blockEnd;
-                        replaced = true;
-                        break; // 仅处理首个命中区块
-                    }
-                    // 次优：区块中包含某个菜单片段，则仅替换该子串
-                    hit = optionInners.find(opt => inner.includes(opt));
-                    if (hit) {
-                        const innerNext = inner.replace(hit, selectedInner);
-                        out += text.slice(last, blockStart) + '※' + innerNext + '※';
-                        last = blockEnd;
-                        replaced = true;
-                        break;
-                    }
-                }
-                if (replaced) {
-                    const nextText = out + text.slice(last);
-                    if (nextText !== text) setText(editor, nextText);
-                }
-            }, true);
-        })();
-        // === NEW END ===
-
-        window.addEventListener('pagehide', () => {
-            try {
-                observers.disconnectAll();
-            } catch {
-            }
-            try {
-                window.__deepCleanerId && clearInterval(window.__deepCleanerId);
-            } catch {
-            }
-        }, {passive: true});
-
-
-        // 关键场景下再检查一次，确保后续状态同步
-        window.addEventListener('resize', restorePointerEvents, {passive: true});
-        const tryRestoreLater = () => setTimeout(restorePointerEvents, 50);
-        document.addEventListener('pointerup', tryRestoreLater, true);
-        document.addEventListener('dragend', tryRestoreLater, true);
-        new MutationObserver(restorePointerEvents)
-            .observe(document.body, {attributes: true, attributeFilter: ['style']});
-        /* ---------- 修复段结束 ---------- */
 
         // 抽取 pathname，尽量避免 new URL
         function _path(u) {
@@ -850,43 +643,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
             }
         };
-
-        /* ===== 提示气泡 ===== */
-        const TIP_ID = 'cgpt-tip-style';                                              // 样式元素 id
-        if (!document.getElementById(TIP_ID)) {                                                   // 若未注入则注入
-            const s = document.createElement('style');             // 创建 style
-            s.id = TIP_ID;                                                                        // 赋 id
-            s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
-            document.head.appendChild(s);                                                         // 注入
-        }
-        const tip = (el, txt) => {
-            // 先清除页面上所有可能残留的气泡，避免重复或卡死
-            document.querySelectorAll(`.${CLS.tip}`).forEach(node => node.remove());
-            const d = Object.assign(document.createElement('div'), {
-                className: CLS.tip,
-                innerText: txt      // 改为 innerText，配合下面样式可保留换行
-            });
-            // 以下三行用于开启自动换行，并限制最大宽度
-            d.style.whiteSpace = 'pre-wrap';
-            d.style.wordBreak = 'break-word';
-            d.style.maxWidth = '200px';
-            document.body.appendChild(d);
-            const r = el.getBoundingClientRect();
-            d.style.left = r.left + r.width / 2 - d.offsetWidth / 2 + 'px';
-            d.style.top = r.top - d.offsetHeight - 6 + 'px';
-            // 安全保险：3 秒后自动销毁，防止意外卡死
-            const timer = setTimeout(() => d.remove(), 3000);
-            // 鼠标移出目标元素时立即销毁
-            el.addEventListener('mouseleave', () => {
-                clearTimeout(timer);
-                d.remove();
-            }, {once: true});
-            return () => {
-                clearTimeout(timer);
-                d.remove();
-            };
-        };
-
 
         /* ===== 全局数据 ===== */
         let folders = {};
@@ -1597,77 +1353,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
             }
 
-            function doImport() {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'application/json';
-                input.onchange = async () => {
-                    const file = input.files && input.files[0];
-                    if (!file) return;
-                    try {
-                        const text = await file.text();
-                        const obj = JSON.parse(text);
-                        if (!obj || obj.type !== 'cgpt-groups-backup' || typeof obj.folders !== 'object') {
-                            alert('Invalid backup file');
-                            return;
-                        }
-
-                        // 应用分组
-                        folders = obj.folders || {};
-                        const order = Object.keys(folders);
-
-                        // 应用 Font/Size 到页面与下拉框
-                        const fnt = obj.pageFont || 'inherit';
-                        const sz  = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
-                        document.documentElement.style.fontFamily = fnt;
-                        document.documentElement.style.fontSize   = sz;
-                        try { fontSelect.value = fnt; } catch {}
-                        try { sizeSelect.value = sz; }  catch {}
-
-                        if (chrome?.runtime?.id) {
-                            await storage.set({folders, folderOrder: order});
-                            await storage.set({pageFont: fnt, pageFontSize: sz});
-                            safeSendMessage({type: 'save-folders', data: folders});
-                        }
-                        render();
-                    } catch {
-                        alert('Import failed');
-                    }
-                };
-                input.click();
-            }
-
-// —— 弹出菜单（add group / Export / Import）——
-            const pop = document.createElement('div');
-            pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:140px;background:#2b2b2b;border-radius:8px;padding:6px 0;z-index:2147483647';
-            document.body.appendChild(pop);
-
-            function hideMenu(){ pop.style.display = 'none'; }
-            window.addEventListener('click', e => {
-                if (!addBtn.contains(e.target) && !pop.contains(e.target)) hideMenu();
-            }, true);
-
-            addBtn.addEventListener('click', async () => {
-                if (pop.style.display === 'block') { hideMenu(); return; }
-                pop.innerHTML = '';
-
-                const mkItem = (txt, handler, danger) => {
-                    const d = document.createElement('div');
-                    d.textContent = txt;
-                    d.style.cssText = `padding:6px 12px;cursor:pointer;white-space:nowrap${danger ? ';color:#e66' : ''}`;
-                    d.onclick = () => { handler(); hideMenu(); };
-                    return d;
-                };
-
-                pop.appendChild(mkItem('add group',  addGroup));
-                pop.appendChild(mkItem('Export',     doExport));
-                pop.appendChild(mkItem('Import',     doImport));
-
-                const r = addBtn.getBoundingClientRect();
-                const left = Math.max(0, Math.min(r.right - 160, window.innerWidth - 160));
-                pop.style.left = `${left}px`;
-                pop.style.top  = `${r.bottom + 4}px`;
-                pop.style.display = 'block';
+            window.cgptBookmarkMenu.attach(addBtn, {
+                addGroup,
+                getFolders: () => folders,
+                setFolders: (next) => { folders = next; },
+                storage,
+                safeSendMessage,
+                render,
+                fontSelect,
+                sizeSelect
             });
 
 
