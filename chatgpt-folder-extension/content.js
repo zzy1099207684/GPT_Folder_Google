@@ -1130,6 +1130,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             return;
                         }
 
+                        // 新增：确认弹框，防止误触
+                        const count = ids.length;
+                        const ok = window.confirm(
+                            count === 1
+                                ? 'Delete this conversation?'
+                                : `Delete ${count} selected conversations?`
+                        );
+                        if (!ok) {
+                            hide();
+                            return;
+                        }
+
                         // 1) 构建“删除中”遮罩与动画，阻止任何交互
                         const OVERLAY_ID = 'cgpt-batch-deleting-overlay';
                         const STYLE_ID = 'cgpt-batch-deleting-style';
