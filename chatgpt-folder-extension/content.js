@@ -1498,30 +1498,19 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             let currentNewChatPopHandler = null;
             // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
             const historyClickHandler = e => {
-                // 忽略对交互子元素的点击：复选框、三点按钮及其菜单
                 if (e.target && e.target.closest('input.history-checkbox, .__menu-item-trailing-btn, [data-trailing-button], button, [role="menu"], [role="menuitem"], [role="button"]')) {
                     return;
                 }
-
                 const a = e.target.closest('a[href*="/c/"]');
                 if (!a) return;
-
                 if (window.__cgptIgnoreNextHistoryClick) return;
 
+                // 仅短暂标记一次，不写入持久映射，避免回页后角标被永久清空
                 clearActiveOnHistoryClick = true;
                 lastClickedChatEl = null;
-                const path = new URL(a.href, location.origin).pathname;
-                lastActiveMap[path] = '__history__';
-                try {
-                    if (chrome?.runtime?.id) {
-                        storage.set({lastActiveMap});
-                    }
-                } catch (err) {
-                    console.warn('[Bookmark] Error saving lastActiveMap:', err);
-                }
-                setTimeout(() => {
-                    highlightActive();
-                }, 0);
+                setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
+
+                setTimeout(highlightActive, 0);
             };
 
             historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
@@ -4095,11 +4084,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     storedFid = hit?.fid;
                 }
 
-                if (storedFid === '__history__') {
-                    activeFid = null;                                 // 历史面板点击：清除高亮
-                } else if (storedFid && folders[storedFid]) {
-                    activeFid = storedFid;                            // 始终信任映射表
-                } else if (arr && arr.length && !clearActiveOnHistoryClick) {
+                if (storedFid && folders[storedFid]) {
+                    activeFid = storedFid;
+                } else if (arr && arr.length /* 放开: 不再受 clearActiveOnHistoryClick 抑制 */) {
                     for (const [fid, folder] of Object.entries(folders)) {
                         if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
                             activeFid = fid;
@@ -4136,6 +4123,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             highlightActive();                              // 初始渲染立即同步
             window.addEventListener('popstate', highlightActive);
+            window.addEventListener('pageshow', highlightActive);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) highlightActive(); });
 
             /* ===== 清除组高亮：原生 New chat ===== */
             if (!window.__cgptNativeNewChatHooked) {
