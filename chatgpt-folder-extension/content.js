@@ -31,6 +31,267 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }
         }
 
+        function ensurePromptToggle() {
+            const form = qs('form[data-type="unified-composer"]');
+            if (!form) return;
+
+            // ===== 新增：把输入框固定为图一样式（默认保持展开态外观） =====
+            try {
+                const STYLE_ID = 'cgpt-fixed-composer-style';
+                if (!document.getElementById(STYLE_ID)) {
+                    const s = document.createElement('style');
+                    s.id = STYLE_ID;
+                    s.textContent = `
+                    form[data-type="unified-composer"] .__zzy-fixed-composer{
+                      background:#2b2b2b !important;            
+                      border-radius:28px !important;            
+                      box-shadow:var(--shadow-short,0 4px 12px rgba(0,0,0,.25)) !important;
+                      display:grid !important;
+                      grid-template-columns:auto 1fr auto !important;
+                      grid-template-areas:
+                        "header header header"
+                        "primary primary primary"
+                        "leading footer trailing" !important;  
+                      overflow:clip !important;
+                      padding:10px !important;                  
+                    }
+                    form[data-type="unified-composer"] .__zzy-fixed-composer [grid-area="primary"],
+                    form[data-type="unified-composer"] .__zzy-fixed-composer [style*="grid-area: primary"]{
+                      min-height:56px;      
+                      margin-top:0 !important;
+                    }
+                    `;
+                    document.head.appendChild(s);
+                }
+                // 选中输入框外层容器：优先按你页面中的 bg-token-bg-primary
+                const composerBox =
+                    form.querySelector('.bg-token-bg-primary') ||   // 典型外层容器类
+                    form.querySelector('[style*="grid-template-areas"]'); // 兜底
+                if (composerBox && !composerBox.classList.contains('__zzy-fixed-composer')) {
+                    composerBox.classList.add('__zzy-fixed-composer');
+                }
+                // 监听 DOM 变化，若组件重渲染则自动补涂一次
+                if (!form.__zzyFixedComposerMO) {
+                    const mo = new MutationObserver(() => {
+                        const boxNow =
+                            form.querySelector('.bg-token-bg-primary') ||
+                            form.querySelector('[style*="grid-template-areas"]');
+                        if (boxNow && !boxNow.classList.contains('__zzy-fixed-composer')) {
+                            boxNow.classList.add('__zzy-fixed-composer');
+                        }
+                    });
+                    mo.observe(form, {childList: true, subtree: true});
+                    form.__zzyFixedComposerMO = mo;
+                }
+            } catch {
+            }
+            // ===== 新增结束 =====
+
+            // 非组内会话也显示开关
+            const path = location.pathname;
+            let box = form.querySelector('#cgpt-prompt-toggle');
+            // 去掉隐藏早退分支，始终渲染
+
+            // 去掉隐藏早退分支，始终渲染
+
+
+            // 计算与发送前计数器一致的 key（根路径首条消息用临时 token 键）
+            const key = (path === '/' && window.__cgptPendingToken)
+                ? `/${window.__cgptPendingToken}` : path;
+
+            function placeBox(b) {
+                try {
+                    // 尽量匹配多语言与不同实现
+                    const micBtn = qs(
+                        [
+                            'button[aria-label*="voice" i]',
+                            'button[aria-label*="microphone" i]',
+                            'button[aria-label*="语音"]',
+                            'button[aria-label*="麦克风"]',
+                            'button[data-testid*="voice" i]'
+                        ].join(','),
+                        form
+                    );
+                    // 找不到麦克风则回退到发送按钮，避免位置丢失
+                    const target = micBtn || qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]', form);
+
+                    const fr = form.getBoundingClientRect();
+                    if (target) {
+                        const tr = target.getBoundingClientRect();
+                        const left = Math.max(8, Math.round(tr.left - fr.left - b.offsetWidth - 40)); // 与目标间距 8px
+                        const top = Math.round(tr.top - fr.top + (tr.height - b.offsetHeight) / 2); // 垂直居中
+                        b.style.left = left + 'px';
+                        b.style.top = top + 'px';
+                        b.style.right = 'auto';
+                        b.style.bottom = 'auto';
+                    } else {
+                        // 兜底：仍保持原来的靠右策略
+                        b.style.left = '';
+                        b.style.right = '92px';
+                        b.style.top = 'auto';
+                        b.style.bottom = '8px';
+                    }
+                } catch {
+                }
+            }
+
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'cgpt-prompt-toggle';
+                box.style.cssText = [
+                    'position:absolute', 'z-index:3',
+                    'display:flex', 'align-items:center', 'gap:6px',
+                    'background:rgba(255,255,255,0.05)', 'border-radius:12px',
+                    'padding:2px 8px', 'font-size:12px', 'user-select:none'
+                ].join(';');
+
+                const label = document.createElement('span');
+                label.textContent = 'prompt';
+
+                const sw = document.createElement('button');
+                sw.type = 'button';
+                sw.className = 'cgpt-switch';
+                sw.style.cssText = [
+                    'width:34px', 'height:20px', 'border-radius:10px', 'border:none',
+                    'position:relative', 'cursor:pointer', 'outline:none'
+                ].join(';');
+
+                const knob = document.createElement('span');
+                knob.style.cssText = [
+                    'position:absolute', 'top:2px', 'left:2px', 'width:16px', 'height:16px',
+                    'border-radius:50%', 'background:#fff', 'transition:left .15s'
+                ].join(';');
+                sw.appendChild(knob);
+
+                // 状态渲染
+                const render = (on) => {
+                    sw.setAttribute('aria-pressed', String(!!on));
+                    sw.style.background = on ? '#10a37f' : '#666';
+                    knob.style.left = on ? '16px' : '2px';
+                };
+
+                // 默认开启：未定义即 true
+                const map = window.__cgptPromptTogglePerPath || {};
+                const currentOn = map[key] !== false;
+                render(currentOn);
+
+                sw.onclick = () => {
+                    const pathNow = location.pathname;
+                    const keyNow = (pathNow === '/' && window.__cgptPendingToken)
+                        ? `/${window.__cgptPendingToken}`
+                        : pathNow;
+                    const next = !(window.__cgptPromptTogglePerPath[keyNow] !== false);
+                    window.__cgptPromptTogglePerPath[keyNow] = next;
+                    try {
+                        sessionStorage.setItem('cgptPromptToggle', JSON.stringify(window.__cgptPromptTogglePerPath));
+                    } catch {
+                    }
+                    render(next);
+                };
+
+
+                box.append(label, sw);
+                // 将容器加到表单。表单通常是相对定位；若不是，也不会影响交互
+                form.appendChild(box);
+
+// 新增：保障定位上下文，避免绝对定位参照错误
+                try {
+                    const cs = getComputedStyle(form);
+                    if (cs.position === 'static') form.style.position = 'relative';
+                } catch {
+                }
+
+                placeBox(box);
+                if (!form.__promptToggleRO) {
+                    const ro = new ResizeObserver(() => placeBox(box));
+                    ro.observe(form);
+                    form.__promptToggleRO = ro;
+                }
+// 保留：麦克风尺寸监听
+                const __mic = qs(
+                    'button[aria-label*="voice" i],button[aria-label*="microphone" i],button[aria-label*="语音"],button[aria-label*="麦克风"],button[data-testid*="voice" i]',
+                    form
+                );
+                if (__mic && !form.__promptToggleMicRO) {
+                    try {
+                        const ro2 = new ResizeObserver(() => placeBox(box));
+                        ro2.observe(__mic);
+                        form.__promptToggleMicRO = ro2;
+                    } catch {
+                    }
+                }
+
+// 新增①：输入相关事件，覆盖首次换行、长行溢出、粘贴多行
+                const ed =
+                    qs('.ProseMirror', form) ||
+                    qs('#prompt-textarea', form) ||
+                    form.querySelector('[contenteditable="true"]');
+                if (ed && !form.__promptToggleInputHooked) {
+                    const update = () => placeBox(box);
+                    ed.addEventListener('input', update);
+                    ed.addEventListener('paste', () => setTimeout(update, 0));
+                    ed.addEventListener(
+                        'keydown',
+                        e => {
+                            if (e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete') {
+                                requestAnimationFrame(update);
+                            }
+                        },
+                        true
+                    );
+                    form.__promptToggleInputHooked = true;
+                }
+
+// 新增②：位置变化监听，而非仅尺寸变化
+                if (!form.__promptToggleMO) {
+                    try {
+                        // debounce 已在脚本前部定义
+                        const mo = new MutationObserver(debounce(() => placeBox(box), 16));
+                        // 优先监听 trailing 区域，取不到则退回 form
+                        const trailing =
+                            qs('[grid-area="trailing"]', form) ||                 // 若存在自定义属性
+                            qs('[style*="grid-area: trailing"]', form) ||         // 样式包含 grid-area: trailing
+                            qs('[style*="grid-area:trailing"]', form) ||          // 去掉空格的兼容
+                            form;
+                        mo.observe(trailing, {
+                            attributes: true,
+                            subtree: true,
+                            attributeFilter: ['class', 'style', 'data-state', 'aria-hidden']
+                        });
+                        form.__promptToggleMO = mo;
+                    } catch {
+                    }
+                }
+
+// 保留：窗口尺寸变化
+                window.addEventListener('resize', () => placeBox(box), {passive: true});
+            } else {
+                // 已存在时同步当前 key 的状态
+                const keyNow = (path === '/' && window.__cgptPendingToken)
+                    ? `/${window.__cgptPendingToken}` : path;
+                const map = window.__cgptPromptTogglePerPath || {};
+                const on = map[keyNow] !== false;
+                const sw = box.querySelector('.cgpt-switch');
+                const knob = sw?.firstElementChild;
+                if (sw && knob) {
+                    sw.setAttribute('aria-pressed', String(!!on));
+                    sw.style.background = on ? '#10a37f' : '#666';
+                    knob.style.left = on ? '16px' : '2px';
+                }
+                placeBox(box);
+            }
+        }
+
+
+        window.__cgptPromptTogglePerPath = (() => {
+            try {
+                return JSON.parse(sessionStorage.getItem('cgptPromptToggle') || '{}');
+            } catch {
+                return {};
+            }
+        })();
+
+
         // 单实例哨兵：若已存在则直接退出，防止重复执行
         if (window.__cgptBookmarksInstance) {
             console.warn('[Bookmark] Duplicate instance detected, aborting.');
@@ -58,11 +319,218 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }, delay);
         }
 
+
+        // 在observers对象中添加新方法
+        const observers = {
+            list: [],
+            add(observer) {
+                this.list.push(observer);
+                return observer;
+            },
+            disconnectAll() {
+                this.list.forEach(obs => {
+                    try {
+                        obs.disconnect();
+                    } catch (e) {
+                        console.warn('[Bookmark] Error disconnecting observer:', e);
+                    }
+                });
+                this.list = [];
+            },
+            cleanup() {
+                // 移除页面中不存在的观察者
+                const initialLength = this.list.length;
+                this.list = this.list.filter(obs => {
+                    try {
+                        return obs && typeof obs.disconnect === 'function';
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                if (initialLength !== this.list.length) {
+                    console.log(`[Bookmark] Cleaned up ${initialLength - this.list.length} broken observers`);
+                }
+            }
+        };
+        window.observers = observers;
+
+        function enqueueIdleTask(fn, timeout = 1000) {
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(fn, {timeout});
+            } else {
+                setTimeout(fn, 0);
+            }
+        }
+
+        window.enqueueIdleTask = enqueueIdleTask;
+
+        function debounce(fn, wait = 200) {
+            let t;
+            return (...args) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn.apply(this, args), wait);
+            };
+        }
+
         let CHUNK_BUDGET_MS = 4;                     // 默认单帧预算
 
         /* ===== 通用工具 ===== */
         const CLS = {tip: 'cgpt-tip'};
         const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'};
+
+        /* ---------- pointerEvents 失效修复 ---------- */
+        function isBlockingOverlayExist() {
+            // 任意仍在屏幕上的全屏遮罩都会令函数返回 true
+            return !!document.querySelector(
+                '[data-state="open"][role="dialog"],' +           // Radix 弹窗 / 侧边栏
+                '.fixed.inset-0[data-aria-hidden="true"],' +      // ChatGPT 本身的全屏层
+                '.immersive-translate-modal[style*="display: flex"]'
+            );
+        }
+
+        function restorePointerEvents() {
+            const b = document.body;
+            if (b && b.style.pointerEvents === 'none' && !isBlockingOverlayExist()) {
+                b.style.pointerEvents = '';
+            }
+        }
+
+        // 页面初始化后立即尝试一次
+        requestAnimationFrame(restorePointerEvents);
+
+        // 复制/粘贴/右键 在捕获阶段放行，避免被其它脚本拦截导致输入框内无法使用
+        const __cgptAllowClipboard = (e) => {
+            const t = e.target;
+            if (!(t instanceof Element)) return;
+            const isEditable =
+                t.matches('input,textarea,[contenteditable="true"]') ||
+                t.closest('[role="dialog"] input,[role="dialog"] textarea,[role="dialog"] [contenteditable="true"]');
+            if (isEditable) {
+                // 不改变默认行为，只阻止继续冒泡到可能会拦截的监听
+                e.stopPropagation();
+            }
+        };
+        window.addEventListener('copy', __cgptAllowClipboard, true);
+        window.addEventListener('cut', __cgptAllowClipboard, true);
+        window.addEventListener('paste', __cgptAllowClipboard, true);
+        window.addEventListener('contextmenu', __cgptAllowClipboard, true);
+        // === NEW: Edit message 发送前将首段 ※…※ 同步为当前选中 Prompt ===
+        (function syncEditPromptOnSend() {
+            function readCurrentPromptText() {
+                try {
+                    const raw = sessionStorage.getItem('cgptSessionPrompt');
+                    const obj = raw ? JSON.parse(raw) : null;
+                    const t = obj && typeof obj.text === 'string' ? obj.text.trim() : null;
+                    return t && t.length ? t : null;
+                } catch { return null; }
+            }
+            function isLikelySend(btn) {
+                if (!btn) return false;
+                if (btn.id === 'composer-submit-button') return false; // 排除主输入框发送
+                const label = (btn.getAttribute('aria-label') || btn.textContent || '').trim().toLowerCase();
+                // 覆盖常见按钮文案
+                return /(send|提交|保存|确定)/.test(label);
+            }
+            function findEditContainer(start) {
+                let n = start, hop = 0;
+                while (n && hop < 10) {
+                    if (n.querySelector && n.querySelector('textarea,[contenteditable="true"]')) return n;
+                    n = n.parentElement;
+                    hop++;
+                }
+                return null;
+            }
+
+            function readPromptOptions() {
+                try {
+                    if (Array.isArray(window.__cgptPromptOptions)) return window.__cgptPromptOptions;
+                    const raw = sessionStorage.getItem('cgptPromptOptions');
+                    const arr = raw ? JSON.parse(raw) : null;
+                    return Array.isArray(arr) ? arr : [];
+                } catch { return []; }
+            }
+            // 新增：去掉首尾 ※ 的对比辅助
+            const stripMarkers = (s) => String(s || '').replace(/^※/, '').replace(/※$/, '');
+            document.addEventListener('click', function (ev) {
+                const btn = ev.target && ev.target.closest('button,[role="button"]');
+                if (!isLikelySend(btn)) return;
+
+                const box = findEditContainer(btn);
+                if (!box) return;
+
+                const editor = box.querySelector('textarea,[contenteditable="true"]');
+                if (!editor || editor.id === 'prompt-textarea') return;
+
+                const selected = readCurrentPromptText();
+                if (!selected) return;
+
+                const getText = (el) => el.tagName === 'TEXTAREA' ? el.value : (el.innerText || '');
+                const setText = (el, val) => {
+                    if (el.tagName === 'TEXTAREA') el.value = val;
+                    else el.innerText = val;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                };
+
+                const text = getText(editor);
+                // 按区块扫描：※…※
+                const BLOCK_RE = /※([\s\S]*?)※/g;
+                const opts = readPromptOptions();
+                const optionInners = opts.map(o => stripMarkers(o.text));
+                const selectedInner = stripMarkers(selected);
+
+                let m, replaced = false, out = '', last = 0;
+                while ((m = BLOCK_RE.exec(text))) {
+                    const blockStart = m.index;
+                    const blockEnd = BLOCK_RE.lastIndex;
+                    const inner = m[1];
+
+                    // 优先：区块以某个菜单片段为前缀
+                    let hit = optionInners.find(opt => inner.startsWith(opt));
+                    if (hit) {
+                        const innerNext = selectedInner + inner.slice(hit.length);
+                        out += text.slice(last, blockStart) + '※' + innerNext + '※';
+                        last = blockEnd;
+                        replaced = true;
+                        break; // 仅处理首个命中区块
+                    }
+                    // 次优：区块中包含某个菜单片段，则仅替换该子串
+                    hit = optionInners.find(opt => inner.includes(opt));
+                    if (hit) {
+                        const innerNext = inner.replace(hit, selectedInner);
+                        out += text.slice(last, blockStart) + '※' + innerNext + '※';
+                        last = blockEnd;
+                        replaced = true;
+                        break;
+                    }
+                }
+                if (replaced) {
+                    const nextText = out + text.slice(last);
+                    if (nextText !== text) setText(editor, nextText);
+                }
+            }, true);
+        })();
+        // === NEW END ===
+
+        window.addEventListener('pagehide', () => {
+            try {
+                observers.disconnectAll();
+            } catch {
+            }
+            try {
+                window.__deepCleanerId && clearInterval(window.__deepCleanerId);
+            } catch {
+            }
+        }, {passive: true});
+
+
+        // 关键场景下再检查一次，确保后续状态同步
+        window.addEventListener('resize', restorePointerEvents, {passive: true});
+        const tryRestoreLater = () => setTimeout(restorePointerEvents, 50);
+        document.addEventListener('pointerup', tryRestoreLater, true);
+        document.addEventListener('dragend', tryRestoreLater, true);
+        new MutationObserver(restorePointerEvents)
+            .observe(document.body, {attributes: true, attributeFilter: ['style']});
+        /* ---------- 修复段结束 ---------- */
 
         // 抽取 pathname，尽量避免 new URL
         function _path(u) {
@@ -382,6 +850,43 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
             }
         };
+
+        /* ===== 提示气泡 ===== */
+        const TIP_ID = 'cgpt-tip-style';                                              // 样式元素 id
+        if (!document.getElementById(TIP_ID)) {                                                   // 若未注入则注入
+            const s = document.createElement('style');             // 创建 style
+            s.id = TIP_ID;                                                                        // 赋 id
+            s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
+            document.head.appendChild(s);                                                         // 注入
+        }
+        const tip = (el, txt) => {
+            // 先清除页面上所有可能残留的气泡，避免重复或卡死
+            document.querySelectorAll(`.${CLS.tip}`).forEach(node => node.remove());
+            const d = Object.assign(document.createElement('div'), {
+                className: CLS.tip,
+                innerText: txt      // 改为 innerText，配合下面样式可保留换行
+            });
+            // 以下三行用于开启自动换行，并限制最大宽度
+            d.style.whiteSpace = 'pre-wrap';
+            d.style.wordBreak = 'break-word';
+            d.style.maxWidth = '200px';
+            document.body.appendChild(d);
+            const r = el.getBoundingClientRect();
+            d.style.left = r.left + r.width / 2 - d.offsetWidth / 2 + 'px';
+            d.style.top = r.top - d.offsetHeight - 6 + 'px';
+            // 安全保险：3 秒后自动销毁，防止意外卡死
+            const timer = setTimeout(() => d.remove(), 3000);
+            // 鼠标移出目标元素时立即销毁
+            el.addEventListener('mouseleave', () => {
+                clearTimeout(timer);
+                d.remove();
+            }, {once: true});
+            return () => {
+                clearTimeout(timer);
+                d.remove();
+            };
+        };
+
 
         /* ===== 全局数据 ===== */
         let folders = {};
@@ -1092,15 +1597,77 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
             }
 
-            window.cgptBookmarkMenu.attach(addBtn, {
-                addGroup,
-                getFolders: () => folders,
-                setFolders: (next) => { folders = next; },
-                storage,
-                safeSendMessage,
-                render,
-                fontSelect,
-                sizeSelect
+            function doImport() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'application/json';
+                input.onchange = async () => {
+                    const file = input.files && input.files[0];
+                    if (!file) return;
+                    try {
+                        const text = await file.text();
+                        const obj = JSON.parse(text);
+                        if (!obj || obj.type !== 'cgpt-groups-backup' || typeof obj.folders !== 'object') {
+                            alert('Invalid backup file');
+                            return;
+                        }
+
+                        // 应用分组
+                        folders = obj.folders || {};
+                        const order = Object.keys(folders);
+
+                        // 应用 Font/Size 到页面与下拉框
+                        const fnt = obj.pageFont || 'inherit';
+                        const sz  = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
+                        document.documentElement.style.fontFamily = fnt;
+                        document.documentElement.style.fontSize   = sz;
+                        try { fontSelect.value = fnt; } catch {}
+                        try { sizeSelect.value = sz; }  catch {}
+
+                        if (chrome?.runtime?.id) {
+                            await storage.set({folders, folderOrder: order});
+                            await storage.set({pageFont: fnt, pageFontSize: sz});
+                            safeSendMessage({type: 'save-folders', data: folders});
+                        }
+                        render();
+                    } catch {
+                        alert('Import failed');
+                    }
+                };
+                input.click();
+            }
+
+// —— 弹出菜单（add group / Export / Import）——
+            const pop = document.createElement('div');
+            pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:140px;background:#2b2b2b;border-radius:8px;padding:6px 0;z-index:2147483647';
+            document.body.appendChild(pop);
+
+            function hideMenu(){ pop.style.display = 'none'; }
+            window.addEventListener('click', e => {
+                if (!addBtn.contains(e.target) && !pop.contains(e.target)) hideMenu();
+            }, true);
+
+            addBtn.addEventListener('click', async () => {
+                if (pop.style.display === 'block') { hideMenu(); return; }
+                pop.innerHTML = '';
+
+                const mkItem = (txt, handler, danger) => {
+                    const d = document.createElement('div');
+                    d.textContent = txt;
+                    d.style.cssText = `padding:6px 12px;cursor:pointer;white-space:nowrap${danger ? ';color:#e66' : ''}`;
+                    d.onclick = () => { handler(); hideMenu(); };
+                    return d;
+                };
+
+                pop.appendChild(mkItem('add group',  addGroup));
+                pop.appendChild(mkItem('Export',     doExport));
+                pop.appendChild(mkItem('Import',     doImport));
+
+                const r = addBtn.getBoundingClientRect();
+                const left = Math.max(0, Math.min(r.right - 160, window.innerWidth - 160));
+                pop.style.left = `${left}px`;
+                pop.style.top  = `${r.bottom + 4}px`;
+                pop.style.display = 'block';
             });
 
 
@@ -1706,7 +2273,39 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 document.body;
             unifiedObs.observe(unifiedRoot, {childList: true, subtree: true});
 
-            window.cgptAttachStrip && window.cgptAttachStrip.enable();
+            // ① 新增：让附件条显示可见的横向滚动条
+            function enableAttachStripScroll() {
+                const STYLE_ID = 'cgpt-attach-scroll-style';
+                if (!document.getElementById(STYLE_ID)) {
+                    const s = document.createElement('style');
+                    s.id = STYLE_ID;
+                    s.textContent = `
+      form[data-type="unified-composer"] .cgpt-attach-strip{
+        overflow-x:auto !important;
+        -ms-overflow-style:auto;
+        scrollbar-width:auto;
+        scrollbar-gutter: stable both-edges;
+        overscroll-behavior-inline: contain;
+      }
+      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar{height:8px}
+      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.35);border-radius:8px}
+      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-track{background:transparent}
+    `;
+                    document.head.appendChild(s);
+                }
+                // 选择并标记附件容器；去掉隐藏滚动条的类
+                const strip = document.querySelector('form[data-type="unified-composer"] .horizontal-scroll-fade-mask');
+                if (strip && !strip.classList.contains('cgpt-attach-strip')) {
+                    strip.classList.remove('no-scrollbar');
+                    strip.classList.add('cgpt-attach-strip');
+                }
+            }
+
+            enableAttachStripScroll();
+            const attachObs = observers.add(new MutationObserver(() => enableAttachStripScroll()));
+            attachObs.observe(document.body, {childList: true, subtree: true});
+
+
 
             /* ---------- 渲染 ---------- */
 
