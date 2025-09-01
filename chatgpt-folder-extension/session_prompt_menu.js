@@ -163,7 +163,7 @@
 
             const text = document.createElement('div');
             text.className = 'flex min-w-0 grow items-center gap-2.5';
-            text.innerHTML = '<div class="truncate">Prompt</div>';
+            text.innerHTML = '<div class="truncate">Use style</div>';
 
             mi.appendChild(icon);
             mi.appendChild(text);
