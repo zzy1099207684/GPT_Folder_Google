@@ -1348,24 +1348,20 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 }
                             });
 
-                            // 一次性前插，确保顺序与 Chats 保持一致
                             if (toPrepend.length) {
                                 f.chats = [...toPrepend, ...f.chats];
                             }
 
-                            // 新增：分组后立即清空多选状态
                             if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
-                            chosen.forEach(a => {
-                                const li = a.closest('li');
-                                const node = li || a;
-                                node.setAttribute('data-cgpt-soft-deleted', '1');
-                                node.style.display = 'none';
-                            });
                             const toggleAll = document.querySelector('#cgpt-select-header input[type="checkbox"]');
                             if (toggleAll) toggleAll.checked = false;
 
-                            safeSendMessage({type: 'save-folders', data: folders});
-                            render();                     // 复用原有渲染逻辑
+                            if (chrome?.runtime?.id) {
+                                storage.set({ folders });                    // 新增：真正写入 storage
+                                safeSendMessage({ type: 'save-folders', data: folders }); // 保持与后台同步
+                            }
+
+                            render();
                             list.remove();
                         };
                         list.appendChild(row);
