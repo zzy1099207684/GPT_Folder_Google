@@ -414,6 +414,102 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         window.addEventListener('cut', __cgptAllowClipboard, true);
         window.addEventListener('paste', __cgptAllowClipboard, true);
         window.addEventListener('contextmenu', __cgptAllowClipboard, true);
+        // === NEW: Edit message 发送前将首段 ※…※ 同步为当前选中 Prompt ===
+        (function syncEditPromptOnSend() {
+            function readCurrentPromptText() {
+                try {
+                    const raw = sessionStorage.getItem('cgptSessionPrompt');
+                    const obj = raw ? JSON.parse(raw) : null;
+                    const t = obj && typeof obj.text === 'string' ? obj.text.trim() : null;
+                    return t && t.length ? t : null;
+                } catch { return null; }
+            }
+            function isLikelySend(btn) {
+                if (!btn) return false;
+                if (btn.id === 'composer-submit-button') return false; // 排除主输入框发送
+                const label = (btn.getAttribute('aria-label') || btn.textContent || '').trim().toLowerCase();
+                // 覆盖常见按钮文案
+                return /(send|提交|保存|确定)/.test(label);
+            }
+            function findEditContainer(start) {
+                let n = start, hop = 0;
+                while (n && hop < 10) {
+                    if (n.querySelector && n.querySelector('textarea,[contenteditable="true"]')) return n;
+                    n = n.parentElement;
+                    hop++;
+                }
+                return null;
+            }
+
+            function readPromptOptions() {
+                try {
+                    if (Array.isArray(window.__cgptPromptOptions)) return window.__cgptPromptOptions;
+                    const raw = sessionStorage.getItem('cgptPromptOptions');
+                    const arr = raw ? JSON.parse(raw) : null;
+                    return Array.isArray(arr) ? arr : [];
+                } catch { return []; }
+            }
+            // 新增：去掉首尾 ※ 的对比辅助
+            const stripMarkers = (s) => String(s || '').replace(/^※/, '').replace(/※$/, '');
+            document.addEventListener('click', function (ev) {
+                const btn = ev.target && ev.target.closest('button,[role="button"]');
+                if (!isLikelySend(btn)) return;
+
+                const box = findEditContainer(btn);
+                if (!box) return;
+
+                const editor = box.querySelector('textarea,[contenteditable="true"]');
+                if (!editor || editor.id === 'prompt-textarea') return;
+
+                const selected = readCurrentPromptText();
+                if (!selected) return;
+
+                const getText = (el) => el.tagName === 'TEXTAREA' ? el.value : (el.innerText || '');
+                const setText = (el, val) => {
+                    if (el.tagName === 'TEXTAREA') el.value = val;
+                    else el.innerText = val;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                };
+
+                const text = getText(editor);
+                // 按区块扫描：※…※
+                const BLOCK_RE = /※([\s\S]*?)※/g;
+                const opts = readPromptOptions();
+                const optionInners = opts.map(o => stripMarkers(o.text));
+                const selectedInner = stripMarkers(selected);
+
+                let m, replaced = false, out = '', last = 0;
+                while ((m = BLOCK_RE.exec(text))) {
+                    const blockStart = m.index;
+                    const blockEnd = BLOCK_RE.lastIndex;
+                    const inner = m[1];
+
+                    // 优先：区块以某个菜单片段为前缀
+                    let hit = optionInners.find(opt => inner.startsWith(opt));
+                    if (hit) {
+                        const innerNext = selectedInner + inner.slice(hit.length);
+                        out += text.slice(last, blockStart) + '※' + innerNext + '※';
+                        last = blockEnd;
+                        replaced = true;
+                        break; // 仅处理首个命中区块
+                    }
+                    // 次优：区块中包含某个菜单片段，则仅替换该子串
+                    hit = optionInners.find(opt => inner.includes(opt));
+                    if (hit) {
+                        const innerNext = inner.replace(hit, selectedInner);
+                        out += text.slice(last, blockStart) + '※' + innerNext + '※';
+                        last = blockEnd;
+                        replaced = true;
+                        break;
+                    }
+                }
+                if (replaced) {
+                    const nextText = out + text.slice(last);
+                    if (nextText !== text) setText(editor, nextText);
+                }
+            }, true);
+        })();
+        // === NEW END ===
 
         window.addEventListener('pagehide', () => {
             try {
@@ -483,7 +579,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         const hints = [
             {
                 label: 'change_code',
-                text: ['※Strictly adhere to the following requirements: Only modify code directly related to the specific problem or requirement raised; self-test after modification to ensure that it fully meets the requirements while also ensuring stability and performance. Provide the original source code and the modified version for comparison and manual implementation; if adding new code, please provide a small amount of original code around the new code location to facilitate location※']
+                text: ['※Only modify code directly related to the specific problem or requirement raised. After modification, perform self-testing to ensure that it fully meets the requirements, fully consider future expansion, and ensure stability and performance. Provide the original source code and modified version for easy comparison and manual implementation. If you need to add new code, please provide a small amount of original code around the new code location to facilitate positioning※']
             }
         ];         // 自行增删
         // 修改后的存储逻辑

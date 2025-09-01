@@ -8,6 +8,12 @@
         { label: 'Formal', text: '※Clear and well-structured responses;※' }
     ];
 
+    try {
+        const slim = optionsList.map(o => ({ label: o.label, text: o.text }));
+        sessionStorage.setItem('cgptPromptOptions', JSON.stringify(slim));
+        window.__cgptPromptOptions = slim;
+    } catch {}
+
     // 新增：集中设置“默认 Normal”
     function __cgptSetDefaultNormal() {
         try {
