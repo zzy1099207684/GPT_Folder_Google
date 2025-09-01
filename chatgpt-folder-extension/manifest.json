@@ -19,6 +19,8 @@
         "https://chatgpt.com/*"
       ],
       "js": [
+        "modules/attach_strip_scroll.js",
+        "modules/prompt_toggle.js",
         "modules/tip.js",
         "modules/util_runtime.js",
         "modules/edit_prompt_sync.js",
