@@ -14,7 +14,7 @@
         window.__cgptPromptOptions = slim;
     } catch {}
 
-    // 新增：集中设置“默认 Normal”
+    // 集中设置“默认 Normal”
     function __cgptSetDefaultNormal() {
         try {
             sessionStorage.setItem(
@@ -24,8 +24,10 @@
         } catch {}
     }
 
-    // 新增：捕获“New chat”点击（全局/原生入口）
-    // 与 content.js 里原选择器一致，确保触发时机完全对齐
+    // 首次进入页确保默认 Normal
+    try { if (!sessionStorage.getItem('cgptSessionPrompt')) __cgptSetDefaultNormal(); } catch {}
+
+    // 捕获“New chat”点击（全局/原生入口）
     document.addEventListener('click', (ev) => {
         const btn = ev.target && ev.target.closest(
             'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
@@ -33,7 +35,8 @@
         if (btn) __cgptSetDefaultNormal();
     }, true);
 
-    // 新增：组内 New chat 的兜底分支（pushState('/') 后触发的 popstate）
+
+    // 组内 New chat 的兜底分支（pushState('/') 后触发的 popstate）
     // 仅在组内新建挂起态存在时生效，避免影响其它导航
     window.addEventListener('popstate', () => {
         try {
@@ -53,7 +56,7 @@
         } catch {}
     }
 
-    // 新增：读取/更新输入框处的 Prompt 胶囊
+    // 读取/更新输入框处的 Prompt 胶囊
     const PILL_CLASS = 'cgpt-prompt-pill';
 
     function readStoredPromptLabel() {
@@ -204,8 +207,8 @@
                                 sessionStorage.removeItem('cgptSessionPrompt');
                                 try {
                                     sessionStorage.removeItem('cgptPromptStyleSwitchPending');
-                                    sessionStorage.removeItem('cgptPromptStyleCrossToken');  // ← 新增：清理周期 token
-                                    sessionStorage.removeItem('cgptCrossLastPath');          // ← 新增：清理上次路径
+                                    sessionStorage.removeItem('cgptPromptStyleCrossToken');  // ← 清理周期 token
+                                    sessionStorage.removeItem('cgptCrossLastPath');          // ← 清理上次路径
                                 } catch {}
                                 toast('Start Prompt：off');
                             } else {
@@ -214,8 +217,8 @@
                                 try {
                                     sessionStorage.setItem('cgptPromptStyleSwitchPending', '1');                 // 本会话首次插入
                                     const token = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-                                    sessionStorage.setItem('cgptPromptStyleCrossToken', token);                  // ← 新增：周期 token
-                                    sessionStorage.setItem('cgptCrossLastPath', location.pathname || '');        // ← 新增：记住当前路径
+                                    sessionStorage.setItem('cgptPromptStyleCrossToken', token);                  // ← 周期 token
+                                    sessionStorage.setItem('cgptCrossLastPath', location.pathname || '');        // ← 记住当前路径
                                 } catch {}
                                 toast('Start Prompt：' + (chosen || 'Unnamed'));
                             }
