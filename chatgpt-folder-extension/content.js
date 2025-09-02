@@ -134,6 +134,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
             }
 
+            let __rafId = 0;
+            const placeBoxRaf = (b) => {
+                if (__rafId) return;
+                __rafId = requestAnimationFrame(() => {
+                    __rafId = 0;
+                    placeBox(b);
+                });
+            };
+
             if (!box) {
                 box = document.createElement('div');
                 box.id = 'cgpt-prompt-toggle';
@@ -199,7 +208,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 } catch {
                 }
 
-                placeBox(box);
+                placeBoxRaf(box);
                 if (!form.__promptToggleRO) {
                     const ro = new ResizeObserver(() => placeBox(box));
                     ro.observe(form);
@@ -223,7 +232,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     qs('#prompt-textarea', form) ||
                     form.querySelector('[contenteditable="true"]');
                 if (ed && !form.__promptToggleInputHooked) {
-                    const update = () => placeBox(box);
+                    const update = () => placeBoxRaf(box);
                     ed.addEventListener('input', update);
                     ed.addEventListener('paste', () => setTimeout(update, 0));
                     ed.addEventListener(
@@ -272,7 +281,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     sw.style.background = on ? '#10a37f' : '#666';
                     knob.style.left = on ? '16px' : '2px';
                 }
-                placeBox(box);
+                placeBoxRaf(box);
             }
         }
 
@@ -1064,7 +1073,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 });
                         }
                     }
-                }, 0)));
+                }, 80)));
                 readyObs.observe(document.body, {childList: true, subtree: true});
             };
             const idle = (cb) => (window.requestIdleCallback || ((f) => setTimeout(f, 120)))(cb);
