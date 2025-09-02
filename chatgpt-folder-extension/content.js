@@ -114,7 +114,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     );
                     // 找不到麦克风则回退到发送按钮，避免位置丢失
                     const target = micBtn || qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]', form);
-
                     const fr = form.getBoundingClientRect();
                     if (target) {
                         const tr = target.getBoundingClientRect();
@@ -194,7 +193,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 // 将容器加到表单。表单通常是相对定位；若不是，也不会影响交互
                 form.appendChild(box);
 
-// 新增：保障定位上下文，避免绝对定位参照错误
                 try {
                     const cs = getComputedStyle(form);
                     if (cs.position === 'static') form.style.position = 'relative';
@@ -207,7 +205,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     ro.observe(form);
                     form.__promptToggleRO = ro;
                 }
-// 保留：麦克风尺寸监听
                 const __mic = qs(
                     'button[aria-label*="voice" i],button[aria-label*="microphone" i],button[aria-label*="语音"],button[aria-label*="麦克风"],button[data-testid*="voice" i]',
                     form
@@ -221,7 +218,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }
                 }
 
-// 新增①：输入相关事件，覆盖首次换行、长行溢出、粘贴多行
                 const ed =
                     qs('.ProseMirror', form) ||
                     qs('#prompt-textarea', form) ||
@@ -242,7 +238,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     form.__promptToggleInputHooked = true;
                 }
 
-// 新增②：位置变化监听，而非仅尺寸变化
                 if (!form.__promptToggleMO) {
                     try {
                         // debounce 已在脚本前部定义
@@ -263,7 +258,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }
                 }
 
-// 保留：窗口尺寸变化
                 window.addEventListener('resize', () => placeBox(box), {passive: true});
             } else {
                 // 已存在时同步当前 key 的状态
