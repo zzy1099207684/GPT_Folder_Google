@@ -1499,7 +1499,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             let clearActiveOnHistoryClick = false;
             let currentNewChatObserver = null;
             let currentNewChatPopHandler = null;
-            // 【新增】点击 history 面板内任何 /c/ 会话，清除组选中标记
             const historyClickHandler = e => {
                 if (e.target && e.target.closest('input.history-checkbox, .__menu-item-trailing-btn, [data-trailing-button], button, [role="menu"], [role="menuitem"], [role="button"]')) {
                     return;
@@ -1508,13 +1507,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 if (!a) return;
                 if (window.__cgptIgnoreNextHistoryClick) return;
 
-                // 仅短暂标记一次，不写入持久映射，避免回页后角标被永久清空
+                // 标记该会话“来自 Chats”，禁止为其点亮组角标
+                try {
+                    const p = new URL(a.href, location.origin).pathname;
+                    lastActiveMap[p] = '__history__';
+                    if (chrome?.runtime?.id) storage.set({ lastActiveMap });
+                } catch {}
+
                 clearActiveOnHistoryClick = true;
                 lastClickedChatEl = null;
                 setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
 
+                // 立即清空组选中态并刷新
+                activeFid = null;
                 setTimeout(highlightActive, 0);
             };
+
 
             historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
             historyNode.addEventListener('click', historyClickHandler);
@@ -4080,16 +4088,20 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
                 activePath = path;
 
-                /* 新增：优先根据刚刚点击的具体链接确定选中组，彻底消除同一会话跨组错标 */
+                const clickedFromHistory = (lastActiveMap[path] === '__history__') || clearActiveOnHistoryClick;
+
                 let storedFid = lastActiveMap[path];
                 if (!storedFid && lastClickedChatEl) {
                     const hit = arr?.find(i => i.el === lastClickedChatEl);
                     storedFid = hit?.fid;
                 }
 
-                if (storedFid && folders[storedFid]) {
+                /* 来自 Chats 时，强制不选组，不做兜底扫描 */
+                if (clickedFromHistory) {
+                    activeFid = null;
+                } else if (storedFid && folders[storedFid]) {
                     activeFid = storedFid;
-                } else if (arr && arr.length /* 放开: 不再受 clearActiveOnHistoryClick 抑制 */) {
+                } else if (arr && arr.length) {
                     for (const [fid, folder] of Object.entries(folders)) {
                         if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
                             activeFid = fid;
