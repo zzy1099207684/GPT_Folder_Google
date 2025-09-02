@@ -79,19 +79,12 @@
                     m.addedNodes.forEach(ensureForNode);
                 }
                 const t = m.target;
-                if (t) {
-                    if (t.nodeType === 1 && t.matches?.('a.__menu-item[href*="/c/"]')) {
-                        renderCheckboxes(t);
-                    } else if (t.nodeType === 3) {
-                        const p = t.parentElement;
-                        if (p && p.matches?.('a.__menu-item[href*="/c/"]')) renderCheckboxes(p);
-                    }
+                if (t && t.nodeType === 1 && t.matches?.('a.__menu-item[href*="/c/"]')) {
+                    renderCheckboxes(t);
                 }
             }
         });
-
-        mo.observe(observeRoot, { childList: true, subtree: true, characterData: true });
-
+        mo.observe(observeRoot, { childList: true, subtree: true });
         // 新增: 监听侧栏根节点被重建时，自动重绑到新的真正侧栏
         const moRoot = new MutationObserver(() => {
             const next = pickSidebarRoot();
@@ -99,7 +92,7 @@
                 mo.disconnect();
                 observeRoot = next;
                 ensureForNode(observeRoot);
-                mo.observe(observeRoot, { childList: true, subtree: true, characterData: true });
+                mo.observe(observeRoot, { childList: true, subtree: true });
             }
         });
         moRoot.observe(document.body, { childList: true, subtree: true });
