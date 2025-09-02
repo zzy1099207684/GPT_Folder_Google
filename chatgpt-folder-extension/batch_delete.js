@@ -66,10 +66,27 @@
 
         let observeRoot = pickSidebarRoot();
 
+        // 批量渲染，避免频繁触发 renderCheckboxes
+        const __pendingNodes = new Set();
+        let __scheduleFlag = false;
+        function __flushPending() {
+            __scheduleFlag = false;
+            const list = Array.from(__pendingNodes);
+            __pendingNodes.clear();
+            for (const n of list) renderCheckboxes(n);
+        }
+        function __scheduleBatch() {
+            if (__scheduleFlag) return;
+            __scheduleFlag = true;
+            (window.requestIdleCallback || (cb => setTimeout(cb, 50)))(__flushPending);
+        }
+
         const ensureForNode = node => {
             if (!node || node.nodeType !== 1) return;
-            renderCheckboxes(node);
+            __pendingNodes.add(node);
+            __scheduleBatch();
         };
+
 
         ensureForNode(observeRoot);
 

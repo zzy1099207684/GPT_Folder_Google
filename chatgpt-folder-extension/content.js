@@ -630,8 +630,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         const tryRestoreLater = () => setTimeout(restorePointerEvents, 50);
         document.addEventListener('pointerup', tryRestoreLater, true);
         document.addEventListener('dragend', tryRestoreLater, true);
-        new MutationObserver(restorePointerEvents)
-            .observe(document.body, {attributes: true, attributeFilter: ['style']});
+        let __restoreScheduled = false;
+        new MutationObserver(() => {
+            if (__restoreScheduled) return;
+            __restoreScheduled = true;
+            requestAnimationFrame(() => {
+                __restoreScheduled = false;
+                restorePointerEvents();
+            });
+        }).observe(document.body, { attributes: true, attributeFilter: ['style'] });
+
         /* ---------- 修复段结束 ---------- */
 
         // 抽取 pathname，尽量避免 new URL
@@ -702,19 +710,23 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 try {
                     if (!chrome?.runtime?.id) return null;
 
-                    // 新增：分片重组逻辑
-                    // 兼容新老格式：优先按 meta.parts 聚合，否则退回 f_<id> 单块或 legacy
+                    // 优先让后台重组，减少页面 CPU
                     if (key === 'folders') {
-                        const {folderKeys = []} = await chrome.storage.sync.get('folderKeys');
+                        const res = await new Promise(resolve => {
+                            try {
+                                chrome.runtime.sendMessage({ type: 'get-folders' }, r => resolve(r));
+                            } catch { resolve(null); }
+                        });
+                        if (res && res.ok && res.folders) return res.folders;
+
+                        // 兜底：后台不可用时，退回旧逻辑
+                        const { folderKeys = [] } = await chrome.storage.sync.get('folderKeys');
                         if (!folderKeys.length) {
                             const legacy = await chrome.storage.sync.get('folders');
                             return legacy.folders || {};
                         }
-
                         const metaKeys = folderKeys.map(id => `f_${id}__meta`);
                         const metas = await chrome.storage.sync.get(metaKeys);
-
-                        // 预组装全部分片键
                         const allPartKeys = [];
                         folderKeys.forEach(id => {
                             const meta = metas[`f_${id}__meta`];
@@ -722,15 +734,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 for (let i = 0; i < meta.parts; i++) allPartKeys.push(`f_${id}__p${i}`);
                             }
                         });
-
-                        // 一次性并发取回：分片、gap 映射、以及所有可能的单块键
                         const [partsObj, gapObj, singlesObj] = await Promise.all([
                             allPartKeys.length ? chrome.storage.sync.get(allPartKeys) : Promise.resolve({}),
                             chrome.storage.sync.get('folderGaps'),
                             chrome.storage.sync.get(folderKeys.map(id => 'f_' + id))
                         ]);
                         const gapMap = (gapObj && gapObj.folderGaps) || {};
-
                         const folders = {};
                         for (const id of folderKeys) {
                             const meta = metas[`f_${id}__meta`];
@@ -744,8 +753,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     name: meta.name || 'Group',
                                     collapsed: !!meta.collapsed,
                                     prompts: Array.isArray(meta.prompts) ? meta.prompts : [],
-                                    gap: Number.isFinite(gapMap[id]) ? gapMap[id]
-                                        : (Number.isFinite(meta.gap) ? meta.gap : 0),
+                                    gap: Number.isFinite(gapMap[id]) ? gapMap[id] : (Number.isFinite(meta.gap) ? meta.gap : 0),
                                     chats
                                 };
                             } else {
@@ -754,7 +762,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         }
                         return folders;
                     }
-
 
                     const obj = await chrome.storage.sync.get(key);
                     return obj[key];
@@ -765,6 +772,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             },
 
 
+
             async set(obj) {
                 try {
                     if (!chrome?.runtime?.id) {
@@ -772,97 +780,51 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         return;
                     }
 
-                    /* 新增：将大对象 folders 拆分存储 */
+                    /* 改为后台序列化写入，避免页面线程切分大对象 */
                     if (obj.folders) {
-                        const folders = obj.folders;
-                        const folderKeys = Object.keys(folders);
-                        const out = {folderKeys};
-                        const MAX_BYTES = 6 * 1024; // 留安全余量，低于 8KB
-
-                        function sizeOf(v) {
-                            return JSON.stringify(v).length;
-                        }
-
-                        function packOne(id, data) {
-                            const {name = 'Group', collapsed = false, prompts = [], chats = [], gap = 0} = data || {};
-                            const base = {name, collapsed, prompts, gap};
-                            const baseCost = sizeOf({...base, chats: []});
-                            let buf = [];
-                            let used = baseCost;
-                            let parts = 0;
-
-                            const flush = () => {
-                                if (!buf.length) return;
-                                out[`f_${id}__p${parts}`] = {chats: buf};
-                                parts += 1;
-                                buf = [];
-                                used = baseCost;
-                            };
-
-                            for (const c of chats) {
-                                const inc = sizeOf(c) + 2; // 粗略计入逗号等开销
-                                if (used + inc > MAX_BYTES && buf.length) flush();
-                                buf.push(c);
-                                used += inc;
-                            }
-                            flush();
-
-                            out[`f_${id}__meta`] = {...base, parts};
-                            // 兼容清理旧单块键
-                            out[`f_${id}`] = undefined;
-                        }
-
-                        folderKeys.forEach(id => packOne(id, folders[id]));
-                        delete obj.folders;
-                        Object.assign(obj, out);
+                        const foldersToSave = obj.folders;
+                        delete obj.folders; // 由后台负责写入分片
+                        await new Promise(resolve => {
+                            try {
+                                chrome.runtime.sendMessage({ type: 'save-folders', data: foldersToSave }, () => resolve());
+                            } catch { resolve(); }
+                        });
                     }
 
+                    // 其余非 folders 键，仍按原有聚合节流写入
+                    if (Object.keys(obj).length === 0) return;
 
-                    // 检查未处理队列大小，避免过度积累
+                    // 原有 pendingWrites 合并与节流逻辑保持不变
                     if (Object.keys(this._pendingWrites).length > this._maxPendingSize) {
                         console.warn('[Bookmark] Too many pending writes, forcing flush');
                         this._clearPendingWrites();
                     }
-
-                    // 合并待写入数据
                     Object.assign(this._pendingWrites, obj);
-
-                    // 清除现有定时器
                     clearTimeout(this._writeTimer);
 
-                    // 计算下次写入时间
                     const now = Date.now();
                     const timeSinceLastWrite = now - this._lastWriteTime;
-                    const delay = timeSinceLastWrite < this._minInterval ?
-                        this._writeDelay :
-                        Math.min(this._writeDelay, 200); // 如果距离上次写入已经很久，可以更快写入
+                    const delay = timeSinceLastWrite < this._minInterval ? this._writeDelay : Math.min(this._writeDelay, 200);
 
-                    // 设置新定时器
                     this._writeTimer = setTimeout(async () => {
                         try {
-                            const dataToWrite = {...this._pendingWrites};        // 先备份待写数据
-                            await chrome.storage.sync.set(dataToWrite);          // 成功后再清空队列
+                            const dataToWrite = { ...this._pendingWrites };
+                            await chrome.storage.sync.set(dataToWrite);
                             this._pendingWrites = {};
-
                             this._lastWriteTime = Date.now();
-                            this._retryCount = 0; // 重置重试计数
+                            this._retryCount = 0;
                         } catch (e) {
-                            if (e?.message?.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {      // 新增：写入过频
-                                console.warn('[Bookmark] Too many writes, backing off:', e);
-                                this._retryWrite(Math.max(delay * 2, 60000));                   // 至少等待 60 s
-                            } else if (
-                                (e && typeof e.message === 'string' &&
+                            // 原有退避与配额处理保持
+                            if (e?.message?.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {
+                                this._retryWrite(Math.max(delay * 2, 60000));
+                            } else if ((e && typeof e.message === 'string' &&
                                     /QUOTA_BYTES_PER_ITEM|QUOTA_BYTES|kQuotaBytesPerItem|quota exceeded/i.test(e.message)) ||
-                                e?.name === 'QuotaExceededError'
-                            ) {
-                                console.warn('[Bookmark] Storage quota exceeded:', e);
+                                e?.name === 'QuotaExceededError') {
                                 this._handleQuotaError();
                             } else {
-                                console.warn('[Bookmark] storage.set error', e);
                                 this._retryWrite(delay * 2);
                             }
                         }
-
                     }, delay);
                 } catch (e) {
                     console.warn('[Bookmark] Error setting up storage write:', e);
