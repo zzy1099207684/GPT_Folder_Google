@@ -384,16 +384,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const st = document.createElement('style');
                 st.id = 'cgpt-chats-collapse-style';
                 st.textContent = `
-                  nav[aria-label="Chat history"].__cgpt-chats-collapsed a.__menu-item[href*="/c/"],
-                  #history.__cgpt-chats-collapsed a.__menu-item[href*="/c/"] { display:none !important; }
-                  /* 角标布局 */
+                  /* 仅隐藏“Chats”分区内的 /c/ 链接 */
+                  aside.__cgpt-chats-collapsed a.__menu-item[href*="/c/"] { display:none !important; }
+                
+                  /* 角标布局保持不变 */
                   #history h2.__menu-label, nav[aria-label="Chat history"] h2.__menu-label {
-                      position:relative;
-                    }
-                    .__cgpt-chats-toggle {
-                      position:absolute; right:12px; top:50%; transform:translateY(-50%);
-                      cursor:pointer; user-select:none; font-weight:700; opacity:.9;
-                    }
+                    position:relative;
+                  }
+                  .__cgpt-chats-toggle {
+                    position:absolute; right:12px; top:50%; transform:translateY(-50%);
+                    cursor:pointer; user-select:none; font-weight:700; opacity:.9;
+                  }
                 `;
                 document.head.appendChild(st);
             };
@@ -418,12 +419,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const root = pickSidebarRoot();
                 if (!root) return;
 
-                // 根节点标记折叠类
-                const collapsed = loadCollapsed();
-                root.classList.toggle('__cgpt-chats-collapsed', collapsed);
-
                 const header = findChatsHeader(root);
-                if (!header || header.__cgptCollapserPatched) return;
+                if (!header) return;
+
+// 仅作用于“Chats”分区：其外层 aside[aria-labelledby]
+                const scope = header.closest('aside[aria-labelledby]') || root;
+
+// 初始折叠类挂到 scope，而非整个 nav/#history
+                const collapsed = loadCollapsed();
+                scope.classList.toggle('__cgpt-chats-collapsed', collapsed);
+
+                if (header.__cgptCollapserPatched) return;
 
                 const btn = document.createElement('span');
                 btn.className = '__cgpt-chats-toggle';
@@ -431,13 +437,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 btn.textContent = collapsed ? '<' : 'v';
                 btn.addEventListener('click', e => {
                     e.stopPropagation();
-                    const cur = root.classList.toggle('__cgpt-chats-collapsed');
+                    const cur = scope.classList.toggle('__cgpt-chats-collapsed');
                     btn.textContent = cur ? '<' : 'v';
                     saveCollapsed(cur);
                 });
-
                 header.appendChild(btn);
                 header.__cgptCollapserPatched = true;
+
             };
 
             // 初次与后续 DOM 变化保持
