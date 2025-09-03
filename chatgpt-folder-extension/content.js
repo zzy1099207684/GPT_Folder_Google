@@ -154,7 +154,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 ].join(';');
 
                 const label = document.createElement('span');
-                label.textContent = 'prompt';
+                label.textContent = 'user instruction';
 
                 const sw = document.createElement('button');
                 sw.type = 'button';
