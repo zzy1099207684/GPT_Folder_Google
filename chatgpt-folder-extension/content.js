@@ -4571,4 +4571,24 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         ].join('');
         document.head.appendChild(s);
     })();
+
+    // 主内容区粘性条磨砂：覆盖 .bg-token-bg-primary.sticky
+    (function ensureFrostedPrimarySticky() {
+        const ID = 'cgpt-frosted-primary-sticky-style';
+        if (document.getElementById(ID)) return;
+        const s = document.createElement('style');
+        s.id = ID;
+        s.textContent = [
+            // 深色
+            '.bg-token-bg-primary.sticky,',
+            '.bg-token-bg-primary.sticky::before,',
+            '.bg-token-bg-primary.sticky::after{',
+            '  background:rgba(0,0,0,.15)!important;',
+            '  -webkit-backdrop-filter:blur(16px) saturate(120%);',
+            '  backdrop-filter:blur(16px) saturate(120%);',
+            '}'
+        ].join('');
+        document.head.appendChild(s);
+    })();
+
 }
