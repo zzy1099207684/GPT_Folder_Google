@@ -1486,11 +1486,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 lastClickedChatEl = null;
                 setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
 
+                // 立即清空组选中态并刷新
                 activeFid = null;
-                document.querySelectorAll('.cgpt-folder-corner')
-                    .forEach(el => el.style.borderTopColor = 'transparent');
                 setTimeout(highlightActive, 0);
-
             };
 
 
@@ -4028,30 +4026,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             function highlightActive() {
                 const path = location.pathname;
 
-                // 来自历史区点击：清空组角标 + 清理所有残留高亮，然后早退
-                if (clearActiveOnHistoryClick) {
-                    activeFid = null;
-                    document.querySelectorAll('.cgpt-folder-corner')
-                        .forEach(el => el.style.borderTopColor = 'transparent');
-
-                    // 复原上一条路径在组内映射的高亮
-                    try {
-                        if (activePath) {
-                            const prevArr = liveSyncMap.get(activePath);
-                            prevArr && prevArr.forEach(({el}) => {
-                                if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
-                            });
-                        }
-                        // 若当前历史项与之前同一路径，也一并复原，避免同路径残留
-                        const curArr = liveSyncMap.get(path);
-                        curArr && curArr.forEach(({el}) => {
-                            if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
-                        });
-                    } catch {}
-
-                    return;
+                /* 若仍在“New chat”挂起阶段，直接锁定该分组避免错跳 */
+                if (window.__cgptPendingFid && folders[window.__cgptPendingFid]) {
+                    activeFid = window.__cgptPendingFid;
                 }
-
                 if (activePath) {
                     const oldArr = liveSyncMap.get(activePath);
                     if (oldArr) oldArr.forEach(({el}) => {
