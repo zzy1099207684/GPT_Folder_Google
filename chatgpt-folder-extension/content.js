@@ -1960,8 +1960,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 };
 
                 pop.appendChild(mkItem('add group', addGroup));
-                pop.appendChild(mkItem('Export', doExport));
-                pop.appendChild(mkItem('Import', doImport));
+                pop.appendChild(mkItem('Config Export', doExport));
+                pop.appendChild(mkItem('Config Import', doImport));
 
                 const r = addBtn.getBoundingClientRect();
                 const left = Math.max(0, Math.min(r.right - 160, window.innerWidth - 160));
