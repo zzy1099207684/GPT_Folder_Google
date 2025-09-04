@@ -479,7 +479,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         const CLS = {tip: 'cgpt-tip'};
         const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'};
 
-        /* ---------- pointerEvents 失效修复 ---------- */
+
         function isBlockingOverlayExist() {
             // 任意仍在屏幕上的全屏遮罩都会令函数返回 true
             return !!document.querySelector(
@@ -646,9 +646,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             });
         }).observe(document.body, { attributes: true, attributeFilter: ['style'] });
 
-        /* ---------- 修复段结束 ---------- */
 
-        // 抽取 pathname，尽量避免 new URL
         function _path(u) {
             if (!u) return '';
             if (typeof u === 'string') {
@@ -659,7 +657,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     return '';
                 }
             }
-            // Anchor 元素或带 pathname 属性的对象
             if (u.pathname) return u.pathname.split('?')[0];
             try {
                 return new URL(String(u), location.origin).pathname;
@@ -670,7 +667,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         const samePath = (a, b) => _path(a) === _path(b);
 
-        // 增强的选择器函数（健壮化）
         const qs = (sel, root = document) => {
             try {
                 const base = root && typeof root.querySelector === 'function' ? root : document;
@@ -698,8 +694,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 text: ['※Only modify code directly related to the specific problem or requirement raised. After modification, perform self-testing to ensure that it fully meets the requirements, fully consider future expansion, and ensure stability and performance. Provide the original source code and modified version for easy comparison and manual implementation. If you need to add new code, please provide a small amount of original code around the new code location to facilitate positioning※']
             }
         ];         // 自行增删
-        // 修改后的存储逻辑
-        // Enhanced storage implementation with better error handling - replace storage object
         const storage = {
             _pendingWrites: {},
             _writeTimer: null,
@@ -4030,6 +4024,24 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             function highlightActive() {
                 const path = location.pathname;
 
+                if (path.startsWith('/g/')) {
+                    activeFid = null;
+                    document.querySelectorAll('.cgpt-folder-corner')
+                        .forEach(el => el.style.borderTopColor = 'transparent');
+
+                    // 复原上一次在分组里高亮的会话
+                    try {
+                        if (activePath) {
+                            const prevArr = liveSyncMap.get(activePath);
+                            prevArr && prevArr.forEach(({el}) => {
+                                if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
+                            });
+                        }
+                    } catch {}
+                    activePath = path;   // 记录当前路径，防止后续误复原
+                    return;
+                }
+
                 // 来自历史区点击：清空组角标 + 清理所有残留高亮，然后早退
                 if (clearActiveOnHistoryClick) {
                     activeFid = null;
@@ -4141,7 +4153,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const node = ev.target && ev.target.closest && ev.target.closest('a,button');
                     if (!node) return;
 
-                    // 提取 pathname，按钮则为空字符串
                     const path = (() => {
                         try {
                             const href = node.getAttribute('href') || node.href || '';
@@ -4154,23 +4165,23 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const isLibrary  = (node.dataset?.testid === 'sidebar-item-library') || path.startsWith('/library');
                     const isCodex    = path === '/codex';
                     const isSora     = node.id === 'sora';
+                    const isProject  = path.startsWith('/g/');   // 新增：项目与项目内会话，如 /g/... 或 /g/.../c/...
 
-                    if (!(isNewChat || isLibrary || isCodex || isSora)) return;
+                    if (!(isNewChat || isLibrary || isCodex || isSora || isProject)) return;
 
-                    // 仅对“全局 New chat”保留抑制标志，其余三项必须清理
-                    if (isNewChat && window.__cgptSuppressGroupClear) {
+                    if (isNewChat && window.__cgptSuppressGroupClear) { // 原有保护
                         delete window.__cgptSuppressGroupClear;
                         return;
                     }
 
-                    // 清空组选中与 pending 状态
+                    // 统一清空组选中与 pending 状态
                     activeFid = null;
                     delete window.__cgptPendingFid;
                     window.__cgptPendingToken = null;
                     delete lastActiveMap['/'];
                     try { if (chrome?.runtime?.id) storage.set({lastActiveMap}); } catch {}
 
-                    // 立即清 UI，避免一帧回灯；并开启一次短暂的“来自外部入口”清理窗口
+                    // 立即清 UI，避免一帧回灯；并短暂视为“来自外部入口”
                     try {
                         clearActiveOnHistoryClick = true;
                         setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
