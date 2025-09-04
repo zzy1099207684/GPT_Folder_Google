@@ -1046,9 +1046,169 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }
         }
 
-// 替换直接 observe 的做法：延后到 load+idle 再启动
         bootAfterHydration();
 
+        (function snorlaxUndraggable() {
+            if (window.__snorlaxUndraggableActive) return;
+            window.__snorlaxUndraggableActive = true;
+
+            const CONTAINER_ID = 'snorlax-heading';
+            let currentContainer = null;
+            let currentMo = null; // 挂在容器上的观察者
+            let docMo = null;     // 监控容器替换的文档级观察者
+
+            // 将指定根节点下所有带 draggable 的元素统一设为 false
+            function applyAll(root) {
+                if (!root) return;
+                root.querySelectorAll('[draggable]').forEach(el => {
+                    try {
+                        if (el.draggable !== false || el.getAttribute('draggable') !== 'false') {
+                            el.draggable = false;
+                            el.setAttribute('draggable', 'false');
+                        }
+                    } catch (_) {}
+                });
+            }
+
+            // 在容器上建立监听：新增节点与 draggable 属性变化时修正为 false
+            function mountOn(container) {
+                if (!container) return;
+
+                // 如果已绑定到同一个容器，直接刷新一次校正即可
+                if (currentContainer === container && currentMo) {
+                    applyAll(container);
+                    return;
+                }
+
+                // 先清理之前的挂载
+                try { currentMo?.disconnect(); } catch (_) {}
+                currentMo = null;
+                currentContainer = container;
+
+                // 初次全量修正
+                applyAll(container);
+
+                const mo = new MutationObserver(mutations => {
+                    for (const m of mutations) {
+                        if (m.type === 'childList' && m.addedNodes?.length) {
+                            m.addedNodes.forEach(node => {
+                                if (node && node.nodeType === 1) {
+                                    if (node.matches?.('[draggable]')) {
+                                        try {
+                                            node.draggable = false;
+                                            node.setAttribute('draggable', 'false');
+                                        } catch (_) {}
+                                    }
+                                    applyAll(node);
+                                }
+                            });
+                        } else if (m.type === 'attributes' && m.attributeName === 'draggable') {
+                            const t = m.target;
+                            try {
+                                if (t.draggable !== false || t.getAttribute('draggable') !== 'false') {
+                                    t.draggable = false;
+                                    t.setAttribute('draggable', 'false');
+                                }
+                            } catch (_) {}
+                        }
+                    }
+                });
+
+                mo.observe(container, {
+                    subtree: true,
+                    childList: true,
+                    attributes: true,
+                    attributeFilter: ['draggable']
+                });
+
+                currentMo = mo;
+                try { window.observers?.add?.(mo); } catch (_) {}
+            }
+
+            // 容器出现/迟到处理
+            function tryMountOnce() {
+                const el = document.getElementById(CONTAINER_ID);
+                if (!el) return false;
+                mountOn(el);
+                return true;
+            }
+
+            // 容器可能晚于脚本出现：先等待一次装载
+            (function waitAndMount() {
+                if (tryMountOnce()) return;
+
+                const waiter = new MutationObserver(() => {
+                    if (tryMountOnce()) {
+                        try { waiter.disconnect(); } catch (_) {}
+                    }
+                });
+
+                waiter.observe(document.documentElement || document.body, {
+                    childList: true,
+                    subtree: true
+                });
+
+                const idle = window.requestIdleCallback || (fn => setTimeout(fn, 120));
+                window.addEventListener('load', () => idle(tryMountOnce), { once: true, passive: true });
+
+                try { window.observers?.add?.(waiter); } catch (_) {}
+            })();
+
+            // === NEW: 监控容器被“刷新/替换”后自动重挂 ===
+            (function watchContainerReplacement() {
+                // 若已存在则避免重复
+                if (docMo) return;
+
+                const checkAndRemount = (root) => {
+                    // 仅当新的容器节点出现时才重挂
+                    // 1) root 自身就是目标
+                    if (root?.nodeType === 1 && root.id === CONTAINER_ID) {
+                        mountOn(root);
+                        return true;
+                    }
+                    // 2) root 子树包含目标
+                    if (root?.nodeType === 1) {
+                        const el = root.querySelector?.('#' + CONTAINER_ID);
+                        if (el) {
+                            mountOn(el);
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+
+                docMo = new MutationObserver(mutations => {
+                    for (const m of mutations) {
+                        if (m.type !== 'childList') continue;
+
+                        // 容器被移除后再新增：我们只关心新增节点里是否出现新的容器
+                        if (m.addedNodes?.length) {
+                            for (const node of m.addedNodes) {
+                                if (checkAndRemount(node)) return; // 命中一次即可
+                            }
+                        }
+
+                        // 少数情况下，替换发生在目标祖先的 innerHTML 级别
+                        // 这里再做一次快速兜底：如果当前容器已不在文档，尝试全局查找并重挂
+                        if (currentContainer && !currentContainer.isConnected) {
+                            const el = document.getElementById(CONTAINER_ID);
+                            if (el) {
+                                mountOn(el);
+                                return;
+                            }
+                        }
+                    }
+                });
+
+                // 监听整个文档树的子列表变更；只在命中容器时做有限工作
+                docMo.observe(document.documentElement || document.body, {
+                    childList: true,
+                    subtree: true
+                });
+
+                try { window.observers?.add?.(docMo); } catch (_) {}
+            })();
+        })();
 
         /* ===== 初始化收藏夹 ===== */
         async function initBookmarks(historyNode) {
@@ -2296,36 +2456,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             // 辅助：赋予 <a> 拖拽能力
             function markDraggable(a) {
-                // —— 新增：一次性在 #snorlax-heading 上做捕获式兜底拦截 —— //
-                if (!window.__cgptNoDragSetup) {
-                    window.__cgptNoDragSetup = true;
-                    const scope = document.querySelector('#snorlax-heading'); // 只针对图中元素
-                    if (scope && !scope.__cgptNoDragPatched) {
-                        scope.addEventListener('dragstart', (e) => {
-                            // 仅拦截该区域内会话链接（/c/）
-                            const targetLink = e.target && e.target.closest && e.target.closest('a[href*="/c/"]');
-                            if (targetLink && scope.contains(targetLink)) {
-                                e.preventDefault();
-                                e.stopPropagation(); // 阻止冒泡到外层
-                            }
-                        }, true); // 用捕获阶段，确保最先拦截
-                        scope.__cgptNoDragPatched = true;
-                    }
-                }
-
-                // —— 新增：该区域内的会话链接彻底禁用并清理拖拽能力 —— //
-                if (a.closest && a.closest('#snorlax-heading')) {
-                    // 若之前被标记为可拖拽，做一次清理，确保禁用稳定
-                    if (a.dataset.drag) {
-                        try { a.removeAttribute('draggable'); } catch {}
-                        a.draggable = false;
-                        a.ondragstart = null;
-                        delete a.dataset.drag;
-                    }
-                    return; // 直接退出，不赋予拖拽能力
-                }
-
-                // 原逻辑：其他区域（例如 Chats）保持可拖拽
                 if (a.dataset.drag) return;
                 a.dataset.drag = "1";
                 a.draggable = true;
@@ -2338,7 +2468,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     e.dataTransfer.setData('text/plain', a.href);
                 };
             }
-
 
 
             // 在统一回调外部新增节流状态
