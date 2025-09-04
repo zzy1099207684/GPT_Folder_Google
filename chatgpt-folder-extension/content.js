@@ -2703,7 +2703,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const pinState = curChat ? (curChat.pinned ? 'unpin' : 'pin') : null;
 
                     let html = `
-        <div class="f-item" data-act="prompt" style="padding:6px 16px;cursor:pointer">Prompt</div>
+        <div class="f-item" data-act="prompt" style="padding:6px 16px;cursor:pointer">Instruction</div>
         <div class="f-item" data-act="rename" style="padding:6px 16px;cursor:pointer">Rename</div>`;
                     if (pinState) {
                         html += `<div class="f-item" data-act="${pinState}" style="padding:6px 16px;cursor:pointer">
