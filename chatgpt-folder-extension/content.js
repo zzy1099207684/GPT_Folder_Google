@@ -1473,20 +1473,24 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
                 const a = e.target.closest('a[href*="/c/"]');
                 if (!a) return;
-                if (window.__cgptIgnoreNextHistoryClick) return;
 
-                // 标记该会话“来自 Chats”，禁止为其点亮组角标
-                try {
-                    const p = new URL(a.href, location.origin).pathname;
-                    lastActiveMap[p] = '__history__';
-                    if (chrome?.runtime?.id) storage.set({ lastActiveMap });
-                } catch {}
+                let p = '';
+                try { p = new URL(a.href, location.origin).pathname; } catch { p = ''; }
 
-                clearActiveOnHistoryClick = true;
+                if (window.__cgptIgnoreNextHistoryClickPath && p === window.__cgptIgnoreNextHistoryClickPath) {
+                    delete window.__cgptIgnoreNextHistoryClickPath;
+                    return;
+                }
+
+                if (p) {
+                    try {
+                        lastActiveMap[p] = '__history__';
+                        if (chrome?.runtime?.id) storage.set({ lastActiveMap });
+                    } catch {}
+                }
                 lastClickedChatEl = null;
                 setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
 
-// 立即清空组选中态并同步清 UI，再异步刷新，避免一帧回灯
                 activeFid = null;
                 document.querySelectorAll('.cgpt-folder-corner')
                     .forEach(el => el.style.borderTopColor = 'transparent');
@@ -3130,13 +3134,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     if (!chat.url) return;
                     e.preventDefault();
 
-                    // 新增：一次性保护，防止紧随其后的 history 监听把映射写成 "__history__"
-                    window.__cgptIgnoreNextHistoryClick = true;
+                    try {
+                        window.__cgptIgnoreNextHistoryClickPath = new URL(chat.url, location.origin).pathname;
+                    } catch { window.__cgptIgnoreNextHistoryClickPath = null; }
                     setTimeout(() => {
-                        try {
-                            delete window.__cgptIgnoreNextHistoryClick;
-                        } catch {
-                        }
+                        try { delete window.__cgptIgnoreNextHistoryClickPath; } catch {}
                     }, 500);
 
                     const stillExists = qsa(HIST_ANCHOR).some(a => samePath(a.href, chat.url));
@@ -4028,7 +4030,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             function highlightActive() {
                 const path = location.pathname;
 
-                // 新增：来自历史区的点击时，直接清空组选中并短路，避免旧路径误判回点亮
+                // 来自历史区点击：清空组角标 + 清理所有残留高亮，然后早退
                 if (clearActiveOnHistoryClick) {
                     activeFid = null;
                     document.querySelectorAll('.cgpt-folder-corner')
@@ -4052,11 +4054,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     return;
                 }
 
-
-                /* 若仍在“New chat”挂起阶段，直接锁定该分组避免错跳 */
-                if (window.__cgptPendingFid && folders[window.__cgptPendingFid]) {
-                    activeFid = window.__cgptPendingFid;
-                }
                 if (activePath) {
                     const oldArr = liveSyncMap.get(activePath);
                     if (oldArr) oldArr.forEach(({el}) => {
@@ -4137,36 +4134,60 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             document.addEventListener('visibilitychange', () => { if (!document.hidden) highlightActive(); });
 
             /* ===== 清除组高亮：原生 New chat ===== */
-            if (!window.__cgptNativeNewChatHooked) {
-                window.__cgptNativeNewChatHooked = true;
-                document.addEventListener('click', ev => {
-                    const btn = ev.target.closest(
-                        'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
-                    );
-                    if (!btn) return;
+            if (!window.__cgptGlobalNavClearHooked) {
+                window.__cgptGlobalNavClearHooked = true;
 
-                    // 若由组内“New chat”间接触发，则跳过本次清除并重置标志
-                    if (window.__cgptSuppressGroupClear) {
+                document.addEventListener('click', ev => {
+                    const node = ev.target && ev.target.closest && ev.target.closest('a,button');
+                    if (!node) return;
+
+                    // 提取 pathname，按钮则为空字符串
+                    const path = (() => {
+                        try {
+                            const href = node.getAttribute('href') || node.href || '';
+                            if (!href) return '';
+                            return new URL(href, location.origin).pathname || '';
+                        } catch { return ''; }
+                    })();
+
+                    const isNewChat  = node.matches?.('button[aria-label="New chat"],a[data-testid="create-new-chat-button"]');
+                    const isLibrary  = (node.dataset?.testid === 'sidebar-item-library') || path.startsWith('/library');
+                    const isCodex    = path === '/codex';
+                    const isSora     = node.id === 'sora';
+
+                    if (!(isNewChat || isLibrary || isCodex || isSora)) return;
+
+                    // 仅对“全局 New chat”保留抑制标志，其余三项必须清理
+                    if (isNewChat && window.__cgptSuppressGroupClear) {
                         delete window.__cgptSuppressGroupClear;
                         return;
                     }
 
+                    // 清空组选中与 pending 状态
                     activeFid = null;
                     delete window.__cgptPendingFid;
                     window.__cgptPendingToken = null;
                     delete lastActiveMap['/'];
-                    try {
-                        if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                    } catch {
-                    }
-                    setTimeout(highlightActive, 0);
-                    setTimeout(() => {
-                        try {
-                            ensurePromptToggle();
-                        } catch {
-                        }
-                    }, 0);
+                    try { if (chrome?.runtime?.id) storage.set({lastActiveMap}); } catch {}
 
+                    // 立即清 UI，避免一帧回灯；并开启一次短暂的“来自外部入口”清理窗口
+                    try {
+                        clearActiveOnHistoryClick = true;
+                        setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
+
+                        document.querySelectorAll('.cgpt-folder-corner')
+                            .forEach(el => el.style.borderTopColor = 'transparent');
+
+                        if (activePath) {
+                            const prevArr = liveSyncMap.get(activePath);
+                            prevArr && prevArr.forEach(({el}) => {
+                                if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
+                            });
+                        }
+                    } catch {}
+
+                    setTimeout(highlightActive, 0);
+                    setTimeout(() => { try { ensurePromptToggle(); } catch {} }, 0);
                 }, true);
             }
 
