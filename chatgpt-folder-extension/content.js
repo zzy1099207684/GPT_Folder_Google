@@ -3322,6 +3322,106 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }, 100);
                 };
 
+                /* 新增：双击组内会话条目→内联重命名并 PATCH 后端，再刷新 Chats 列表 */
+                link.ondblclick = e => {
+                    e.preventDefault();
+                    if (!chat.url) return;
+                    const m = /\/c\/([^/?#]+)/.exec(chat.url);
+                    const convId = m && m[1];
+                    if (!convId) return;
+
+                    const oldTitle = link.textContent || 'New chat';
+
+                    // 内联输入框
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = oldTitle;
+                    input.maxLength = 200;
+                    input.style.cssText = [
+                        'flex:1','min-width:0','margin-right:4px','font-size:13px','color:#fff',
+                        'background:rgba(255,255,255,.06)','border:1px solid rgba(255,255,255,.2)',
+                        'border-radius:6px','padding:2px 4px','line-height:1.25'
+                    ].join(';');
+
+                    // 替换呈现
+                    const parent = link.parentElement || li;
+                    parent.insertBefore(input, link);
+                    link.style.display = 'none';
+                    input.focus(); input.select();
+
+                    let finished = false;
+                    const restore = () => { if (finished) return; finished = true; input.remove(); link.style.display = ''; };
+
+                    // 本地更新与持久化
+                    const applyLocal = t => {
+                        link.textContent = t;
+                        chat.title = t;
+                        try { if (chrome?.runtime?.id) storage.set({folders}); } catch {}
+                        safeSendMessage({type:'save-folders', data: folders});
+                    };
+
+                    // 构建授权头，参考 Batch Processing→Delete
+                    function buildAcceptLanguage() {
+                        const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
+                            .map(s => String(s || '').split(';')[0]).filter(Boolean);
+                        const uniq = [...new Set(ls)].slice(0, 4);
+                        if (!uniq.length) return 'en-US,en;q=0.9';
+                        const qs = [1.0, 0.9, 0.8, 0.7];
+                        return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
+                    }
+                    async function getHeaders() {
+                        const h = { accept:'*/*', 'accept-language': buildAcceptLanguage(), 'content-type':'application/json' };
+                        try {
+                            const r = await fetch('/api/auth/session', {credentials:'same-origin'});
+                            if (r.ok) { const j = await r.json(); if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`; }
+                        } catch {}
+                        return h;
+                    }
+
+                    const commit = async () => {
+                        if (finished) return;
+                        finished = true;
+                        const next = (input.value || '').trim() || oldTitle;
+                        input.remove(); link.style.display = '';
+                        if (next === oldTitle) return;
+
+                        // 乐观更新
+                        applyLocal(next);
+
+                        try {
+                            const headers = await getHeaders();          // 同 Delete 授权获取
+                            const res = await fetch(`/backend-api/conversation/${convId}`, {
+                                method: 'PATCH',
+                                headers,
+                                body: JSON.stringify({title: next})
+                            }); // 删除也是 PATCH 该接口，见引用
+                            if (!res.ok) applyLocal(oldTitle);
+                        } catch {
+                            applyLocal(oldTitle);
+                        }
+
+                        // 同步刷新 Chats 列表
+                        try {
+                            if (typeof __cgptFetchConversationsAndRefresh === 'function') {
+                                __cgptFetchConversationsAndRefresh(convId);
+                            } else {
+                                const p = new URL(chat.url, location.origin).pathname;
+                                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                                const a = hist && hist.querySelector(`a[href*="${p}"]`);
+                                const t = a && (a.querySelector('.truncate') || a);
+                                if (t) t.textContent = next;
+                            }
+                        } catch {}
+                    };
+
+                    input.addEventListener('keydown', ev => {
+                        if (ev.key === 'Enter') commit();
+                        else if (ev.key === 'Escape') restore();
+                    }, {capture:true});
+                    input.addEventListener('blur', commit, {once:true});
+                };
+
+
 
                 const del = document.createElement('span');
                 del.textContent = '✕';
