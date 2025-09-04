@@ -2296,6 +2296,36 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             // 辅助：赋予 <a> 拖拽能力
             function markDraggable(a) {
+                // —— 新增：一次性在 #snorlax-heading 上做捕获式兜底拦截 —— //
+                if (!window.__cgptNoDragSetup) {
+                    window.__cgptNoDragSetup = true;
+                    const scope = document.querySelector('#snorlax-heading'); // 只针对图中元素
+                    if (scope && !scope.__cgptNoDragPatched) {
+                        scope.addEventListener('dragstart', (e) => {
+                            // 仅拦截该区域内会话链接（/c/）
+                            const targetLink = e.target && e.target.closest && e.target.closest('a[href*="/c/"]');
+                            if (targetLink && scope.contains(targetLink)) {
+                                e.preventDefault();
+                                e.stopPropagation(); // 阻止冒泡到外层
+                            }
+                        }, true); // 用捕获阶段，确保最先拦截
+                        scope.__cgptNoDragPatched = true;
+                    }
+                }
+
+                // —— 新增：该区域内的会话链接彻底禁用并清理拖拽能力 —— //
+                if (a.closest && a.closest('#snorlax-heading')) {
+                    // 若之前被标记为可拖拽，做一次清理，确保禁用稳定
+                    if (a.dataset.drag) {
+                        try { a.removeAttribute('draggable'); } catch {}
+                        a.draggable = false;
+                        a.ondragstart = null;
+                        delete a.dataset.drag;
+                    }
+                    return; // 直接退出，不赋予拖拽能力
+                }
+
+                // 原逻辑：其他区域（例如 Chats）保持可拖拽
                 if (a.dataset.drag) return;
                 a.dataset.drag = "1";
                 a.draggable = true;
@@ -2308,6 +2338,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     e.dataTransfer.setData('text/plain', a.href);
                 };
             }
+
 
 
             // 在统一回调外部新增节流状态
