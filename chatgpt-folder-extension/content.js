@@ -1188,8 +1188,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             }
                         }
 
-                        // 少数情况下，替换发生在目标祖先的 innerHTML 级别
-                        // 这里再做一次快速兜底：如果当前容器已不在文档，尝试全局查找并重挂
                         if (currentContainer && !currentContainer.isConnected) {
                             const el = document.getElementById(CONTAINER_ID);
                             if (el) {
