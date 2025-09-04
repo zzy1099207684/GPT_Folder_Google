@@ -400,9 +400,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             };
 
             const loadCollapsed = () => {
-                try { return localStorage.getItem(STORAGE_KEY) !== '0'; } catch { return true; }
+                try {
+                    return localStorage.getItem(STORAGE_KEY) !== '0';
+                } catch {
+                    return true;
+                }
             };
-            const saveCollapsed = v => { try { localStorage.setItem(STORAGE_KEY, v ? '1' : '0'); } catch {} };
+            const saveCollapsed = v => {
+                try {
+                    localStorage.setItem(STORAGE_KEY, v ? '1' : '0');
+                } catch {
+                }
+            };
 
             const findChatsHeader = root => {
                 // light.txt 确认：Chats 位于 #history 内部的 h2.__menu-label，或直接在 nav 内部。:contentReference[oaicite:5]{index=5}
@@ -454,15 +463,24 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 patchOnce();
 
                 const mo = new MutationObserver(() => patchOnce());
-                mo.observe(document.body, { childList: true, subtree: true });
+                mo.observe(document.body, {childList: true, subtree: true});
                 // 若你的全局 observers 存在，则纳入统一管理
-                try { window.observers?.add?.(mo); } catch {}
-                window.addEventListener('beforeunload', () => { try { mo.disconnect(); } catch {} }, { passive: true });
+                try {
+                    window.observers?.add?.(mo);
+                } catch {
+                }
+                window.addEventListener('beforeunload', () => {
+                    try {
+                        mo.disconnect();
+                    } catch {
+                    }
+                }, {passive: true});
             };
 
             // 延后到空闲帧，避开水合窗口
             (window.requestIdleCallback || (fn => setTimeout(fn, 120)))(init);
         })();
+
         /* === NEW END === */
 
         function debounce(fn, wait = 200) {
@@ -644,7 +662,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 __restoreScheduled = false;
                 restorePointerEvents();
             });
-        }).observe(document.body, { attributes: true, attributeFilter: ['style'] });
+        }).observe(document.body, {attributes: true, attributeFilter: ['style']});
 
 
         function _path(u) {
@@ -714,13 +732,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     if (key === 'folders') {
                         const res = await new Promise(resolve => {
                             try {
-                                chrome.runtime.sendMessage({ type: 'get-folders' }, r => resolve(r));
-                            } catch { resolve(null); }
+                                chrome.runtime.sendMessage({type: 'get-folders'}, r => resolve(r));
+                            } catch {
+                                resolve(null);
+                            }
                         });
                         if (res && res.ok && res.folders) return res.folders;
 
                         // 兜底：后台不可用时，退回旧逻辑
-                        const { folderKeys = [] } = await chrome.storage.sync.get('folderKeys');
+                        const {folderKeys = []} = await chrome.storage.sync.get('folderKeys');
                         if (!folderKeys.length) {
                             const legacy = await chrome.storage.sync.get('folders');
                             return legacy.folders || {};
@@ -772,7 +792,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             },
 
 
-
             async set(obj) {
                 try {
                     if (!chrome?.runtime?.id) {
@@ -786,8 +805,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         delete obj.folders; // 由后台负责写入分片
                         await new Promise(resolve => {
                             try {
-                                chrome.runtime.sendMessage({ type: 'save-folders', data: foldersToSave }, () => resolve());
-                            } catch { resolve(); }
+                                chrome.runtime.sendMessage({
+                                    type: 'save-folders',
+                                    data: foldersToSave
+                                }, () => resolve());
+                            } catch {
+                                resolve();
+                            }
                         });
                     }
 
@@ -808,7 +832,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     this._writeTimer = setTimeout(async () => {
                         try {
-                            const dataToWrite = { ...this._pendingWrites };
+                            const dataToWrite = {...this._pendingWrites};
                             await chrome.storage.sync.set(dataToWrite);
                             this._pendingWrites = {};
                             this._lastWriteTime = Date.now();
@@ -1066,7 +1090,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             el.draggable = false;
                             el.setAttribute('draggable', 'false');
                         }
-                    } catch (_) {}
+                    } catch (_) {
+                    }
                 });
             }
 
@@ -1081,7 +1106,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
 
                 // 先清理之前的挂载
-                try { currentMo?.disconnect(); } catch (_) {}
+                try {
+                    currentMo?.disconnect();
+                } catch (_) {
+                }
                 currentMo = null;
                 currentContainer = container;
 
@@ -1097,7 +1125,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                         try {
                                             node.draggable = false;
                                             node.setAttribute('draggable', 'false');
-                                        } catch (_) {}
+                                        } catch (_) {
+                                        }
                                     }
                                     applyAll(node);
                                 }
@@ -1109,7 +1138,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     t.draggable = false;
                                     t.setAttribute('draggable', 'false');
                                 }
-                            } catch (_) {}
+                            } catch (_) {
+                            }
                         }
                     }
                 });
@@ -1122,7 +1152,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 });
 
                 currentMo = mo;
-                try { window.observers?.add?.(mo); } catch (_) {}
+                try {
+                    window.observers?.add?.(mo);
+                } catch (_) {
+                }
             }
 
             // 容器出现/迟到处理
@@ -1139,7 +1172,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 const waiter = new MutationObserver(() => {
                     if (tryMountOnce()) {
-                        try { waiter.disconnect(); } catch (_) {}
+                        try {
+                            waiter.disconnect();
+                        } catch (_) {
+                        }
                     }
                 });
 
@@ -1149,9 +1185,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 });
 
                 const idle = window.requestIdleCallback || (fn => setTimeout(fn, 120));
-                window.addEventListener('load', () => idle(tryMountOnce), { once: true, passive: true });
+                window.addEventListener('load', () => idle(tryMountOnce), {once: true, passive: true});
 
-                try { window.observers?.add?.(waiter); } catch (_) {}
+                try {
+                    window.observers?.add?.(waiter);
+                } catch (_) {
+                }
             })();
 
             // === NEW: 监控容器被“刷新/替换”后自动重挂 ===
@@ -1204,7 +1243,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     subtree: true
                 });
 
-                try { window.observers?.add?.(docMo); } catch (_) {}
+                try {
+                    window.observers?.add?.(docMo);
+                } catch (_) {
+                }
             })();
         })();
 
@@ -1626,8 +1668,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const a = e.target.closest('a[href*="/c/"]');
                 if (!a) return;
 
-                let p = '';
-                try { p = new URL(a.href, location.origin).pathname; } catch { p = ''; }
+                let p;
+                try {
+                    p = new URL(a.href, location.origin).pathname;
+                } catch {
+                    p = '';
+                }
 
                 if (window.__cgptIgnoreNextHistoryClickPath && p === window.__cgptIgnoreNextHistoryClickPath) {
                     delete window.__cgptIgnoreNextHistoryClickPath;
@@ -1637,11 +1683,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 if (p) {
                     try {
                         lastActiveMap[p] = '__history__';
-                        if (chrome?.runtime?.id) storage.set({ lastActiveMap });
-                    } catch {}
+                        if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                    } catch {
+                    }
                 }
                 lastClickedChatEl = null;
-                setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
+                setTimeout(() => {
+                    clearActiveOnHistoryClick = false;
+                }, 300);
 
                 activeFid = null;
                 document.querySelectorAll('.cgpt-folder-corner')
@@ -3288,9 +3337,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     try {
                         window.__cgptIgnoreNextHistoryClickPath = new URL(chat.url, location.origin).pathname;
-                    } catch { window.__cgptIgnoreNextHistoryClickPath = null; }
+                    } catch {
+                        window.__cgptIgnoreNextHistoryClickPath = null;
+                    }
                     setTimeout(() => {
-                        try { delete window.__cgptIgnoreNextHistoryClickPath; } catch {}
+                        try {
+                            delete window.__cgptIgnoreNextHistoryClickPath;
+                        } catch {
+                        }
                     }, 500);
 
                     const stillExists = qsa(HIST_ANCHOR).some(a => samePath(a.href, chat.url));
@@ -3338,26 +3392,35 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     input.value = oldTitle;
                     input.maxLength = 200;
                     input.style.cssText = [
-                        'flex:1','min-width:0','margin-right:4px','font-size:13px','color:#fff',
-                        'background:rgba(255,255,255,.06)','border:1px solid rgba(255,255,255,.2)',
-                        'border-radius:6px','padding:2px 4px','line-height:1.25'
+                        'flex:1', 'min-width:0', 'margin-right:4px', 'font-size:13px', 'color:#fff',
+                        'background:rgba(255,255,255,.06)', 'border:1px solid rgba(255,255,255,.2)',
+                        'border-radius:6px', 'padding:2px 4px', 'line-height:1.25'
                     ].join(';');
 
                     // 替换呈现
                     const parent = link.parentElement || li;
                     parent.insertBefore(input, link);
                     link.style.display = 'none';
-                    input.focus(); input.select();
+                    input.focus();
+                    input.select();
 
                     let finished = false;
-                    const restore = () => { if (finished) return; finished = true; input.remove(); link.style.display = ''; };
+                    const restore = () => {
+                        if (finished) return;
+                        finished = true;
+                        input.remove();
+                        link.style.display = '';
+                    };
 
                     // 本地更新与持久化
                     const applyLocal = t => {
                         link.textContent = t;
                         chat.title = t;
-                        try { if (chrome?.runtime?.id) storage.set({folders}); } catch {}
-                        safeSendMessage({type:'save-folders', data: folders});
+                        try {
+                            if (chrome?.runtime?.id) storage.set({folders});
+                        } catch {
+                        }
+                        safeSendMessage({type: 'save-folders', data: folders});
                     };
 
                     // 构建授权头，参考 Batch Processing→Delete
@@ -3369,12 +3432,21 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const qs = [1.0, 0.9, 0.8, 0.7];
                         return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
                     }
+
                     async function getHeaders() {
-                        const h = { accept:'*/*', 'accept-language': buildAcceptLanguage(), 'content-type':'application/json' };
+                        const h = {
+                            accept: '*/*',
+                            'accept-language': buildAcceptLanguage(),
+                            'content-type': 'application/json'
+                        };
                         try {
-                            const r = await fetch('/api/auth/session', {credentials:'same-origin'});
-                            if (r.ok) { const j = await r.json(); if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`; }
-                        } catch {}
+                            const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
+                            if (r.ok) {
+                                const j = await r.json();
+                                if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
+                            }
+                        } catch {
+                        }
                         return h;
                     }
 
@@ -3382,7 +3454,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         if (finished) return;
                         finished = true;
                         const next = (input.value || '').trim() || oldTitle;
-                        input.remove(); link.style.display = '';
+                        input.remove();
+                        link.style.display = '';
                         if (next === oldTitle) return;
 
                         // 乐观更新
@@ -3411,16 +3484,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 const t = a && (a.querySelector('.truncate') || a);
                                 if (t) t.textContent = next;
                             }
-                        } catch {}
+                        } catch {
+                        }
                     };
 
                     input.addEventListener('keydown', ev => {
                         if (ev.key === 'Enter') commit();
                         else if (ev.key === 'Escape') restore();
-                    }, {capture:true});
-                    input.addEventListener('blur', commit, {once:true});
+                    }, {capture: true});
+                    input.addEventListener('blur', commit, {once: true});
                 };
-
 
 
                 const del = document.createElement('span');
@@ -4292,10 +4365,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         if (activePath) {
                             const prevArr = liveSyncMap.get(activePath);
                             prevArr && prevArr.forEach(({el}) => {
-                                if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
+                                if (el && el.isConnected) {
+                                    el.style.background = '';
+                                    el.style.color = '#b2b2b2';
+                                }
                             });
                         }
-                    } catch {}
+                    } catch {
+                    }
                     activePath = path;   // 记录当前路径，防止后续误复原
                     return;
                 }
@@ -4311,15 +4388,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         if (activePath) {
                             const prevArr = liveSyncMap.get(activePath);
                             prevArr && prevArr.forEach(({el}) => {
-                                if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
+                                if (el && el.isConnected) {
+                                    el.style.background = '';
+                                    el.style.color = '#b2b2b2';
+                                }
                             });
                         }
                         // 若当前历史项与之前同一路径，也一并复原，避免同路径残留
                         const curArr = liveSyncMap.get(path);
                         curArr && curArr.forEach(({el}) => {
-                            if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
+                            if (el && el.isConnected) {
+                                el.style.background = '';
+                                el.style.color = '#b2b2b2';
+                            }
                         });
-                    } catch {}
+                    } catch {
+                    }
 
                     return;
                 }
@@ -4401,7 +4485,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             highlightActive();                              // 初始渲染立即同步
             window.addEventListener('popstate', highlightActive);
             window.addEventListener('pageshow', highlightActive);
-            document.addEventListener('visibilitychange', () => { if (!document.hidden) highlightActive(); });
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) highlightActive();
+            });
 
             /* ===== 清除组高亮：原生 New chat ===== */
             if (!window.__cgptGlobalNavClearHooked) {
@@ -4416,14 +4502,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             const href = node.getAttribute('href') || node.href || '';
                             if (!href) return '';
                             return new URL(href, location.origin).pathname || '';
-                        } catch { return ''; }
+                        } catch {
+                            return '';
+                        }
                     })();
 
-                    const isNewChat  = node.matches?.('button[aria-label="New chat"],a[data-testid="create-new-chat-button"]');
-                    const isLibrary  = (node.dataset?.testid === 'sidebar-item-library') || path.startsWith('/library');
-                    const isCodex    = path === '/codex';
-                    const isSora     = node.id === 'sora';
-                    const isProject  = path.startsWith('/g/');   // 新增：项目与项目内会话，如 /g/... 或 /g/.../c/...
+                    const isNewChat = node.matches?.('button[aria-label="New chat"],a[data-testid="create-new-chat-button"]');
+                    const isLibrary = (node.dataset?.testid === 'sidebar-item-library') || path.startsWith('/library');
+                    const isCodex = path === '/codex';
+                    const isSora = node.id === 'sora';
+                    const isProject = path.startsWith('/g/');   // 新增：项目与项目内会话，如 /g/... 或 /g/.../c/...
 
                     if (!(isNewChat || isLibrary || isCodex || isSora || isProject)) return;
 
@@ -4437,12 +4525,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     delete window.__cgptPendingFid;
                     window.__cgptPendingToken = null;
                     delete lastActiveMap['/'];
-                    try { if (chrome?.runtime?.id) storage.set({lastActiveMap}); } catch {}
+                    try {
+                        if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                    } catch {
+                    }
 
                     // 立即清 UI，避免一帧回灯；并短暂视为“来自外部入口”
                     try {
                         clearActiveOnHistoryClick = true;
-                        setTimeout(() => { clearActiveOnHistoryClick = false; }, 300);
+                        setTimeout(() => {
+                            clearActiveOnHistoryClick = false;
+                        }, 300);
 
                         document.querySelectorAll('.cgpt-folder-corner')
                             .forEach(el => el.style.borderTopColor = 'transparent');
@@ -4450,13 +4543,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         if (activePath) {
                             const prevArr = liveSyncMap.get(activePath);
                             prevArr && prevArr.forEach(({el}) => {
-                                if (el && el.isConnected) { el.style.background = ''; el.style.color = '#b2b2b2'; }
+                                if (el && el.isConnected) {
+                                    el.style.background = '';
+                                    el.style.color = '#b2b2b2';
+                                }
                             });
                         }
-                    } catch {}
+                    } catch {
+                    }
 
                     setTimeout(highlightActive, 0);
-                    setTimeout(() => { try { ensurePromptToggle(); } catch {} }, 0);
+                    setTimeout(() => {
+                        try {
+                            ensurePromptToggle();
+                        } catch {
+                        }
+                    }, 0);
                 }, true);
             }
 
