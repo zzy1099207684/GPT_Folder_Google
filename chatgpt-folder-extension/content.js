@@ -5080,23 +5080,65 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         document.head.appendChild(s);
     })();
 
-    // 主内容区粘性条磨砂：覆盖 .bg-token-bg-primary.sticky
-    (function ensureFrostedPrimarySticky() {
-        const ID = 'cgpt-frosted-primary-sticky-style';
-        if (document.getElementById(ID)) return;
-        const s = document.createElement('style');
-        s.id = ID;
-        s.textContent = [
-            // 深色
-            '.bg-token-bg-primary.sticky,',
-            '.bg-token-bg-primary.sticky::before,',
-            '.bg-token-bg-primary.sticky::after{',
-            '  background:rgba(0,0,0,.15)!important;',
-            '  -webkit-backdrop-filter:blur(16px) saturate(120%);',
-            '  backdrop-filter:blur(16px) saturate(120%);',
-            '}'
-        ].join('');
-        document.head.appendChild(s);
-    })();
+    // ==== Edit message 对话框修复: 确保编辑内容可滚动并取消外层遮罩 ====
+    (function fixEditDialog() {
+        // 注入样式：限制编辑框高度并允许滚动；隐藏冲突遮罩
+        const STYLE_ID = 'cgpt-edit-dialog-fix-style';
+        if (!document.getElementById(STYLE_ID)) {
+            const s = document.createElement('style');
+            s.id = STYLE_ID;
+            s.textContent = `
+              [role="dialog"] textarea,
+              [role="dialog"] .ProseMirror {
+                max-height: 65vh !important;
+                height: auto !important;
+                overflow: auto !important;
+              }
+              [role="dialog"] [class*="overflow-hidden"] {
+                overflow: auto !important;
+              }
+              html.__cgpt-editing .immersive-translate-input,
+              html.__cgpt-editing .immersive-translate-modal,
+              html.__cgpt-editing .immersive-translate-dialog {
+                display: none !important;
+                pointer-events: none !important;
+              }
+            `;
+            document.head.appendChild(s);
+        }
 
+        // 监听对话框出现与消失，切换编辑状态
+        const mo = new MutationObserver(() => toggleEditMode());
+        mo.observe(document.body, { childList: true, subtree: true });
+
+        function toggleEditMode() {
+            const dlg = document.querySelector('[role="dialog"] textarea, [role="dialog"] .ProseMirror');
+            const on = !!dlg;
+            document.documentElement.classList.toggle('__cgpt-editing', on);
+            if (dlg) autosize(dlg);
+        }
+
+        // 自适应调整 textarea 高度；contenteditable 控件仅设置滚动
+        function autosize(el) {
+            const resize = () => {
+                try {
+                    if (el.tagName === 'TEXTAREA') {
+                        el.style.height = 'auto';
+                        const max = Math.round(window.innerHeight * 0.65);
+                        el.style.height = Math.min(el.scrollHeight, max) + 'px';
+                    } else {
+                        el.style.maxHeight = '65vh';
+                        el.style.overflowY = 'auto';
+                    }
+                } catch {}
+            };
+            resize();
+            el.addEventListener('input', resize, { passive: true });
+        }
+
+        // 页面离开时清理状态
+        window.addEventListener('beforeunload', () => {
+            document.documentElement.classList.remove('__cgpt-editing');
+        }, { passive: true });
+    })();
 }
