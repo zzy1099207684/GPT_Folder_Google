@@ -156,14 +156,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const label = document.createElement('span');
                 label.textContent = 'user instruction';
 
-                const sw = document.createElement('button');
-                sw.type = 'button';
-                sw.className = 'cgpt-switch';
+                const sw = document.createElement('div');
+                sw.className = 'cgpt-switch-3';
                 sw.style.cssText = [
-                    'width:34px', 'height:20px', 'border-radius:10px', 'border:none',
-                    'position:relative', 'cursor:pointer', 'outline:none'
+                    'width:54px', 'height:20px', 'border-radius:10px', 'border:none',
+                    'position:relative', 'cursor:pointer', 'outline:none', 'background:#666',
+                    'display:block'
                 ].join(';');
 
+                // 白点
                 const knob = document.createElement('span');
                 knob.style.cssText = [
                     'position:absolute', 'top:2px', 'left:2px', 'width:16px', 'height:16px',
@@ -171,31 +172,70 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 ].join(';');
                 sw.appendChild(knob);
 
-                // 状态渲染
-                const render = (on) => {
-                    sw.setAttribute('aria-pressed', String(!!on));
-                    sw.style.background = on ? '#10a37f' : '#666';
-                    knob.style.left = on ? '16px' : '2px';
+                // 中位记号：提示存在中间选项
+                const mid = document.createElement('span');
+                mid.setAttribute('aria-hidden', 'true');
+                mid.style.cssText = [
+                    'position:absolute', 'top:4px', 'left:26px', 'width:2px', 'height:12px',
+                    'background:rgba(255,255,255,.6)', 'border-radius:1px', 'pointer-events:none'
+                ].join(';');
+                sw.appendChild(mid);
+
+                // 三个点击热区
+                ['L', 'M', 'R'].forEach((k, i) => {
+                    const seg = document.createElement('button');
+                    seg.type = 'button';
+                    seg.setAttribute('aria-label', i === 0 ? 'all on' : (i === 1 ? 'half off' : 'all off'));
+                    seg.style.cssText = [
+                        'position:absolute', 'top:0', 'bottom:0',
+                        `left:${i * 18}px`, 'width:18px', 'border:none', 'background:transparent', 'cursor:pointer'
+                    ].join(';');
+                    seg.onclick = (e) => {
+                        e.stopPropagation();
+                        setMode(i); // 0/1/2
+                    };
+                    sw.appendChild(seg);
+                });
+
+                const readMode = (v) => {
+                    if (typeof v === 'number') return Math.min(2, Math.max(0, v));
+                    if (v === false) return 2;         // 旧 false -> 全关
+                    return 0;                          // 旧 true/undefined -> 全开
                 };
 
-                // 默认开启：未定义即 true
-                const map = window.__cgptPromptTogglePerPath || {};
-                const currentOn = map[key] !== false;
-                render(currentOn);
+                const render = (mode) => {
+                    sw.dataset.mode = String(mode);
+                    // 背景色：0 绿、1 灰、2 深灰
+                    sw.style.background = (mode === 0) ? '#10a37f' : (mode === 1 ? '#888' : '#666');
+                    knob.style.left = (mode === 0) ? '2px' : (mode === 1 ? '19px' : '36px');
+                };
 
-                sw.onclick = () => {
+                const saveMode = (mode) => {
                     const pathNow = location.pathname;
-                    const keyNow = (pathNow === '/' && window.__cgptPendingToken)
-                        ? `/${window.__cgptPendingToken}`
-                        : pathNow;
-                    const next = !(window.__cgptPromptTogglePerPath[keyNow] !== false);
-                    window.__cgptPromptTogglePerPath[keyNow] = next;
+                    const keyNow = (pathNow === '/' && window.__cgptPendingToken) ? `/${window.__cgptPendingToken}` : pathNow;
+                    window.__cgptPromptTogglePerPath[keyNow] = mode;
                     try {
                         sessionStorage.setItem('cgptPromptToggle', JSON.stringify(window.__cgptPromptTogglePerPath));
                     } catch {
                     }
-                    render(next);
                 };
+
+                const setMode = (mode) => {
+                    render(mode);
+                    saveMode(mode);
+                };
+
+                const map = window.__cgptPromptTogglePerPath || {};
+                const initMode = readMode(map[key]);
+                render(initMode);
+
+                sw.addEventListener('click', (e) => {
+                    if (e.target !== sw) return;   // 三分段按钮已单独处理
+                    const pathNow = location.pathname;
+                    const keyNow = (pathNow === '/' && window.__cgptPendingToken) ? `/${window.__cgptPendingToken}` : pathNow;
+                    const cur = readMode(window.__cgptPromptTogglePerPath[keyNow]);
+                    setMode((cur + 1) % 3);
+                });
 
 
                 box.append(label, sw);
@@ -431,10 +471,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const header = findChatsHeader(root);
                 if (!header) return;
 
-// 仅作用于“Chats”分区：其外层 aside[aria-labelledby]
                 const scope = header.closest('aside[aria-labelledby]') || root;
 
-// 初始折叠类挂到 scope，而非整个 nav/#history
                 const collapsed = loadCollapsed();
                 scope.classList.toggle('__cgpt-chats-collapsed', collapsed);
 
@@ -2603,7 +2641,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             enableAttachStripScroll();
 
 
-
             const attachObs = observers.add(new MutationObserver(() => enableAttachStripScroll()));
             attachObs.observe(document.body, {childList: true, subtree: true});
 
@@ -3739,83 +3776,77 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }
                 }
 
-                if (injectNow && mainPrompt) {
+                if (injectNow && (groupPrompt || inputPrompt)) {
                     qsa('p', ed).forEach((p, i, arr) => {
                         const txt = p.innerText.trim();
                         if ((txt === groupPrompt || txt === inputPrompt) && i !== arr.length - 1) p.remove();
                     });
                 }
-                const toggles = window.__cgptPromptTogglePerPath || {};
-                const toggleOn = toggles[counterKey] !== false;
 
-                // 若本次需要注入 prompt（组内、输入框二者合并）
-                if (injectNow && mainPrompt && toggleOn) {
+                // 读取三段式模式：0=全开,1=禁组内,2=全关；兼容旧布尔
+                const toggles = window.__cgptPromptTogglePerPath || {};
+                const raw = toggles[counterKey];
+                const mode = (typeof raw === 'number') ? Math.min(2, Math.max(0, raw)) : (raw === false ? 2 : 0);
+
+                const allowGroup = (mode === 0);
+                const allowStyle = (mode === 0 || mode === 1);
+
+                // 计算本次允许注入的两类 prompt
+                const gpAllowed = allowGroup ? groupPrompt : '';
+                const inAllowed = allowStyle ? inputPrompt : '';
+
+                if (injectNow && (gpAllowed || inAllowed)) {
                     qsa('p', ed).forEach((p, i, arr) => {
                         const txt = p.innerText.trim();
                         if ((txt === groupPrompt || txt === inputPrompt || txt === 'Task content:') && i !== arr.length - 1) p.remove();
                     });
+
                     const frag = document.createDocumentFragment();
                     const gp = document.createElement('p');
 
-                    let merged = mainPrompt;
-                    if (groupPrompt && inputPrompt) {
+                    let merged = gpAllowed || inAllowed;
+                    if (gpAllowed && inAllowed) {
                         const clean = s => String(s).replace(/^※+/, '').replace(/※+$/, '').trim();
-                        const left = clean(inputPrompt).replace(/[;；:。!? \t]+$/, '');
-                        const right = clean(groupPrompt).replace(/^[;；:。!? \t]+/, '');
+                        const left = clean(inAllowed).replace(/[;；:。!? \t]+$/, '');
+                        const right = clean(gpAllowed).replace(/^[;；:。!? \t]+/, '');
                         const inner = left && right ? `${left}; ${right}` : (left || right);
                         merged = `※${inner}※`;
                     }
 
+                    // 仅当允许 Use style 才可能前置 “Switch style:”
                     try {
                         const localPending = sessionStorage.getItem('cgptPromptStyleSwitchPending') === '1';
-
                         let crossShouldPrepend = false;
-                        const token = sessionStorage.getItem('cgptPromptStyleCrossToken'); // ← 周期 token 是否存在
+                        const token = sessionStorage.getItem('cgptPromptStyleCrossToken');
                         if (token) {
                             const here = location.pathname || '';
                             const last = sessionStorage.getItem('cgptCrossLastPath') || '';
-                            if (here.startsWith('/c/') && last.startsWith('/c/') && here !== last) {
-                                crossShouldPrepend = true;
-                            }
+                            if (here.startsWith('/c/') && last.startsWith('/c/') && here !== last) crossShouldPrepend = true;
                             try {
                                 sessionStorage.setItem('cgptCrossLastPath', here);
                             } catch {
                             }
                         }
-
-                        // 仅在“已有会话（/c/）”里才前置那句英文提示；新建对话页（/）不加
                         const isExistingChat = location.pathname.startsWith('/c/');
-
-                        if ((localPending || crossShouldPrepend) && isExistingChat) {
-                            const prepend = 'Switch style:';
+                        if (allowStyle && (localPending || crossShouldPrepend) && isExistingChat) {
                             const inner = String(merged).replace(/^※+/, '').replace(/※+$/, '');
-                            merged = `※${prepend}${inner}※`;
-
-                            if (localPending) {
-                                sessionStorage.removeItem('cgptPromptStyleSwitchPending'); // 本会话一次性仍然只用一次
-                            }
+                            merged = `※Switch style:${inner}※`;
+                            if (localPending) sessionStorage.removeItem('cgptPromptStyleSwitchPending');
                         }
                     } catch {
                     }
 
-
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
                     if (mergedClean) {
-                        // 新增：在修改 DOM 前先判断“是否已有用户文本”
                         const hadUserText = ((ed.innerText || '').trim().length > 0);
-
                         gp.textContent = merged;
                         frag.appendChild(gp);
-
-                        // 修改：只有当“已有用户文本”时，才插入 Task content:
                         if (hadUserText) {
                             const tc = document.createElement('p');
                             tc.textContent = 'Task content:';
                             frag.appendChild(tc);
                         }
-
-                        ed.prepend(frag);
-                        changed = true;
+                        ed.appendChild(frag);
                     }
                 }
 
