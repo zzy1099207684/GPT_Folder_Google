@@ -3739,7 +3739,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     : '';
 
                 const inputPrompt = sessionPrompt;                   // 输入框设置的 prompt（可能为空）
-                const mainPrompt = groupPrompt || inputPrompt;       // 至少保证注入其一
 
                 // 会话级 prompt 默认每轮都注入；否则沿用分组的间隔设置（默认 3）
                 const gap = sessionPrompt
