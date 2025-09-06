@@ -2617,17 +2617,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const s = document.createElement('style');
                     s.id = STYLE_ID;
                     s.textContent = `
-      form[data-type="unified-composer"] .cgpt-attach-strip{
-        overflow-x:auto !important;
-        -ms-overflow-style:auto;
-        scrollbar-width:auto;
-        scrollbar-gutter: stable both-edges;
-        overscroll-behavior-inline: contain;
-      }
-      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar{height:8px}
-      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.35);border-radius:8px}
-      form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-track{background:transparent}
-    `;
+                          form[data-type="unified-composer"] .cgpt-attach-strip{
+                            overflow-x:auto !important;
+                            -ms-overflow-style:auto;
+                            scrollbar-width:auto;
+                            scrollbar-gutter: stable both-edges;
+                            overscroll-behavior-inline: contain;
+                          }
+                          form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar{height:8px}
+                          form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.35);border-radius:8px}
+                          form[data-type="unified-composer"] .cgpt-attach-strip::-webkit-scrollbar-track{background:transparent}
+                        `;
                     document.head.appendChild(s);
                 }
                 // 选择并标记附件容器；去掉隐藏滚动条的类
