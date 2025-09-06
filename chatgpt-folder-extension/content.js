@@ -3838,7 +3838,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
                     if (mergedClean) {
-                        const hadUserText = ((ed.innerText || '').trim().length > 0);
+                        const hadUserText = ((ed.innerText || '').trim().length > 0); // 可留可删
                         gp.textContent = merged;
                         frag.appendChild(gp);
                         if (hadUserText) {
@@ -3846,7 +3846,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             tc.textContent = 'Task content:';
                             frag.appendChild(tc);
                         }
-                        ed.appendChild(frag);
+                        ed.insertBefore(frag, ed.firstChild);
                     }
                 }
 
