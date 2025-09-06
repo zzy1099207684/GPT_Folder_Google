@@ -2639,6 +2639,62 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 enqueueIdleTask(chunk);
             }
 
+            /* === NEW: 跨窗口实时同步（多窗口 A->B 实时看到新会话；不同步组开合） === */
+            (() => {
+                if (!chrome?.storage?.onChanged) return;
+                let syncTimer = null;
+
+                // 认为是“UI 折叠/展开状态”的键或字段名（黑名单）
+                const UI_STATE_KEYS = new Set([
+                    '__showAll', 'expanded', 'collapsed', 'open', 'folded',
+                    'folderShowAll', 'expandedFolders', 'folderOpenState', 'uiState'
+                ]);
+                const isUiStateKey = (k) => UI_STATE_KEYS.has(k) || k?.startsWith('_ui');
+
+                // 深度剔除对象中的 UI 折叠态字段，确保仅以“数据变化”作为重绘依据
+                function stripUiState(value) {
+                    if (value == null || typeof value !== 'object') return value;
+                    if (Array.isArray(value)) return value.map(stripUiState);
+                    const out = {};
+                    for (const [k, v] of Object.entries(value)) {
+                        if (isUiStateKey(k)) continue;
+                        out[k] = stripUiState(v);
+                    }
+                    return out;
+                }
+
+                chrome.storage.onChanged.addListener((changes, area) => {
+                    if (area !== 'sync') return;
+
+                    // 仅关心分组数据键，不把 UI 折叠态键当作触发条件
+                    const interesting = Object.keys(changes).some(k =>
+                        !isUiStateKey(k) && (k === 'folderKeys' || k === 'folderGaps' || k === 'folderOrder' || k.startsWith('f_'))
+                    );
+                    if (!interesting) return;
+
+                    clearTimeout(syncTimer);
+                    syncTimer = setTimeout(async () => {
+                        try {
+                            const latest = await storage.get('folders');
+                            if (!latest) return;
+
+                            // 比较时忽略 UI 折叠/展开字段，避免“组开合”引发跨窗重绘
+                            const curSan = JSON.stringify(stripUiState(folders || {}));
+                            const nxtSan = JSON.stringify(stripUiState(latest || {}));
+                            if (curSan === nxtSan) return;
+
+                            // 仅在“数据变化”时更新并重绘；不开合同步
+                            folders = latest;
+
+                            render();
+                            if (typeof highlightActive === 'function') highlightActive();
+                        } catch (e) {
+                            console.warn('[Bookmark] cross-window sync failed:', e);
+                        }
+                    }, 120);
+                });
+            })();
+
 
             /* ---------- 文件夹渲染 ---------- */
             function renderFolder(fid, f) {
