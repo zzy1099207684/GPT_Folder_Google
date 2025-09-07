@@ -681,6 +681,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 // 设置容器宽度
                 container.style.width = 'auto';
+                container.style.height = 'auto';
                 container.style.minWidth = 'auto';
                 container.style.maxWidth = 'auto';
                 container.style.overflow = 'hidden'; // 防止容器本身出现滚动条
@@ -691,12 +692,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     gridContainer.style.width = '100%';
                     gridContainer.style.maxWidth = '100%';
                     gridContainer.style.minWidth = 'unset'; // 移除最小宽度限制
+                    gridContainer.style.height = 'auto';
                     gridContainer.style.overflow = 'hidden';
                 }
 
                 // 处理 textarea
                 const textarea = container.querySelector('textarea');
                 if (textarea) {
+                    textarea.style.height = 'auto+100px'; // 固定高度，避免过高
                     textarea.style.width = '100%';
                     textarea.style.maxWidth = '100%';
                     textarea.style.minWidth = 'unset'; // 移除最小宽度限制
