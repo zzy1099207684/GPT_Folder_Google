@@ -90,14 +90,20 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             // 非组内会话也显示开关
             const path = location.pathname;
             let box = form.querySelector('#cgpt-prompt-toggle');
-            // 去掉隐藏早退分支，始终渲染
 
-            // 去掉隐藏早退分支，始终渲染
-
-
-            // 计算与发送前计数器一致的 key（根路径首条消息用临时 token 键）
             const key = (path === '/' && window.__cgptPendingToken)
                 ? `/${window.__cgptPendingToken}` : path;
+
+            if (path === '/' && window.__cgptPendingToken) {
+                const toggles = window.__cgptPromptTogglePerPath || {};
+                if (toggles[key] === undefined) {
+                    toggles[key] = 0; // 0=全开
+                    try {
+                        sessionStorage.setItem('cgptPromptToggle', JSON.stringify(toggles));
+                    } catch {}
+                    window.__cgptPromptTogglePerPath = toggles;
+                }
+            }
 
             function placeBox(b) {
                 try {
@@ -185,14 +191,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 ['L', 'M', 'R'].forEach((k, i) => {
                     const seg = document.createElement('button');
                     seg.type = 'button';
-                    seg.setAttribute('aria-label', i === 0 ? 'all on' : (i === 1 ? 'half off' : 'all off'));
+                    // 反转 aria 标签
+                    seg.setAttribute('aria-label', i === 0 ? 'all off' : (i === 1 ? 'half off' : 'all on'));
                     seg.style.cssText = [
                         'position:absolute', 'top:0', 'bottom:0',
                         `left:${i * 18}px`, 'width:18px', 'border:none', 'background:transparent', 'cursor:pointer'
                     ].join(';');
                     seg.onclick = (e) => {
                         e.stopPropagation();
-                        setMode(i); // 0/1/2
+                        setMode(2 - i); // 方向反转：L->2, M->1, R->0
                     };
                     sw.appendChild(seg);
                 });
@@ -205,9 +212,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 const render = (mode) => {
                     sw.dataset.mode = String(mode);
-                    // 背景色：0 绿、1 灰、2 深灰
                     sw.style.background = (mode === 0) ? '#10a37f' : (mode === 1 ? '#888' : '#666');
-                    knob.style.left = (mode === 0) ? '2px' : (mode === 1 ? '19px' : '36px');
+                    knob.style.left = (mode === 0) ? '36px' : (mode === 1 ? '19px' : '2px');
                 };
 
                 const saveMode = (mode) => {
@@ -2217,11 +2223,23 @@ ${SEL} textarea{
                     if (z && countGroups(z) > 0) armed = true;
                 };
 
-                const reloadOnce = () => {
+                function softReset() {
                     if (reloading) return;
                     reloading = true;
-                    location.reload();
-                };
+                    try {
+                        document.getElementById('cgpt-bookmarks-wrapper')?.remove();
+                        window.observers?.disconnectAll?.();
+                    } catch {}
+                    const hist =
+                        document.querySelector('div#history') ||
+                        document.querySelector('nav[aria-label="Chat history"]');
+                    const idle = window.enqueueIdleTask ?? (fn => setTimeout(fn, 0));
+                    if (hist && window.initBookmarks) {
+                        idle(() => { try { window.initBookmarks(hist); } finally { reloading = false; } });
+                    } else {
+                        reloading = false;
+                    }
+                }
 
                 // 新增：统一的“2秒后仍缺失才刷新”调度器
                 const cancelConfirm = () => {
@@ -2234,10 +2252,8 @@ ${SEL} textarea{
                     cancelConfirm();
                     missingTimer = setTimeout(() => {
                         try {
-                            if (predicate()) reloadOnce();
-                        } finally {
-                            missingTimer = null;
-                        }
+                            if (predicate()) softReset();
+                        } finally { missingTimer = null; }
                     }, 1500);
                 };
 
@@ -2269,7 +2285,6 @@ ${SEL} textarea{
                     mo.observe(z, {childList: true});
                 };
 
-                // 兜底：wrapper 自身被移除也采用“2秒确认后再刷新”
                 const moBody = new MutationObserver(() => {
                     const stillMissingWrapper = () => !document.querySelector('#cgpt-bookmarks-wrapper');
                     if (stillMissingWrapper()) {
@@ -2278,7 +2293,7 @@ ${SEL} textarea{
                         cancelConfirm();
                     }
                 });
-                moBody.observe(document.body, {childList: true, subtree: true});
+                moBody.observe(document.body, { childList: true, subtree: true });
 
                 // 初次尝试启动；若 zone 尚未就绪，短暂轮询几次
                 start();
