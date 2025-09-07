@@ -1415,7 +1415,7 @@ ${SEL} textarea{
                 if (docMo) return;
 
                 const checkAndRemount = (root) => {
-                    // 仅当新的容器节点出现时才重挂
+                    // 仅当新的 容器节点出现时才重挂
                     // 1) root 自身就是目标
                     if (root?.nodeType === 1 && root.id === CONTAINER_ID) {
                         mountOn(root);
