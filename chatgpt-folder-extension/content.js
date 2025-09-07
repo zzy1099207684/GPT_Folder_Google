@@ -674,9 +674,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }, true);
         })();
         // === NEW END ===
+        // === NEW END ===
         (function fixTextareaWidthInit() {
+            const SEL = '.bg-token-main-surface-tertiary.rounded-3xl';
+            let ro = null;            // ResizeObserver
+            let mo = null;            // 局部 MutationObserver
+            let docMo = null;         // 仅用于“等待容器出现/被替换时”临时监听
+            let target = null;        // 当前监听的容器
+            let rafFlag = false;
+
             function fixTextareaWidth() {
-                const container = document.querySelector('.bg-token-main-surface-tertiary.rounded-3xl');
+                const container = document.querySelector(SEL);
                 if (!container) return;
 
                 // 设置容器宽度
@@ -684,14 +692,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 container.style.height = 'auto';
                 container.style.minWidth = 'auto';
                 container.style.maxWidth = 'auto';
-                container.style.overflow = 'hidden'; // 防止容器本身出现滚动条
+                container.style.overflow = 'hidden';
 
                 // 处理 grid 容器
                 const gridContainer = container.querySelector('.grid');
                 if (gridContainer) {
                     gridContainer.style.width = '100%';
                     gridContainer.style.maxWidth = '100%';
-                    gridContainer.style.minWidth = 'unset'; // 移除最小宽度限制
+                    gridContainer.style.minWidth = 'unset';
                     gridContainer.style.height = 'auto';
                     gridContainer.style.overflow = 'hidden';
                 }
@@ -699,28 +707,28 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 // 处理 textarea
                 const textarea = container.querySelector('textarea');
                 if (textarea) {
-                    textarea.style.height = 'auto+100px'; // 固定高度，避免过高
+                    // 保持原有设置，不改行为
+                    textarea.style.height = 'auto+100px';
                     textarea.style.width = '100%';
                     textarea.style.maxWidth = '100%';
-                    textarea.style.minWidth = 'unset'; // 移除最小宽度限制
-                    textarea.style.boxSizing = 'border-box'; // 确保 padding 包含在宽度内
-                    textarea.style.resize = 'vertical'; // 只允许垂直调整大小
-                    textarea.style.overflowX = 'hidden'; // 隐藏横向滚动条
-                    textarea.style.overflowY = 'auto'; // 保持垂直滚动
+                    textarea.style.minWidth = 'unset';
+                    textarea.style.boxSizing = 'border-box';
+                    textarea.style.resize = 'vertical';
+                    textarea.style.overflowX = 'hidden';
+                    textarea.style.overflowY = 'auto';
                     textarea.style.whiteSpace = 'pre-wrap';
                     textarea.style.wordBreak = 'break-word';
                     textarea.style.wordWrap = 'break-word';
                     textarea.style.overflowWrap = 'break-word';
                 }
 
-                // 处理 span（可能是用于显示的元素）
+                // 处理 span（仅当父级是目标容器或其 grid）
                 const spans = container.querySelectorAll('span');
                 spans.forEach(span => {
-                    // 只处理直接相关的 span，避免影响其他元素
                     if (span.parentElement === gridContainer || span.parentElement === container) {
                         span.style.width = '100%';
                         span.style.maxWidth = '100%';
-                        span.style.minWidth = 'unset'; // 移除最小宽度限制
+                        span.style.minWidth = 'unset';
                         span.style.display = 'inline-block';
                         span.style.whiteSpace = 'pre-wrap';
                         span.style.wordBreak = 'break-word';
@@ -730,7 +738,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }
                 });
 
-                // 处理可能存在的内部 div 容器
+                // 处理内部 div 溢出
                 const innerDivs = container.querySelectorAll('div');
                 innerDivs.forEach(div => {
                     if (div.scrollWidth > div.clientWidth) {
@@ -741,14 +749,90 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 });
             }
 
-            // 初次执行
-            requestIdleCallback ? requestIdleCallback(fixTextareaWidth) : setTimeout(fixTextareaWidth, 100);
+            // rAF 合帧，避免同帧多次执行
+            function schedule() {
+                if (rafFlag) return;
+                rafFlag = true;
+                requestAnimationFrame(() => {
+                    rafFlag = false;
+                    fixTextareaWidth();
+                });
+            }
 
-            // 动态监听
-            const mo = new MutationObserver(() => fixTextareaWidth());
-            mo.observe(document.body, {childList: true, subtree: true});
-            try { window.observers?.add?.(mo); } catch {}
+            function teardown() {
+                try { ro && ro.disconnect(); } catch {}
+                try { mo && mo.disconnect(); } catch {}
+                try { docMo && docMo.disconnect(); } catch {}
+                ro = mo = docMo = null;
+                target = null;
+            }
+
+            function startOn(container) {
+                if (!container) return;
+                if (target === container && ro && mo) { schedule(); return; }
+
+                teardown();
+                target = container;
+
+                // 首次执行
+                (window.requestIdleCallback || (cb => setTimeout(cb, 100)))(schedule);
+
+                // 仅监听目标容器与其 grid 尺寸变化
+                ro = new ResizeObserver(() => schedule());
+                ro.observe(container);
+                const grid = container.querySelector('.grid');
+                if (grid) ro.observe(grid);
+
+                // 仅监听目标容器的结构变更（新增 textarea 等）
+                mo = new MutationObserver(() => schedule());
+                mo.observe(container, { childList: true, subtree: true });
+
+                // 纳入全局清理
+                try { window.observers?.add?.(ro); } catch {}
+                try { window.observers?.add?.(mo); } catch {}
+            }
+
+            function waitForContainerOnce() {
+                if (docMo) return;
+                docMo = new MutationObserver(muts => {
+                    if (target && target.isConnected) return;             // 已有目标且仍在文档中
+                    for (const m of muts) {
+                        for (const n of m.addedNodes || []) {
+                            if (n.nodeType === 1) {
+                                const c = n.matches?.(SEL) ? n : n.querySelector?.(SEL);
+                                if (c) {
+                                    startOn(c);
+                                    try { docMo.disconnect(); } catch {}
+                                    docMo = null;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                });
+                docMo.observe(document.body, { childList: true, subtree: true });
+                try { window.observers?.add?.(docMo); } catch {}
+            }
+
+            // 启动：优先绑定到现有容器；若容器稍后出现则临时监听一次
+            const boot = () => {
+                const c = document.querySelector(SEL);
+                if (c) startOn(c);
+                else waitForContainerOnce();
+            };
+
+            if (document.readyState === 'complete') {
+                (window.requestIdleCallback || (cb => setTimeout(cb, 100)))(boot);
+            } else {
+                window.addEventListener('load', () => (
+                    window.requestIdleCallback || (cb => setTimeout(cb, 100))
+                )(boot), { once: true, passive: true });
+            }
+
+            // 页面离开时清理
+            window.addEventListener('beforeunload', teardown, { passive: true });
         })();
+
         window.addEventListener('pagehide', () => {
             try {
                 observers.disconnectAll();
