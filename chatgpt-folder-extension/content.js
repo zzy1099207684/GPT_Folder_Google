@@ -674,27 +674,46 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }, true);
         })();
         // === NEW END ===
-        // === NEW END ===
         (function fixTextareaWidthInit() {
             const SEL = '.bg-token-main-surface-tertiary.rounded-3xl';
-            let ro = null;            // ResizeObserver
-            let mo = null;            // 局部 MutationObserver
-            let docMo = null;         // 仅用于“等待容器出现/被替换时”临时监听
-            let target = null;        // 当前监听的容器
+            let ro = null;
+            let mo = null;
+            let docMo = null;   // 改为“常驻”文档观察者
+            let target = null;
             let rafFlag = false;
+
+            /* [新增，仅此处插入，便于定位]
+               放在函数顶部，注入一次性样式，抵抗组件重渲染对内联样式的覆盖 */
+            const STYLE_ID = 'cgpt-textarea-fix-style';
+            function ensureTextareaFixStyle() {
+                if (document.getElementById(STYLE_ID)) return;
+                const s = document.createElement('style');
+                s.id = STYLE_ID;
+                s.textContent = `
+${SEL}, ${SEL} .grid { width:100%!important; max-width:100%!important; min-width:0!important; overflow:hidden; }
+${SEL} textarea{
+  width:100%!important; max-width:100%!important; min-width:0!important; box-sizing:border-box!important;
+  overflow-x:hidden!important; overflow-y:auto; white-space:pre-wrap; word-break:break-word; overflow-wrap:break-word;
+  resize:vertical; min-height:140px; height:auto!important;
+}`;
+                document.head.appendChild(s);
+            }
 
             function fixTextareaWidth() {
                 const container = document.querySelector(SEL);
                 if (!container) return;
 
-                // 设置容器宽度
+                // 一次性样式确保即便组件替换也生效
+                ensureTextareaFixStyle();
+
+                // 容器
                 container.style.width = 'auto';
                 container.style.height = 'auto';
                 container.style.minWidth = 'auto';
                 container.style.maxWidth = 'auto';
                 container.style.overflow = 'hidden';
 
-                // 处理 grid 容器
+                // grid
                 const gridContainer = container.querySelector('.grid');
                 if (gridContainer) {
                     gridContainer.style.width = '100%';
@@ -704,11 +723,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     gridContainer.style.overflow = 'hidden';
                 }
 
-                // 处理 textarea
+                // textarea
                 const textarea = container.querySelector('textarea');
                 if (textarea) {
-                    // 保持原有设置，不改行为
-                    textarea.style.height = 'auto+100px';
+                    // 关键修正：取消固定高度，采用 auto + min-height，避免跳变与还原
+                    textarea.style.height = '';                 // ← 改动：移除固定高度
+                    textarea.style.minHeight = '140px';         // ← 改动：统一最小高度
+
                     textarea.style.width = '100%';
                     textarea.style.maxWidth = '100%';
                     textarea.style.minWidth = 'unset';
@@ -722,7 +743,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     textarea.style.overflowWrap = 'break-word';
                 }
 
-                // 处理 span（仅当父级是目标容器或其 grid）
+                // 其余保持不变（spans、innerDivs 逻辑原样）
                 const spans = container.querySelectorAll('span');
                 spans.forEach(span => {
                     if (span.parentElement === gridContainer || span.parentElement === container) {
@@ -732,93 +753,79 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         span.style.display = 'inline-block';
                         span.style.whiteSpace = 'pre-wrap';
                         span.style.wordBreak = 'break-word';
-                        span.style.wordWrap = 'break-word';
                         span.style.overflowWrap = 'break-word';
                         span.style.overflow = 'hidden';
+                        span.style.height = 'auto';
                     }
                 });
 
-                // 处理内部 div 溢出
                 const innerDivs = container.querySelectorAll('div');
                 innerDivs.forEach(div => {
                     if (div.scrollWidth > div.clientWidth) {
                         div.style.overflowX = 'hidden';
                         div.style.maxWidth = '100%';
                         div.style.wordBreak = 'break-word';
+                        div.style.height = 'auto';
                     }
                 });
             }
 
-            // rAF 合帧，避免同帧多次执行
             function schedule() {
                 if (rafFlag) return;
                 rafFlag = true;
-                requestAnimationFrame(() => {
-                    rafFlag = false;
-                    fixTextareaWidth();
-                });
+                requestAnimationFrame(() => { rafFlag = false; fixTextareaWidth(); });
             }
 
-            function teardown() {
-                try { ro && ro.disconnect(); } catch {}
-                try { mo && mo.disconnect(); } catch {}
-                try { docMo && docMo.disconnect(); } catch {}
-                ro = mo = docMo = null;
-                target = null;
-            }
-
+            // 改动点：startOn 不再调用 teardown()，避免误断开文档级观察者
             function startOn(container) {
                 if (!container) return;
                 if (target === container && ro && mo) { schedule(); return; }
 
-                teardown();
+                try { ro && ro.disconnect(); } catch {}
+                try { mo && mo.disconnect(); } catch {}
+                ro = mo = null;
+
                 target = container;
 
-                // 首次执行
                 (window.requestIdleCallback || (cb => setTimeout(cb, 100)))(schedule);
 
-                // 仅监听目标容器与其 grid 尺寸变化
                 ro = new ResizeObserver(() => schedule());
                 ro.observe(container);
                 const grid = container.querySelector('.grid');
                 if (grid) ro.observe(grid);
 
-                // 仅监听目标容器的结构变更（新增 textarea 等）
                 mo = new MutationObserver(() => schedule());
                 mo.observe(container, { childList: true, subtree: true });
 
-                // 纳入全局清理
                 try { window.observers?.add?.(ro); } catch {}
                 try { window.observers?.add?.(mo); } catch {}
             }
 
-            function waitForContainerOnce() {
+            // 改动点：文档观察者常驻，任何新增/替换都会重绑
+            function ensureDocWatcher() {
                 if (docMo) return;
-                docMo = new MutationObserver(muts => {
-                    if (target && target.isConnected) return;             // 已有目标且仍在文档中
-                    for (const m of muts) {
-                        for (const n of m.addedNodes || []) {
-                            if (n.nodeType === 1) {
-                                const c = n.matches?.(SEL) ? n : n.querySelector?.(SEL);
-                                if (c) {
-                                    startOn(c);
-                                    try { docMo.disconnect(); } catch {}
-                                    docMo = null;
-                                    return;
-                                }
-                            }
-                        }
-                    }
+                let pending = false;
+                const check = () => {
+                    pending = false;
+                    const c = document.querySelector(SEL);
+                    // 容器被替换或当前目标已离文档时，立即重绑
+                    if (c && c !== target) startOn(c);
+                    if (target && !target.isConnected && c) startOn(c);
+                };
+                docMo = new MutationObserver(() => {
+                    if (pending) return;
+                    pending = true;
+                    requestAnimationFrame(check);
                 });
                 docMo.observe(document.body, { childList: true, subtree: true });
                 try { window.observers?.add?.(docMo); } catch {}
             }
 
-            // 启动：优先绑定到现有容器；若容器稍后出现则临时监听一次
             const boot = () => {
+                ensureTextareaFixStyle();   // 提前注入样式
+                ensureDocWatcher();         // 常驻监听容器替换
                 const c = document.querySelector(SEL);
                 if (c) startOn(c);
-                else waitForContainerOnce();
             };
 
             if (document.readyState === 'complete') {
@@ -829,9 +836,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 )(boot), { once: true, passive: true });
             }
 
-            // 页面离开时清理
+            function teardown() {
+                try { ro && ro.disconnect(); } catch {}
+                try { mo && mo.disconnect(); } catch {}
+                try { docMo && docMo.disconnect(); } catch {}
+                ro = mo = docMo = null;
+                target = null;
+            }
             window.addEventListener('beforeunload', teardown, { passive: true });
         })();
+
 
         window.addEventListener('pagehide', () => {
             try {
@@ -5048,7 +5062,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             function wrap(el) {
                 if (!el || el.dataset.promptWrapped) return;
-                const raw = el.innerText;
+                const raw = el.innerText || '';
                 const hit = raw.match(REG);
                 if (!hit) return;
 
@@ -5060,7 +5074,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const pre = document.createElement('pre');
                 pre.className = 'overflow-x-auto';
                 const code = document.createElement('code');
-                code.textContent = prompt.slice(1, -1)
+                code.innerText = prompt.slice(1, -1)
                 pre.appendChild(code);
                 el.appendChild(pre);
                 if (rest) el.appendChild(document.createTextNode(rest));
