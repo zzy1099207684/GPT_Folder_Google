@@ -3592,7 +3592,7 @@ ${SEL} textarea{
             function renderChat(parentUl, fid, chat) {
                 const li = document.createElement('li');
                 li.draggable = true;
-                li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin:2px 0;cursor:grab';
+                li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin:0;cursor:pointer';
 
                 if (chat.pinned) {
                     const pin = document.createElement('span');
