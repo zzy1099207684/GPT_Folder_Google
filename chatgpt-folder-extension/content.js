@@ -674,7 +674,78 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }, true);
         })();
         // === NEW END ===
+        (function fixTextareaWidthInit() {
+            function fixTextareaWidth() {
+                const container = document.querySelector('.bg-token-main-surface-tertiary.rounded-3xl');
+                if (!container) return;
 
+                // 设置容器宽度
+                container.style.width = 'auto';
+                container.style.minWidth = 'auto';
+                container.style.maxWidth = 'auto';
+                container.style.overflow = 'hidden'; // 防止容器本身出现滚动条
+
+                // 处理 grid 容器
+                const gridContainer = container.querySelector('.grid');
+                if (gridContainer) {
+                    gridContainer.style.width = '100%';
+                    gridContainer.style.maxWidth = '100%';
+                    gridContainer.style.minWidth = 'unset'; // 移除最小宽度限制
+                    gridContainer.style.overflow = 'hidden';
+                }
+
+                // 处理 textarea
+                const textarea = container.querySelector('textarea');
+                if (textarea) {
+                    textarea.style.width = '100%';
+                    textarea.style.maxWidth = '100%';
+                    textarea.style.minWidth = 'unset'; // 移除最小宽度限制
+                    textarea.style.boxSizing = 'border-box'; // 确保 padding 包含在宽度内
+                    textarea.style.resize = 'vertical'; // 只允许垂直调整大小
+                    textarea.style.overflowX = 'hidden'; // 隐藏横向滚动条
+                    textarea.style.overflowY = 'auto'; // 保持垂直滚动
+                    textarea.style.whiteSpace = 'pre-wrap';
+                    textarea.style.wordBreak = 'break-word';
+                    textarea.style.wordWrap = 'break-word';
+                    textarea.style.overflowWrap = 'break-word';
+                }
+
+                // 处理 span（可能是用于显示的元素）
+                const spans = container.querySelectorAll('span');
+                spans.forEach(span => {
+                    // 只处理直接相关的 span，避免影响其他元素
+                    if (span.parentElement === gridContainer || span.parentElement === container) {
+                        span.style.width = '100%';
+                        span.style.maxWidth = '100%';
+                        span.style.minWidth = 'unset'; // 移除最小宽度限制
+                        span.style.display = 'inline-block';
+                        span.style.whiteSpace = 'pre-wrap';
+                        span.style.wordBreak = 'break-word';
+                        span.style.wordWrap = 'break-word';
+                        span.style.overflowWrap = 'break-word';
+                        span.style.overflow = 'hidden';
+                    }
+                });
+
+                // 处理可能存在的内部 div 容器
+                const innerDivs = container.querySelectorAll('div');
+                innerDivs.forEach(div => {
+                    if (div.scrollWidth > div.clientWidth) {
+                        div.style.overflowX = 'hidden';
+                        div.style.maxWidth = '100%';
+                        div.style.wordBreak = 'break-word';
+                    }
+                });
+            }
+
+            // 初次执行
+            requestIdleCallback ? requestIdleCallback(fixTextareaWidth) : setTimeout(fixTextareaWidth, 100);
+
+            // 动态监听
+            const mo = new MutationObserver(() => fixTextareaWidth());
+            mo.observe(document.body, {childList: true, subtree: true});
+            try { window.observers?.add?.(mo); } catch {}
+        })();
         window.addEventListener('pagehide', () => {
             try {
                 observers.disconnectAll();
