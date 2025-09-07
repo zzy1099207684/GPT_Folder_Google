@@ -3351,6 +3351,33 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const ul = document.createElement('ul');
                 ul.style.cssText = `list-style:none;padding-left:8px;margin:4px 0 0;${f.collapsed ? 'display:none' : ''}`;
 
+                // 在 renderFolder 里 ul 创建完成后追加：
+                ul.addEventListener('dragover', e => {
+                    e.preventDefault();          // 必须，否则 drop 不触发
+                    e.dataTransfer.dropEffect = 'move';
+                });
+
+                ul.addEventListener('drop', e => {
+                    e.preventDefault();
+                    const srcIdx = +e.dataTransfer.getData('chatIdx');
+                    const srcFid = e.dataTransfer.getData('fid');
+                    if (srcFid !== fid) return;          // 只允许组内互换
+                    const tgtLi = e.target.closest('li');
+                    if (!tgtLi || tgtLi === ul.children[srcIdx]) return;
+                    const tgtIdx = Array.from(ul.children).indexOf(tgtLi);
+                    if (tgtIdx < 0) return;
+
+                    // 数组层面互换
+                    const chats = folders[fid].chats;
+                    [chats[srcIdx], chats[tgtIdx]] = [chats[tgtIdx], chats[srcIdx]];
+
+                    // DOM 层面互换（无闪烁）
+                    ul.insertBefore(ul.children[srcIdx], tgtIdx > srcIdx ? tgtLi.nextSibling : tgtLi);
+
+                    // 持久化
+                    safeSendMessage({ type: 'save-folders', data: folders });
+                });
+
                 if (!f.collapsed && f.chats.length) {
                     const MAX_VISIBLE = 10;                                       // 超出条数触发折叠
                     const chatsForRender = [...f.chats].sort((a, b) =>
@@ -3478,7 +3505,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             /* ---------- 聊天渲染 ---------- */
             function renderChat(parentUl, fid, chat) {
                 const li = document.createElement('li');
-                li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin:2px 0';
+                li.draggable = true;
+                li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin:2px 0;cursor:grab';
 
                 if (chat.pinned) {
                     const pin = document.createElement('span');
@@ -3696,7 +3724,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 };
                 li.append(link, del);
 
-
+                li.addEventListener('dragstart', ev => {
+                    ev.dataTransfer.effectAllowed = 'move';
+                    // 携带本 chat 在数组中的索引
+                    const idx = Array.from(parentUl.children).indexOf(li);
+                    ev.dataTransfer.setData('chatIdx', idx);
+                    ev.dataTransfer.setData('fid', fid);
+                    li.style.opacity = '0.4';
+                });
+                li.addEventListener('dragend', () => { li.style.opacity = ''; });
                 parentUl.appendChild(li);
 
 
