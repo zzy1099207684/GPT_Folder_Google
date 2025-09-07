@@ -320,7 +320,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     ? `/${window.__cgptPendingToken}` : path;
                 const map = window.__cgptPromptTogglePerPath || {};
                 const on = map[keyNow] !== false;
-                const sw = box.querySelector('.cgpt-switch');
+                const sw = box.querySelector('.cgpt-switch-3');
                 const knob = sw?.firstElementChild;
                 if (sw && knob) {
                     sw.setAttribute('aria-pressed', String(!!on));
@@ -5159,35 +5159,43 @@ ${SEL} textarea{
         })();
 
     })();
-// ==== event-loop stall monitor (NEW) ====
-    (function monitorEventLoop(interval = 10_000, threshold = 500, cooldown = 30_000) {
+    (function monitorEventLoop(interval = 10_000, threshold = 5_000, cooldown = 60_000) {
         if (window.__cgptEventLoopMonitor) return;
         window.__cgptEventLoopMonitor = true;
 
         let last = performance.now();
-        let lastReset = 0;                                  // 新增：记录上次自愈时间
+        let lastReset = 0;
+        let breaches = 0;
+        let lastUserInput = performance.now();
+
+        window.addEventListener('pointerdown', () => { lastUserInput = performance.now(); }, { passive: true });
+        window.addEventListener('keydown',      () => { lastUserInput = performance.now(); }, { passive: true });
 
         setInterval(() => {
             const now = performance.now();
             const drift = now - last - interval;
             last = now;
 
-            if (drift > threshold) {
-                if (now - lastReset < cooldown) {           // 冷却期内仅记录一次
-                    // console.warn('[Bookmark] Main thread stall (cooldown):', drift);
-                    return;
-                }
-                lastReset = now;
+            breaches = (drift > threshold) ? (breaches + 1) : 0;
 
-                // console.warn('[Bookmark] Main thread stall:', drift);
-                document.getElementById('cgpt-bookmarks-wrapper')?.remove();
-                window.observers?.disconnectAll?.();
-                const hist = document.querySelector('div#history') || document.querySelector('nav[aria-label="Chat history"]');
-                const idle = window.enqueueIdleTask ?? (fn => setTimeout(fn, 0));
-                if (hist) idle(() => window.initBookmarks?.(hist));
+            if (
+                breaches >= 2 &&
+                !document.hidden &&
+                now - lastUserInput > 5000 &&
+                now - lastReset >= cooldown
+            ) {
+                lastReset = now;
+                const wrapper = document.getElementById('cgpt-bookmarks-wrapper');
+                if (!wrapper) {
+                    const hist = document.querySelector('div#history') || document.querySelector('nav[aria-label="Chat history"]');
+                    const idle = window.enqueueIdleTask ?? (fn => setTimeout(fn, 0));
+                    if (hist) idle(() => window.initBookmarks?.(hist));
+                }
+                // wrapper 存在则不拆不重建，避免闪烁
             }
         }, interval);
     })();
+
 
 // 全局保留首页“磨砂背景”的兜底层
     function ensureFrostedBG() {
