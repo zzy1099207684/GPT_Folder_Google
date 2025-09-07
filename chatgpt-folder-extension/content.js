@@ -2000,6 +2000,17 @@ ${SEL} textarea{
                 fontSelect.appendChild(o);
             });
 
+// 新增：把任意 font-family 字符串归一化为下拉中存在的单个选项
+            function normalizeFontValue(s) {
+                const list = Array.from(fontSelect.options).map(o => o.value);
+                const raw = String(s || '').trim();
+                if (!raw) return 'inherit';
+                if (list.includes(raw)) return raw;
+                // 处理 "'Segoe UI', Arial, sans-serif" → 匹配第一个受支持的项
+                const hit = raw.split(',').map(x => x.trim().replace(/^['"]|['"]$/g, '')).find(x => list.includes(x));
+                return hit || 'inherit';
+            }
+
             // 新增 Size：预设百分比
             ['80%', '85%', '90%', '95%', '100%'].forEach(p => {
                 const o = document.createElement('option');
@@ -2024,12 +2035,12 @@ ${SEL} textarea{
             // 初始化：恢复字体与字号
             await (async () => {
                 const savedFont = await storage.get('pageFont');
-                if (savedFont) {
-                    fontSelect.value = savedFont;
-                    document.documentElement.style.fontFamily = savedFont;
-                }
-                const savedSize = await storage.get('pageFontSize');     // 新增 Size
-                const applied = typeof savedSize === 'string' && savedSize.endsWith('%') ? savedSize : '100%';
+                const useFont = normalizeFontValue(savedFont);
+                fontSelect.value = useFont;
+                document.documentElement.style.fontFamily = useFont;
+
+                const savedSize = await storage.get('pageFontSize');
+                const applied = (typeof savedSize === 'string' && savedSize.endsWith('%')) ? savedSize : '100%';
                 sizeSelect.value = applied;
                 document.documentElement.style.fontSize = applied;
             })();
@@ -2075,7 +2086,7 @@ ${SEL} textarea{
 // —— 导出 / 导入 ——
             async function doExport() {
                 // 取当前页面实时 Font/Size，若为空再回退存储
-                const font = document.documentElement.style.fontFamily || (await storage.get('pageFont')) || '';
+                const font = normalizeFontValue(document.documentElement.style.fontFamily || (await storage.get('pageFont')) || '');
                 const size = document.documentElement.style.fontSize || (await storage.get('pageFontSize')) || '100%';
                 const payload = {
                     type: 'cgpt-groups-backup',
@@ -2117,19 +2128,12 @@ ${SEL} textarea{
                         folders = obj.folders || {};
                         const order = Object.keys(folders);
 
-                        // 应用 Font/Size 到页面与下拉框
-                        const fnt = obj.pageFont || 'inherit';
+                        const fnt = normalizeFontValue(obj.pageFont);
                         const sz = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
                         document.documentElement.style.fontFamily = fnt;
                         document.documentElement.style.fontSize = sz;
-                        try {
-                            fontSelect.value = fnt;
-                        } catch {
-                        }
-                        try {
-                            sizeSelect.value = sz;
-                        } catch {
-                        }
+                        try { fontSelect.value = fnt; } catch {}
+                        try { sizeSelect.value = sz; } catch {}
 
                         if (chrome?.runtime?.id) {
                             await storage.set({folders, folderOrder: order});
