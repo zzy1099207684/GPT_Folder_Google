@@ -600,13 +600,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         (function syncEditPromptOnSend() {
             function readCurrentPromptText() {
                 try {
-                    const raw = sessionStorage.getItem('cgptSessionPrompt');
+                    const raw = localStorage.getItem('cgptGlobalPrompt')
+                        || sessionStorage.getItem('cgptSessionPrompt');
                     const obj = raw ? JSON.parse(raw) : null;
                     const t = obj && typeof obj.text === 'string' ? obj.text.trim() : null;
                     return t && t.length ? t : null;
-                } catch {
-                    return null;
-                }
+                } catch { return null; }
             }
 
             function isLikelySend(btn) {
@@ -1292,45 +1291,68 @@ ${SEL} textarea{
             }
         }
 
-        bootAfterHydration();
-
-        (function ensureAliveOnResume() {
-            const ensure = () => {
+        (function installReattachAll(){
+            if (window.__cgptReattachAll) return;
+            window.__cgptReattachAll = function reattachAll(){
                 const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
                 if (!hist) return;
                 const host = hist.parentElement;
 
-                // 1) 侧栏自定义块：优先重挂旧实例
-                const wrap =
-                    document.getElementById('cgpt-bookmarks-wrapper') ||
-                    window.__cgptBookmarksRootEl;
-                if (wrap && host && !wrap.isConnected) {
-                    try { host.insertBefore(wrap, hist); } catch (_) {}
-                }
-                // 若不存在任何实例，走一次初始化
-                if (!document.getElementById('cgpt-bookmarks-wrapper') &&
-                    typeof window.initBookmarks === 'function') {
-                    try { window.initBookmarks(hist); } catch (_) {}
+                // 1) wrapper 复位或重建
+                const wrap = document.getElementById('cgpt-bookmarks-wrapper') || window.__cgptBookmarksRootEl;
+                if (wrap && host && !wrap.isConnected) { try { host.insertBefore(wrap, hist); } catch {} }
+                if (!document.getElementById('cgpt-bookmarks-wrapper') && typeof window.initBookmarks === 'function') {
+                    try { window.initBookmarks(hist); } catch {}
                 }
 
-                // 2) “Batch Processing” 头部复位到 Chats 标题上方
+                // 2) Batch Processing 头复位或重建
                 const selHeader = document.getElementById('cgpt-select-header');
-                if (selHeader) {
-                    const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
-                    const h2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
-                    if (!selHeader.isConnected || selHeader.parentElement !== chatsAside) {
-                        try { chatsAside.insertBefore(selHeader, h2); } catch (_) {}
+                const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+                const h2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+                if (!selHeader) {
+                    if (typeof window.__cgptAttachToHistory === 'function') {
+                        try { window.__cgptAttachToHistory(hist); } catch {}
                     }
+                } else if (!selHeader.isConnected || selHeader.parentElement !== chatsAside) {
+                    try { chatsAside.insertBefore(selHeader, h2); } catch {}
                 }
-            };
 
+                // 3) 输入区修复（开关/样式等）
+                try { ensurePromptToggle(); } catch {}
+            };
+        })();
+
+
+        (function patchHistoryNavigation(){
+            if (window.__cgptHistoryPatched) return;
+            window.__cgptHistoryPatched = true;
+
+            const fire = () => {
+                try { window.dispatchEvent(new Event('spa:navigation')); } catch {}
+            };
+            const _push = history.pushState;
+            const _replace = history.replaceState;
+            history.pushState = function(...args){ const r = _push.apply(this, args); fire(); return r; };
+            history.replaceState = function(...args){ const r = _replace.apply(this, args); fire(); return r; };
+
+            // 稳妥起见，多帧复挂
+            const rerun = () => {
+                window.__cgptReattachAll?.();
+                setTimeout(() => window.__cgptReattachAll?.(), 400);
+                setTimeout(() => window.__cgptReattachAll?.(), 1000);
+            };
+            window.addEventListener('spa:navigation', rerun);
+        })();
+
+
+        bootAfterHydration();
+
+        (function ensureAliveOnResume() {
             const revive = () => {
-                ensure();
-                setTimeout(ensure, 150);
-                setTimeout(ensure, 800);
+                window.__cgptReattachAll?.();
+                setTimeout(() => window.__cgptReattachAll?.(), 150);
+                setTimeout(() => window.__cgptReattachAll?.(), 800);
             };
-
-            window.__cgptEnsureSidebarAlive = revive;
 
             document.addEventListener('visibilitychange', () => {
                 if (!document.hidden) revive();
@@ -1338,6 +1360,41 @@ ${SEL} textarea{
 
             window.addEventListener('pageshow', revive, { passive: true });
             window.addEventListener('focus', revive, { passive: true });
+        })();
+
+        // === NEW: 头部工具条保活 ===
+        (function keepBatchHeaderAlive() {
+            const mo = new MutationObserver(() => {
+                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                if (!hist) return;
+                const selHeader = document.getElementById('cgpt-select-header');
+                if (!selHeader) return;
+                const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+                const h2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+                if (!selHeader.isConnected || selHeader.parentElement !== chatsAside) {
+                    try { chatsAside.insertBefore(selHeader, h2); } catch {}
+                }
+            });
+            mo.observe(document.body, { childList: true, subtree: true });
+            try { window.observers?.add?.(mo); } catch {}
+        })();
+
+
+        (function keepAliveOnProjectSwitch() {
+            const kick = () => {
+                // 统一复挂，包含 wrapper / header / 输入区
+                window.__cgptReattachAll?.();
+            };
+            document.addEventListener('click', e => {
+                const a = e.target && e.target.closest && e.target.closest(
+                    'a[href*="/p/"], a[href*="/projects"], a[href*="/g/"],' +
+                    ' [aria-label*="project" i], [data-testid*="project" i]'
+                );
+                if (!a) return;
+                setTimeout(kick, 200);
+                setTimeout(kick, 800);
+                setTimeout(kick, 1600);   // 新增兜底，覆盖慢水合
+            }, true);
         })();
 
         (function snorlaxUndraggable() {
@@ -1769,7 +1826,7 @@ ${SEL} textarea{
                             try {
                                 const delPaths = new Set(ids.map(id => `/c/${id}`));
                                 let changed = false;
-                                const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                                const folderZone = qs('#cgpt-folder-zone');
                                 const fidList = Object.keys(folders);
 
                                 for (const [fid, folder] of Object.entries(folders)) {
@@ -2291,8 +2348,10 @@ ${SEL} textarea{
             });
 
 
-            const folderZone = Object.assign(document.createElement('div'), {style: 'padding:0 12px'});
-            /* 关键：调整插入顺序——先字体块，再 Groups 标题，再分组列表 */
+            const folderZone = Object.assign(document.createElement('div'), {
+                id: 'cgpt-folder-zone',
+                style: 'padding:0 12px'
+            });
             inner.append(fontBlock, bar, folderZone);
             wrap.appendChild(inner);
 
@@ -2314,7 +2373,7 @@ ${SEL} textarea{
             const selHeader = document.getElementById('cgpt-select-header');
             // 新增：当“Groups”组的条目元素整体消失时，整页刷新
             (function setupGroupLossReload() {
-                const ZONE_SEL = '#cgpt-bookmarks-wrapper > div > div:nth-child(3)';
+                const ZONE_SEL = '#cgpt-folder-zone';
                 let armed = false;      // 仅当曾出现过至少 1 个组条目后才“武装”
                 let reloading = false;  // 确保只刷新一次
                 let missingTimer = null; // 新增：延迟确认用
@@ -2742,6 +2801,12 @@ ${SEL} textarea{
                 });
             });
 
+            syncObserver.observe(document.body, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+
             syncTitles();
 
 
@@ -2789,7 +2854,7 @@ ${SEL} textarea{
                         }
 
                         let changed = false;
-                        const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                        const folderZone = qs('#cgpt-folder-zone');
                         if (!folderZone) {
                             prevHistoryPaths = currentPaths;
                             return;
@@ -3642,7 +3707,7 @@ ${SEL} textarea{
                     const t = qsa('a[href*="/c/"]').find(a => samePath(a.href, url))?.textContent.trim() || 'chat';
                     f.chats.unshift({url, title: t}); // 插入到数组开头
                     safeSendMessage({type: 'save-folders', data: folders});
-                    const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                    const folderZone = qs('#cgpt-folder-zone');
                     const fidList = Object.keys(folders);
                     const idx = fidList.indexOf(fid);
                     const oldBox = folderZone.children[idx];
@@ -4026,12 +4091,11 @@ ${SEL} textarea{
                 // 会话级 prompt 与组内 prompt 不再区分优先级；单独计算两者
                 const sessionPrompt = (() => {
                     try {
-                        const raw = sessionStorage.getItem('cgptSessionPrompt');
+                        const raw = localStorage.getItem('cgptGlobalPrompt')
+                            || sessionStorage.getItem('cgptSessionPrompt');
                         const obj = raw ? JSON.parse(raw) : null;
                         return (obj && String(obj.text || '').trim()) || '';
-                    } catch {
-                        return '';
-                    }
+                    } catch { return ''; }
                 })();
 
                 const groupPrompts = currentFid ? (folders[currentFid].prompts || []) : [];
@@ -4321,7 +4385,7 @@ ${SEL} textarea{
 
                         if (needRender) {
                             // 精准更新：只替换当前分组节点，避免等待整块异步分帧渲染
-                            const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                            const folderZone = qs('#cgpt-folder-zone');
                             const fidList = Object.keys(folders);
                             const idx = fidList.indexOf(folderFid);
                             const oldBox = folderZone && folderZone.children && folderZone.children[idx];
@@ -4947,15 +5011,11 @@ ${SEL} textarea{
 
                     setTimeout(highlightActive, 0);
                     setTimeout(() => {
-                        try { ensurePromptToggle(); } catch {}
+                        try {
+                            ensurePromptToggle();
+                        } catch {
+                        }
                     }, 0);
-
-                    setTimeout(() => {
-                        try { window.__cgptEnsureSidebarAlive?.(); } catch {}
-                    }, 0);
-                    setTimeout(() => {
-                        try { window.__cgptEnsureSidebarAlive?.(); } catch {}
-                    }, 600);
                 }, true);
             }
 
