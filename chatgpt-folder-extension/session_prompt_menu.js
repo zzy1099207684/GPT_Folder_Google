@@ -15,33 +15,37 @@
     } catch {}
 
     // 集中设置“默认 Normal”
-    function __getGlobalPrompt() {
-        try {
-            const raw = localStorage.getItem('cgptGlobalPrompt')
-                || sessionStorage.getItem('cgptSessionPrompt');
-            return raw ? JSON.parse(raw) : null;
-        } catch { return null; }
-    }
-    function __setGlobalPrompt(obj) {
-        try { localStorage.setItem('cgptGlobalPrompt', JSON.stringify(obj)); } catch {}
-        try { sessionStorage.setItem('cgptSessionPrompt', JSON.stringify(obj)); } catch {}
-    }
-    function __clearGlobalPrompt() {
-        try { localStorage.removeItem('cgptGlobalPrompt'); } catch {}
-        try { sessionStorage.removeItem('cgptSessionPrompt'); } catch {}
-    }
-
-// 集中设置“默认 Normal”（仅当未设置过）
     function __cgptSetDefaultNormal() {
         try {
-            if (!__getGlobalPrompt()) {
-                __setGlobalPrompt({ label: optionsList[0].label, text: optionsList[0].text });
-            }
+            sessionStorage.setItem(
+                'cgptSessionPrompt',
+                JSON.stringify({ label: optionsList[0].label, text: optionsList[0].text })
+            );
         } catch {}
     }
 
-// 首次进入页确保默认 Normal
-    try { if (!__getGlobalPrompt()) __cgptSetDefaultNormal(); } catch {}
+    // 首次进入页确保默认 Normal
+    try { if (!sessionStorage.getItem('cgptSessionPrompt')) __cgptSetDefaultNormal(); } catch {}
+
+    // 捕获“New chat”点击（全局/原生入口）
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest(
+            'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
+        );
+        if (btn) __cgptSetDefaultNormal();
+    }, true);
+
+
+    // 组内 New chat 的兜底分支（pushState('/') 后触发的 popstate）
+    // 仅在组内新建挂起态存在时生效，避免影响其它导航
+    window.addEventListener('popstate', () => {
+        try {
+            if (window.__cgptPendingToken && location.pathname === '/') {
+                __cgptSetDefaultNormal();
+            }
+        } catch {}
+    }, { passive: true });
+
     function toast(msg) {
         try {
             const el = document.createElement('div');
@@ -56,8 +60,11 @@
     const PILL_CLASS = 'cgpt-prompt-pill';
 
     function readStoredPromptLabel() {
-        const obj = __getGlobalPrompt();
-        return obj && typeof obj.label === 'string' ? obj.label.trim() : null;
+        try {
+            const raw = sessionStorage.getItem('cgptSessionPrompt');
+            const obj = raw ? JSON.parse(raw) : null;
+            return obj && typeof obj.label === 'string' ? obj.label.trim() : null;
+        } catch { return null; }
     }
 
     // 构建胶囊元素，放在 + 按钮右侧
@@ -96,8 +103,10 @@
         // 点击 × 恢复到 Normal
         close.addEventListener('click', (e) => {
             e.stopPropagation();
-            __clearGlobalPrompt();
-            toast('Start Prompt：off');
+            try {
+                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: optionsList[0].label, text: optionsList[0].text }));
+                toast('Start Prompt：off');
+            } catch {}
             updatePromptPill();
         });
 
@@ -170,7 +179,10 @@
                 pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 180)) + 'px';
                 pop.style.top  = (rect.bottom + 6) + 'px';
 
-                const storedPrompt = __getGlobalPrompt();
+                const storedPrompt = (() => { try {
+                    const raw = sessionStorage.getItem('cgptSessionPrompt');
+                    return raw ? JSON.parse(raw) : null;
+                } catch { return null; } })();
                 const currentLabel = (storedPrompt && typeof storedPrompt.label === 'string')
                     ? String(storedPrompt.label).trim() : null;
 
@@ -191,20 +203,22 @@
                             const chosen = String(o.label || '').trim();
                             const isSame = currentLabel && chosen === currentLabel;
                             if (isSame) {
-                                __clearGlobalPrompt();                          // ← 真正关闭
+                                // 关闭：清理所有一次性 / 周期标记
+                                sessionStorage.removeItem('cgptSessionPrompt');
                                 try {
                                     sessionStorage.removeItem('cgptPromptStyleSwitchPending');
-                                    sessionStorage.removeItem('cgptPromptStyleCrossToken');
-                                    sessionStorage.removeItem('cgptCrossLastPath');
+                                    sessionStorage.removeItem('cgptPromptStyleCrossToken');  // ← 清理周期 token
+                                    sessionStorage.removeItem('cgptCrossLastPath');          // ← 清理上次路径
                                 } catch {}
                                 toast('Start Prompt：off');
                             } else {
-                                __setGlobalPrompt({ label: o.label, text: o.text }); // ← 全局保存
+                                // 切换到不同样式：本会话一次性 + 跨会话“按切换动作”触发
+                                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: o.label, text: o.text }));
                                 try {
-                                    sessionStorage.setItem('cgptPromptStyleSwitchPending', '1');
+                                    sessionStorage.setItem('cgptPromptStyleSwitchPending', '1');                 // 本会话首次插入
                                     const token = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-                                    sessionStorage.setItem('cgptPromptStyleCrossToken', token);
-                                    sessionStorage.setItem('cgptCrossLastPath', location.pathname || '');
+                                    sessionStorage.setItem('cgptPromptStyleCrossToken', token);                  // ← 周期 token
+                                    sessionStorage.setItem('cgptCrossLastPath', location.pathname || '');        // ← 记住当前路径
                                 } catch {}
                                 toast('Start Prompt：' + (chosen || 'Unnamed'));
                             }
@@ -257,7 +271,7 @@
     // 进入页面先渲染一次；跨 tab 变化也同步
     updatePromptPill();
     window.addEventListener('storage', (e) => {
-        if (e.key === 'cgptGlobalPrompt') updatePromptPill();
+        if (e.key === 'cgptSessionPrompt') updatePromptPill();
     }, { passive: true });
 
     window.addEventListener('pagehide', () => { try { mo.disconnect(); } catch {} }, { passive: true });
