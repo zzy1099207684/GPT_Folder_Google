@@ -1267,6 +1267,19 @@ ${SEL} textarea{
                     }
 
                     if (hist && !wrapper) {
+                        const cached = window.__cgptBookmarksRootEl;
+                        if (cached) {
+                            try {
+                                hist.parentElement && hist.parentElement.insertBefore(cached, hist);
+                                // 重绑事件与批量头
+                                if (typeof window.__cgptAttachToHistory === 'function') {
+                                    window.__cgptAttachToHistory(hist);
+                                }
+                                return; // 已重挂，避免走重建
+                            } catch (e) {
+                                console.warn('[Bookmark] Failed to re-attach cached wrapper:', e);
+                            }
+                        }
                         if (!window.__cgptCreatingBookmarks) {
                             window.__cgptCreatingBookmarks = true; // 哨兵启动
                             initBookmarks(hist)
@@ -1480,6 +1493,11 @@ ${SEL} textarea{
 
         /* ===== 初始化收藏夹 ===== */
         async function initBookmarks(historyNode) {
+            if (historyNode && historyNode.matches && historyNode.matches('nav[aria-label="Chat history"]')) {
+                const inner = historyNode.querySelector('div#history');
+                if (!inner) return;            // 等待下一轮观察器再挂载，避免暂挂到错误位置
+                historyNode = inner;
+            }
             function insertMultiSelectHeader(root) {
                 /* 若块已存在就搬到 div#history 之上，避免重复创建 */
                 const exist = document.getElementById('cgpt-select-header');
@@ -1870,7 +1888,7 @@ ${SEL} textarea{
                                 safeSendMessage({type: 'save-folders', data: folders});
                             }
 
-                            render();
+                            // render();
                             list.remove();
                         };
                         list.appendChild(row);
@@ -1935,28 +1953,42 @@ ${SEL} textarea{
             historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
             historyNode.addEventListener('click', historyClickHandler);
 
-            // 多选头部块 ─ 初始化
-            insertMultiSelectHeader(historyNode);        // ← 新增
+            window.__cgptAttachToHistory = (node) => {
+                if (!node) return;
+                try {
+                    if (node._folderClickHandler) node.removeEventListener('click', node._folderClickHandler);
+                } catch {}
+                node._folderClickHandler = historyClickHandler;
+                node.addEventListener('click', historyClickHandler);
+                insertMultiSelectHeader(node);
+            };
 
-            // 检查是否已有书签容器
-            const existingWrapper = qs('#cgpt-bookmarks-wrapper');
+            // 多选头部块 ─ 初始化
+            insertMultiSelectHeader(historyNode);
+
+// 优先使用：DOM 中的实例 或 内存缓存的实例
+            const existingWrapper = qs('#cgpt-bookmarks-wrapper') || window.__cgptBookmarksRootEl;
             if (existingWrapper) {
-                // 若已有容器且位置不在 historyNode 同一父节点，则移动到正确位置
                 const host2 = historyNode?.parentElement;
                 if (host2 && existingWrapper.parentElement !== host2) {
-                    try {
-                        host2.insertBefore(existingWrapper, historyNode);
-                    } catch (e) {
-                        console.warn('[Bookmark] Failed to relocate existing wrapper:', e);
-                    }
+                    host2.insertBefore(existingWrapper, historyNode);
+                }
+                // 确保缓存指向当前实例
+                window.__cgptBookmarksRootEl = existingWrapper;
+                // 重新绑定历史区事件与批量头
+                if (typeof window.__cgptAttachToHistory === 'function') {
+                    window.__cgptAttachToHistory(historyNode);
                 }
                 return;
             }
+
 
             /* ---------- DOM 构建 ---------- */
             const wrap = Object.assign(document.createElement('div'), {
                 id: 'cgpt-bookmarks-wrapper', style: 'width:100%;margin-bottom:4px'
             });
+            // 单例缓存：后续仅重挂不重建
+            window.__cgptBookmarksRootEl = wrap;
             const inner = Object.assign(document.createElement('div'), {style: 'padding:4px 0'});
             // …（后续创建 fontBlock、bar、folderZone 等）…
 
@@ -2496,7 +2528,7 @@ ${SEL} textarea{
 
             function refreshHistoryOrder() {
                 try {
-                    const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                    const hist = qs('div#history');
                     if (!hist) return;
 
                     // 新增：按 pathname 去重，优先保留真实项（无 data-url），清理其余重复
