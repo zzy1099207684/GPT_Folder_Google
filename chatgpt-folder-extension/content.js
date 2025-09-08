@@ -925,7 +925,7 @@ ${SEL} textarea{
         const hints = [
             {
                 label: 'change_code',
-                text: ['※Only modify code directly related to the specific issue or requirement raised. Perform self-tests after modification to ensure that the requirements are fully met. Minimize the code needed to achieve the desired stable effect, avoid redundancy, and ensure stability and performance. Provide both the original source code and the modified version for comparison and manual implementation. If adding new code, provide a small amount of the original code around the new code location to facilitate location.※']
+                text: ['※Only modify the code parts directly related to the specific problem. After the modification, self-testing is required to verify that it fully meets the requirements. Stable functions should be implemented with minimal code to avoid redundancy, while ensuring stability and performance. The original code and the modified version should be provided for comparison. When adding new code, a small amount of original code should be provided before and after it to facilitate positioning.※']
             }
         ];         // 自行增删
         const storage = {
