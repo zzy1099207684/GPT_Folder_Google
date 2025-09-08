@@ -12,6 +12,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
     const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]';
     const MAX_PROMPTS = 4;
     (() => { // 立即执行函数隔离作用域
+        let wrapper = null;
         function nanoid(size = 21) {
             let id = ''
             const chars = 'ModuleSymbhasOwnPr-0123456789ABCDEFGHIJKLNQRTUVWXYZ_cfgijkpqtvxz'
@@ -43,6 +44,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 return;
             }
             const form = qs('form[data-type="unified-composer"]');
+            if (!form) {
+                if (!window.__cgptComposerAwaiter) {
+                    const mo = new MutationObserver(() => {
+                        const f = document.querySelector('form[data-type="unified-composer"]');
+                        if (f) { mo.disconnect(); window.__cgptComposerAwaiter = null; ensurePromptToggle(); }
+                    });
+                    mo.observe(document.body, {childList:true, subtree:true});
+                    window.__cgptComposerAwaiter = mo;
+                }
+                return;
+            }
             if (!form) return;
 
             // ===== 新增：把输入框固定为图一样式（默认保持展开态外观） =====
@@ -62,7 +74,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         "header header header"
                         "primary primary primary"
                         "leading footer trailing" !important;  
-                      overflow:clip !important;
                       padding:10px !important;                  
                     }
                     form[data-type="unified-composer"] .__zzy-fixed-composer [grid-area="primary"],
@@ -546,8 +557,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         }
 
         let CHUNK_BUDGET_MS = 4;                     // 默认单帧预算
-
-        /* ===== 通用工具 ===== */
         const CLS = {tip: 'cgpt-tip'};
         const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'};
 
@@ -706,11 +715,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const s = document.createElement('style');
                 s.id = STYLE_ID;
                 s.textContent = `
-${SEL}, ${SEL} .grid { width:100%!important; max-width:100%!important; min-width:0!important; overflow:hidden; }
+${SEL}, ${SEL} .grid { width:100%!important; max-width:100%!important; min-width:0!important;}
 ${SEL} textarea{
   width:100%!important; max-width:100%!important; min-width:0!important; box-sizing:border-box!important;
-  overflow-x:hidden!important; overflow-y:auto; white-space:pre-wrap; word-break:break-word; overflow-wrap:break-word;
-  resize:vertical; min-height:140px; height:auto!important;
+  overflow-x:auto!important;  overflow-y:auto; 
+  white-space:pre-wrap; word-break:break-word; overflow-wrap:break-word;
+  white-space:pre;
 }`;
                 document.head.appendChild(s);
             }
@@ -1228,90 +1238,105 @@ ${SEL} textarea{
 
         function bootAfterHydration() {
             const start = () => {
-                const readyObs = observers.add(new MutationObserver(debounce(() => {
+                // This observer now reacts instantly without debounce.
+                const readyObs = observers.add(new MutationObserver(() => {
                     const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
 
-                    const wrappers = qsa('#cgpt-bookmarks-wrapper');
-                    if (wrappers.length > 1) {
-                        wrappers.slice(1).forEach(w => w.remove());
+                    if (!hist) {
+                        return; // Wait for the main history/nav element to appear
                     }
 
-                    const wrapper = wrappers[0];
+                    // A more stable parent element to anchor our UI
+                    const stableHost = hist.parentElement;
 
-                    if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
-                        try {
-                            hist.parentElement.insertBefore(wrapper, hist);
-                        } catch (e) {
-                            console.warn('[Bookmark] Failed to relocate wrapper:', e);
-                        }
-                    }
-
-                    const selHeader = qs('#cgpt-select-header');
-                    if (hist && selHeader) {
-                        const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
-                        const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
-                        if (selHeader.parentElement !== chatsAside || selHeader.nextSibling !== chatsH2) {
-                            try {
-                                chatsAside.insertBefore(selHeader, chatsH2);
-                            } catch (e) {
-                                console.warn('[Bookmark] Failed to relocate select header:', e);
-                            }
-                        }
-                    }
-                    if (!hist && wrapper) {
-                        try {
-                            wrapper.remove()
-                        } catch {
-                        }
-                        return;                         // ← 仅删除 startBookmarksWatchdog?.()
-                    }
-
-                    if (hist && !wrapper) {
-                        const cached = window.__cgptBookmarksRootEl;
-                        if (cached) {
-                            try {
-                                hist.parentElement && hist.parentElement.insertBefore(cached, hist);
-                                // 重绑事件与批量头
-                                if (typeof window.__cgptAttachToHistory === 'function') {
-                                    window.__cgptAttachToHistory(hist);
-                                }
-                                return; // 已重挂，避免走重建
-                            } catch (e) {
-                                console.warn('[Bookmark] Failed to re-attach cached wrapper:', e);
-                            }
-                        }
+                    // If wrapper is not created yet, initialize it.
+                    if (!wrapper) {
                         if (!window.__cgptCreatingBookmarks) {
-                            window.__cgptCreatingBookmarks = true; // 哨兵启动
+                            window.__cgptCreatingBookmarks = true;
                             initBookmarks(hist)
                                 .catch(err => console.error('initBookmarks error:', err))
                                 .finally(() => {
                                     window.__cgptCreatingBookmarks = false;
-
-                                    // 再次去重，防止并发情况下残留多余 wrapper
-                                    const all = qsa('#cgpt-bookmarks-wrapper');
-                                    if (all.length > 1) {
-                                        all.slice(1).forEach(w => {
-                                            try {
-                                                w.remove();
-                                            } catch {
-                                            }
-                                        });
-                                    }
                                 });
                         }
+                        return;
                     }
-                }, 16)));
-                readyObs.observe(document.body, {childList: true, subtree: true});
+
+                    // If wrapper exists but is detached from the DOM, re-attach it swiftly.
+                    if (stableHost && !wrapper.isConnected) {
+                        try {
+                            stableHost.insertBefore(wrapper, hist);
+
+                            // Also re-attach the multi-select header, as it might also get detached.
+                            const selHeader = document.getElementById('cgpt-select-header');
+                            if (selHeader) {
+                                const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+                                const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+                                if (chatsH2) {
+                                    chatsAside.insertBefore(selHeader, chatsH2);
+                                }
+                            }
+                        } catch (e) {
+                            // This might fail if the host is also in a transient state, which is fine. The observer will catch it again.
+                        }
+                    }
+                }));
+                readyObs.observe(document.body, { childList: true, subtree: true });
             };
+
             const idle = (cb) => (window.requestIdleCallback || ((f) => setTimeout(f, 120)))(cb);
             if (document.readyState === 'complete') {
                 idle(start);
             } else {
-                window.addEventListener('load', () => idle(start), {once: true, passive: true});
+                window.addEventListener('load', () => idle(start), { once: true, passive: true });
             }
         }
 
         bootAfterHydration();
+
+        (function ensureAliveOnResume() {
+            const ensure = () => {
+                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                if (!hist) return;
+                const host = hist.parentElement;
+
+                // 1) 侧栏自定义块：优先重挂旧实例
+                const wrap =
+                    document.getElementById('cgpt-bookmarks-wrapper') ||
+                    window.__cgptBookmarksRootEl;
+                if (wrap && host && !wrap.isConnected) {
+                    try { host.insertBefore(wrap, hist); } catch (_) {}
+                }
+                // 若不存在任何实例，走一次初始化
+                if (!document.getElementById('cgpt-bookmarks-wrapper') &&
+                    typeof window.initBookmarks === 'function') {
+                    try { window.initBookmarks(hist); } catch (_) {}
+                }
+
+                // 2) “Batch Processing” 头部复位到 Chats 标题上方
+                const selHeader = document.getElementById('cgpt-select-header');
+                if (selHeader) {
+                    const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
+                    const h2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+                    if (!selHeader.isConnected || selHeader.parentElement !== chatsAside) {
+                        try { chatsAside.insertBefore(selHeader, h2); } catch (_) {}
+                    }
+                }
+            };
+
+            const revive = () => {            // 多次尝试，覆盖水合中的延迟
+                ensure();
+                setTimeout(ensure, 150);
+                setTimeout(ensure, 800);
+            };
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) revive();
+            }, { passive: true });
+
+            window.addEventListener('pageshow', revive, { passive: true });
+            window.addEventListener('focus', revive, { passive: true });
+        })();
 
         (function snorlaxUndraggable() {
             if (window.__snorlaxUndraggableActive) return;
@@ -1493,6 +1518,10 @@ ${SEL} textarea{
 
         /* ===== 初始化收藏夹 ===== */
         async function initBookmarks(historyNode) {
+            if (wrapper) { // The single-instance guard is still crucial.
+                return;
+            }
+
             if (historyNode && historyNode.matches && historyNode.matches('nav[aria-label="Chat history"]')) {
                 const inner = historyNode.querySelector('div#history');
                 if (!inner) return;            // 等待下一轮观察器再挂载，避免暂挂到错误位置
@@ -1952,6 +1981,27 @@ ${SEL} textarea{
             historyNode._folderClickHandler = historyClickHandler; // 存储引用以便后续移除
             historyNode.addEventListener('click', historyClickHandler);
 
+            document.addEventListener('click', function __cgptGlobalHistoryClick(ev) {
+                // 放行交互控件
+                if (ev.target && ev.target.closest &&
+                    ev.target.closest('input.history-checkbox, .__menu-item-trailing-btn, [data-trailing-button], button, [role="menu"], [role="menuitem"], [role="button"]')) {
+                    return;
+                }
+                const a = ev.target.closest && ev.target.closest('a[href*="/c/"]');
+                if (!a) return;
+                // 排除组面板内部点击，避免与组内导航重复处理
+                if (a.closest('#cgpt-bookmarks-wrapper')) return;
+
+                let p = '';
+                try { p = new URL(a.href, location.origin).pathname; } catch {}
+                if (!p) return;
+
+                try { lastActiveMap[p] = '__history__'; if (chrome?.runtime?.id) storage.set({ lastActiveMap }); } catch {}
+                // 来自 Chats，清空组选中并在下一帧同步高亮
+                activeFid = null;
+                setTimeout(() => { try { highlightActive(); } catch {} }, 0);
+            }, true);
+
             window.__cgptAttachToHistory = (node) => {
                 if (!node) return;
                 try {
@@ -2244,11 +2294,12 @@ ${SEL} textarea{
             inner.append(fontBlock, bar, folderZone);
             wrap.appendChild(inner);
 
-            // 插入 bookmarks wrapper 于最顶 —— 加防护与早退
+            wrapper = wrap;
+
             const host = historyNode?.parentElement;
             try {
-                if (host && host.isConnected && historyNode.isConnected) {
-                    host.insertBefore(wrap, historyNode);
+                if (host && host.isConnected && historyNode.isConnected && (wrapper instanceof Node)) {
+                    host.insertBefore(wrapper, historyNode);
                 } else {
                     // 节点可能在路由/水合过程中被卸载；本轮放弃，交由上层观察器下一轮重试
                     return;
@@ -2257,7 +2308,6 @@ ${SEL} textarea{
                 console.warn('[Bookmark] Safe insert failed, will retry later:', e);
                 return;
             }
-
             // 重新定位多选头部块到 history 与 bookmarks wrapper 之间
             const selHeader = document.getElementById('cgpt-select-header');
             // 新增：当“Groups”组的条目元素整体消失时，整页刷新
@@ -4785,11 +4835,9 @@ ${SEL} textarea{
                 }
 
                 /* 来自 Chats 时，强制不选组，不做兜底扫描 */
-                if (clickedFromHistory) {
-                    activeFid = null;
-                } else if (storedFid && folders[storedFid]) {
+                if (storedFid && folders[storedFid]) {
                     activeFid = storedFid;
-                } else if (arr && arr.length) {
+                } else {
                     for (const [fid, folder] of Object.entries(folders)) {
                         if (folder.chats.some(c => samePath(c.url, location.origin + path))) {
                             activeFid = fid;
