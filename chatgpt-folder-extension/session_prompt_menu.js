@@ -259,7 +259,14 @@
         }
         if (needRefresh) requestAnimationFrame(updatePromptPill);
     });
-    mo.observe(document.body, { childList: true, subtree: true });
+    const __start = () => mo.observe(document.body, { childList:true, subtree:true });
+    if (document.readyState === 'complete') {
+        (window.requestIdleCallback || (cb=>setTimeout(cb,120)))(__start);
+    } else {
+        window.addEventListener('load', () => (
+            window.requestIdleCallback || (cb=>setTimeout(cb,120))
+        )(__start), { once:true, passive:true });
+    }
 
     // 进入页面先渲染一次；跨 tab 变化也同步
     updatePromptPill();

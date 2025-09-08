@@ -20,6 +20,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             return id
         }
 
+        function afterHydration(fn){
+            const runner = () => (window.requestIdleCallback || (cb=>setTimeout(cb,120)))(fn);
+            if (document.readyState === 'complete') runner();
+            else window.addEventListener('load', runner, { once:true, passive:true });
+        }
+
         function safeSendMessage(msg) {
             try {
                 if (chrome?.runtime?.id && typeof chrome.runtime.sendMessage === 'function') {
@@ -32,6 +38,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         }
 
         function ensurePromptToggle() {
+            if (document.readyState !== 'complete') {
+                window.addEventListener('load', () => setTimeout(ensurePromptToggle, 0), { once:true });
+                return;
+            }
             const form = qs('form[data-type="unified-composer"]');
             if (!form) return;
 
@@ -1156,13 +1166,15 @@ ${SEL} textarea{
         };
 
         /* ===== 提示气泡 ===== */
-        const TIP_ID = 'cgpt-tip-style';                                              // 样式元素 id
-        if (!document.getElementById(TIP_ID)) {                                                   // 若未注入则注入
-            const s = document.createElement('style');             // 创建 style
-            s.id = TIP_ID;                                                                        // 赋 id
+        const TIP_ID = 'cgpt-tip-style';
+        afterHydration(() => {
+            if (!document.getElementById(TIP_ID)) {
+                const s = document.createElement('style');
+                s.id = TIP_ID;                                                                     // 赋 id
             s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
-            document.head.appendChild(s);                                                         // 注入
-        }
+                (document.head || document.documentElement).appendChild(s);
+            }
+        });
         const tip = (el, txt) => {
             // 先清除页面上所有可能残留的气泡，避免重复或卡死
             document.querySelectorAll(`.${CLS.tip}`).forEach(node => node.remove());
@@ -5120,11 +5132,11 @@ ${SEL} textarea{
 
         /* ===== 移除回答中的 <hr data-start data-end> 分隔线（新增） ===== */
         (function stripAnswerHrSeparators() {
-            // 兜底样式：即刻隐藏目标 <hr>
-            const STYLE_ID = 'cgpt-hide-hr-sep';
-            if (!document.getElementById(STYLE_ID)) {
-                const s = document.createElement('style');
-                s.id = STYLE_ID;
+            function setup(){
+                const STYLE_ID = 'cgpt-hide-hr-sep';
+                if (!document.getElementById(STYLE_ID)) {
+                    const s = document.createElement('style');
+                    s.id = STYLE_ID;
                 s.textContent = [
                     'article hr[data-start][data-end],',
                     '[data-message-author-role] hr[data-start][data-end],',
@@ -5162,8 +5174,10 @@ ${SEL} textarea{
                     }
                 }
             });
-            mo.observe(document.body, {childList: true, subtree: true});
-            window.observers?.add?.(mo); // 交由现有 observers 统一管理
+                mo.observe(document.body, {childList:true, subtree:true});
+                window.observers?.add?.(mo);
+            }
+            afterHydration(setup);                                   // ← 延后到水合后
         })();
 
     })();
