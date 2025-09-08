@@ -4405,7 +4405,7 @@ ${SEL} textarea{
                                             link;
                                         titleEl.textContent = title;
                                         clone.querySelectorAll('[class]').forEach(n => {
-                                            if (/\bbg-token-/.test(n.className)) n.className = n.className.replace(/\bbg-token-[^\s]+/g, '').trim();
+                                            if (/\bbg-token-/.test(n.className)) n.className = n.className.replace(/\bbg-token-\S+/g, '').trim();
                                         });
                                         const listEl = tplItem.parentElement && /^(UL|OL)$/.test(tplItem.parentElement.tagName) ? tplItem.parentElement : null;
                                         if (listEl) listEl.insertBefore(clone, listEl.firstChild);
