@@ -1857,12 +1857,17 @@ ${SEL} textarea{
                             }
 
                             if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
+                            root.querySelectorAll('input.history-checkbox:checked').forEach(cb => {
+                                cb.checked = false;
+                                cb.dispatchEvent(new Event('change'));
+                            });
+
                             const toggleAll = document.querySelector('#cgpt-select-header input[type="checkbox"]');
                             if (toggleAll) toggleAll.checked = false;
 
                             if (chrome?.runtime?.id) {
-                                storage.set({folders});                    // 新增：真正写入 storage
-                                safeSendMessage({type: 'save-folders', data: folders}); // 保持与后台同步
+                                storage.set({folders});
+                                safeSendMessage({type: 'save-folders', data: folders});
                             }
 
                             render();
