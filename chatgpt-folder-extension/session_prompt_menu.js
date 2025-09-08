@@ -32,19 +32,10 @@
         const btn = ev.target && ev.target.closest(
             'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
         );
-        if (btn) __cgptSetDefaultNormal();
+        if (!btn) return; // 保持已选样式，不做重置
+        // no-op
     }, true);
 
-
-    // 组内 New chat 的兜底分支（pushState('/') 后触发的 popstate）
-    // 仅在组内新建挂起态存在时生效，避免影响其它导航
-    window.addEventListener('popstate', () => {
-        try {
-            if (window.__cgptPendingToken && location.pathname === '/') {
-                __cgptSetDefaultNormal();
-            }
-        } catch {}
-    }, { passive: true });
 
     function toast(msg) {
         try {
