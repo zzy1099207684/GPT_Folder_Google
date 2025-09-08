@@ -3780,8 +3780,9 @@ ${SEL} textarea{
 
                         // 同步刷新 Chats 列表
                         try {
-                            if (typeof __cgptFetchConversationsAndRefresh === 'function') {
-                                __cgptFetchConversationsAndRefresh(convId);
+                            const fn = window.__cgptFetchConversationsAndRefresh;
+                            if (typeof fn === 'function') {
+                                fn(convId);
                             } else {
                                 const p = new URL(chat.url, location.origin).pathname;
                                 const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
@@ -4506,7 +4507,7 @@ ${SEL} textarea{
                             } catch {
                             }
                         }
-
+                        window.__cgptFetchConversationsAndRefresh = __cgptFetchConversationsAndRefresh;
 
                         function __cgptMonitorFirstAnswerThenReload() {
                             if (!location.pathname.startsWith('/c/')) return;
