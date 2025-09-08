@@ -2687,7 +2687,6 @@ ${SEL} textarea{
             });
 
 
-            // 统一版本 —— 自动选根节点，兼容旧/新版侧栏
             const syncTitles = () => {
                 let updated = false;
 
@@ -2698,15 +2697,14 @@ ${SEL} textarea{
 
                 const anchorMap = new Map();
                 qsa('a[href*="/c/"]', histRoot).forEach(link => {
-                    const p = link.pathname;            // 直接取现成 pathname
+                    const p = link.pathname;
                     if (p) anchorMap.set(p.split('?')[0], link);
                 });
 
-
+                // 既有：更新已渲染在 DOM 中的组内链接文本 + 对应数据
                 liveSyncMap.forEach((arr, path) => {
                     const a = anchorMap.get(path);
                     if (!a) return;
-
                     const text = (a.textContent || 'New chat').trim();
                     arr.forEach(({fid, el}) => {
                         if (el.textContent !== text) el.textContent = text;
@@ -2720,11 +2718,30 @@ ${SEL} textarea{
                     });
                 });
 
+                // 新增：同步“未渲染”的组内会话（折叠等场景）
+                // 使 folders[*].chats[*].title 始终与 Chats 一致
+                for (const [fid, folder] of Object.entries(folders)) {
+                    const list = Array.isArray(folder?.chats) ? folder.chats : [];
+                    for (const c of list) {
+                        let p = null;
+                        try { p = new URL(c.url, location.origin).pathname.split('?')[0]; } catch {}
+                        if (!p) continue;
+                        const a = anchorMap.get(p);
+                        if (!a) continue;
+                        const text = (a.textContent || 'New chat').trim();
+                        if (c.title !== text) {
+                            c.title = text;
+                            updated = true;
+                        }
+                    }
+                }
+
                 if (updated) {
                     safeSendMessage({type: 'save-folders', data: folders});
                     highlightActive();
                 }
             };
+
 
             const syncTitlesDebounced = debounce(syncTitles, 200);
 
@@ -3612,14 +3629,16 @@ ${SEL} textarea{
                     arrow.textContent = f.collapsed ? '∴' : '∵';
 
                     if (!f.collapsed) {
-                        // 关键修复：每次从收缩→展开都重绘，确保列表与计数刷新
                         renderChatsLocal();
+                        // 新增：渲染后立即同步一次标题，确保 UI 立刻更新
+                        enqueueIdleTask(() => { try { syncTitlesDebounced(); } catch {} });
                     } else {
                         ul.style.display = 'none';
                     }
 
                     if (typeof highlightActive === 'function') highlightActive();
                 };
+
 
 
                 // —— 修改后代码片段 ——
