@@ -925,7 +925,7 @@ ${SEL} textarea{
         const hints = [
             {
                 label: 'change_code',
-                text: ['※Only modify code directly related to the specific problem or requirement raised. After modification, perform self-testing to ensure that it fully meets the requirements, fully consider future expansion, and ensure stability and performance. Provide the original source code and modified version for easy comparison and manual implementation. If you need to add new code, please provide a small amount of original code around the new code location to facilitate positioning※']
+                text: ['※Only modify code directly related to the specific issue or requirement raised. Perform self-tests after modification to ensure that the requirements are fully met. Minimize the code needed to achieve the desired stable effect, avoid redundancy, and ensure stability and performance. Provide both the original source code and the modified version for comparison and manual implementation. If adding new code, provide a small amount of the original code around the new code location to facilitate location.※']
             }
         ];         // 自行增删
         const storage = {
@@ -3815,8 +3815,12 @@ ${SEL} textarea{
                 li.append(link, del);
 
                 li.addEventListener('dragstart', ev => {
+                    // === 新增守卫：重命名态或存在输入框时禁止拖拽 ===
+                    if (li.classList.contains('__renaming') || li.querySelector('input[type="text"]')) {
+                        ev.preventDefault();
+                        return;
+                    }
                     ev.dataTransfer.effectAllowed = 'move';
-                    // 携带本 chat 在数组中的索引
                     const idx = Array.from(parentUl.children).indexOf(li);
                     ev.dataTransfer.setData('chatIdx', idx);
                     ev.dataTransfer.setData('fid', fid);
