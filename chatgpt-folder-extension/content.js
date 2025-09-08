@@ -1888,7 +1888,6 @@ ${SEL} textarea{
                                 safeSendMessage({type: 'save-folders', data: folders});
                             }
 
-                            // render();
                             list.remove();
                         };
                         list.appendChild(row);
