@@ -245,12 +245,24 @@
                 if (node.nodeType !== 1) return;
                 if (node.matches?.('div[role="group"]')) patchGroup(node);
                 node.querySelectorAll?.('div[role="group"]').forEach(patchGroup);
-                if (!needRefresh && node.querySelector?.('form[data-type="unified-composer"]')) needRefresh = true;
+
+                // 新增：直接监听 plus 按钮出现，避免只等表单节点
+                if (!needRefresh && (
+                    node.matches?.('[data-testid="composer-plus-btn"]') ||
+                    node.querySelector?.('[data-testid="composer-plus-btn"]')
+                )) {
+                    needRefresh = true;
+                } else if (!needRefresh && node.querySelector?.('form[data-type="unified-composer"]')) {
+                    needRefresh = true;
+                }
             });
         }
         if (needRefresh) requestAnimationFrame(updatePromptPill);
     });
-    const __start = () => mo.observe(document.body, { childList:true, subtree:true });
+    const __start = () => {
+        mo.observe(document.body, { childList:true, subtree:true });
+        requestAnimationFrame(updatePromptPill);
+    };
     if (document.readyState === 'complete') {
         (window.requestIdleCallback || (cb=>setTimeout(cb,120)))(__start);
     } else {

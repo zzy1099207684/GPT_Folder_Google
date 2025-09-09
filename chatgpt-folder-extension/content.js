@@ -4218,10 +4218,11 @@ ${SEL} textarea{
 
                         const folder = folderFid ? folders[folderFid] : null;
                         if (!folder) return;
-                        if (folderFid && !lastActiveMap[curPath]) {
+                        if (folderFid && lastActiveMap[curPath] !== folderFid) {
                             lastActiveMap[curPath] = folderFid;
                             if (chrome?.runtime?.id) storage.set({lastActiveMap});
                         }
+
                         const i = folder.chats.findIndex(c => samePath(c.url, cur));
                         let needRender;
 
