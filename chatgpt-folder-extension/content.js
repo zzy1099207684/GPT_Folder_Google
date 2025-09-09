@@ -1480,6 +1480,9 @@ ${SEL} textarea{
 
         /* ===== 初始化收藏夹 ===== */
         async function initBookmarks(historyNode) {
+            if (document.documentElement.dataset.cgptBuilding === '1') return;
+            if (document.getElementById('cgpt-bookmarks-wrapper')) return;
+            document.documentElement.dataset.cgptBuilding = '1';
             function insertMultiSelectHeader(root) {
                 /* 若块已存在就搬到 div#history 之上，避免重复创建 */
                 const exist = document.getElementById('cgpt-select-header');
@@ -1938,18 +1941,13 @@ ${SEL} textarea{
             // 多选头部块 ─ 初始化
             insertMultiSelectHeader(historyNode);        // ← 新增
 
-            // 检查是否已有书签容器
             const existingWrapper = qs('#cgpt-bookmarks-wrapper');
             if (existingWrapper) {
-                // 若已有容器且位置不在 historyNode 同一父节点，则移动到正确位置
                 const host2 = historyNode?.parentElement;
                 if (host2 && existingWrapper.parentElement !== host2) {
-                    try {
-                        host2.insertBefore(existingWrapper, historyNode);
-                    } catch (e) {
-                        console.warn('[Bookmark] Failed to relocate existing wrapper:', e);
-                    }
+                    try { host2.insertBefore(existingWrapper, historyNode); } catch (e) { console.warn('[Bookmark] Failed to relocate existing wrapper:', e); }
                 }
+                delete document.documentElement.dataset.cgptBuilding;  // 释放构建锁
                 return;
             }
 
@@ -2213,19 +2211,31 @@ ${SEL} textarea{
             inner.append(fontBlock, bar, folderZone);
             wrap.appendChild(inner);
 
-            // 插入 bookmarks wrapper 于最顶 —— 加防护与早退
             const host = historyNode?.parentElement;
+            if (document.getElementById('cgpt-bookmarks-wrapper')) {
+                delete document.documentElement.dataset.cgptBuilding;
+                return;
+            }
             try {
                 if (host && host.isConnected && historyNode.isConnected) {
                     host.insertBefore(wrap, historyNode);
                 } else {
-                    // 节点可能在路由/水合过程中被卸载；本轮放弃，交由上层观察器下一轮重试
+                    delete document.documentElement.dataset.cgptBuilding; // 释放构建锁
                     return;
                 }
             } catch (e) {
                 console.warn('[Bookmark] Safe insert failed, will retry later:', e);
+                delete document.documentElement.dataset.cgptBuilding;   // 释放构建锁
                 return;
             }
+
+            (() => {
+                const all = document.querySelectorAll('#cgpt-bookmarks-wrapper');
+                for (let i = 1; i < all.length; i++) {
+                    try { all[i].remove(); } catch(_) {}
+                }
+            })();
+            delete document.documentElement.dataset.cgptBuilding;
 
             // 重新定位多选头部块到 history 与 bookmarks wrapper 之间
             const selHeader = document.getElementById('cgpt-select-header');
