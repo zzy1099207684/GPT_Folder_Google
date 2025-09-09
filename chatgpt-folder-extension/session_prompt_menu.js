@@ -62,6 +62,7 @@
     function buildPill(label) {
         const pill = document.createElement('span');
         pill.className = PILL_CLASS;
+        pill.setAttribute('data-label', String(label || ''));   // ← 新增：记录当前标签
         pill.style.cssText = [
             'display:inline-flex',
             'align-items:center',
@@ -87,6 +88,7 @@
         text.textContent = label;
 
         const close = document.createElement('button');
+
         close.type = 'button';
         close.textContent = '×';
         close.style.cssText = 'margin-left:4px;border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1';
@@ -107,29 +109,43 @@
         return pill;
     }
 
-    // 把胶囊插入到 + 按钮右侧；Normal 或空则移除
     function updatePromptPill() {
         const label = readStoredPromptLabel();
         const shouldShow = optionsList
             .filter(opt => opt.label !== 'Normal')
             .some(opt => opt.label === label);
 
-        // 找到所有输入框的 + 按钮（精确选择器来自页面结构）:contentReference[oaicite:2]{index=2}
         const plusButtons = Array.from(document.querySelectorAll('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]'));
         plusButtons.forEach(btn => {
-            const host = btn && btn.parentElement; // <span class="flex"> 包裹 + 按钮
+            const host = btn && btn.parentElement;
             if (!host) return;
 
-            // 清理旧的
-            host.querySelectorAll('.' + PILL_CLASS).forEach(n => n.remove());
+            const existed = host.querySelector('.' + PILL_CLASS);
 
-            if (shouldShow) {
-                const pill = buildPill(label);
-                // 插入到 + 号右侧
-                host.insertBefore(pill, btn.nextSibling);
+            if (!shouldShow) {
+                // 需要隐藏：仅当存在时移除，避免无谓操作
+                if (existed) existed.remove();
+                return;
             }
+
+            // 需要显示
+            if (existed) {
+                // 标签相同则不动；不同只更新文本与 data-label，避免“删后再插”的闪烁
+                const current = existed.getAttribute('data-label') || '';
+                if (current === String(label || '')) return;
+
+                const textNode = existed.querySelector('span:nth-of-type(2)');
+                if (textNode) textNode.textContent = label || '';
+                existed.setAttribute('data-label', String(label || ''));
+                return;
+            }
+
+            // 首次存在：创建并插入到 + 按钮右侧
+            const pill = buildPill(label);
+            host.insertBefore(pill, btn.nextSibling);
         });
     }
+
 
     // 观察下拉菜单出现，并注入「Prompt」入口
     const mo = new MutationObserver((mutations) => {
@@ -271,8 +287,6 @@
         )(__start), { once:true, passive:true });
     }
 
-    // 进入页面先渲染一次；跨 tab 变化也同步
-    updatePromptPill();
     window.addEventListener('storage', (e) => {
         if (e.key === 'cgptSessionPrompt') updatePromptPill();
     }, { passive: true });
