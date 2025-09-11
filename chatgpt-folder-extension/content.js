@@ -497,11 +497,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const btn = document.createElement('span');
                 btn.className = '__cgpt-chats-toggle';
                 btn.setAttribute('aria-label', 'Toggle chats');
-                btn.textContent = collapsed ? '<' : 'v';
+                btn.textContent = collapsed ? '👈' : '👇';
                 btn.addEventListener('click', e => {
                     e.stopPropagation();
                     const cur = scope.classList.toggle('__cgpt-chats-collapsed');
-                    btn.textContent = cur ? '<' : 'v';
+                    btn.textContent = cur ? '👈' : '👇';
                     saveCollapsed(cur);
                 });
                 header.appendChild(btn);
@@ -1496,25 +1496,45 @@ ${SEL} textarea{
                     return;
                 }
 
-                // 外层 aside（宽度缩减，与分组列表项对齐）
                 const aside = document.createElement('aside');
                 aside.id = 'cgpt-select-header';
                 aside.style.cssText = 'margin:0 12px 4px;width:calc(100% - 24px)';
 
+                (function ensureMultiSelectStyle(){
+                    if (document.getElementById('cgpt-multi-style')) return;
+                    const st = document.createElement('style');
+                    st.id = 'cgpt-multi-style';
+                    st.textContent = `
+                  /* 默认隐藏 */
+                  #cgpt-select-header input[type="checkbox"]{display:none!important;}
+                  a.__menu-item[href*="/c/"] input.history-checkbox{display:none!important;}
+                  /* 显示时 */
+                  .__cgpt-multi-visible #cgpt-select-header input[type="checkbox"]{display:inline-block!important;}
+                  .__cgpt-multi-visible a.__menu-item[href*="/c/"] input.history-checkbox{display:inline-block!important;}
+                  `;
+                    document.head.appendChild(st);
+                })();
+
                 // 内层工具条
                 const bar = document.createElement('div');
-                bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:rgba(255,255,255,.05)';
-                // 全选复选框
+                bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:rgba(255,255,255,0.05)';
+                // 全选复选框（默认由样式隐藏）
                 const toggle = document.createElement('input');
                 toggle.type = 'checkbox';
                 toggle.style.cssText = 'accent-color:#10a37f;cursor:pointer';
                 bar.appendChild(toggle);
 
-                // 批量处理文字
+                // 批量处理文字（可点击开关 + 文案切换）
                 const batchLabel = document.createElement('span');
-                batchLabel.textContent = 'Batch Processing';
-                batchLabel.style.cssText = 'font-size:13px;color:white';
+                batchLabel.style.cssText = 'font-size:13px;color:white;cursor:pointer';
                 bar.appendChild(batchLabel);
+
+                // [新增] 根据可见状态更新文案：打开 => [open]，关闭 => [close]
+                function updateBatchLabel() {
+                    const open = document.body.classList.contains('__cgpt-multi-visible');
+                    batchLabel.textContent = `Batch Processing${open ? '[👉]' : '[👈]'}`;
+                }
+                updateBatchLabel(); // 初始化为 [close]
 
                 // 右侧省略号
                 const menuBtn = document.createElement('span');
@@ -1524,16 +1544,39 @@ ${SEL} textarea{
 
                 aside.appendChild(bar);
                 chatsAside.insertBefore(aside, chatsH2);
+
+
                 /* === 交互 === */
 
-                // ① 全选 / 取消全选
+                // 统一开关：显示/隐藏多选；隐藏时清空所有已选并复位“全选”
+                function setMultiVisible(show){
+                    document.body.classList.toggle('__cgpt-multi-visible', !!show);
+                    if (!show) {
+                        if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
+                        root.querySelectorAll('input.history-checkbox:checked').forEach(cb=>{
+                            cb.checked = false;
+                            cb.dispatchEvent(new Event('change'));
+                        });
+                        toggle.checked = false;
+                    }
+                    updateBatchLabel(); // [新增] 每次切换后同步文案
+                }
+
+                // 点击“Batch Processing[open|close]”切换显示/隐藏
+                batchLabel.addEventListener('click', () => {
+                    const next = !document.body.classList.contains('__cgpt-multi-visible');
+                    setMultiVisible(next);
+                });
+
+                // ① 全选 / 取消全选（原逻辑不变）
                 toggle.addEventListener('change', () => {
                     const boxes = root.querySelectorAll('input.history-checkbox');
                     boxes.forEach(cb => {
                         cb.checked = toggle.checked;
-                        cb.dispatchEvent(new Event('change'));       // 触发 batch_delete.js 内的存储同步
+                        cb.dispatchEvent(new Event('change'));  // 同步batch_delete.js内存储
                     });
                 });
+
 
                 // ② 弹出菜单
                 const pop = document.createElement('div');
