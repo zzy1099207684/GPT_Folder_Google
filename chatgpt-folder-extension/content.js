@@ -528,8 +528,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 // light.txt 确认：Chats 位于 #history 内部的 h2.__menu-label，或直接在 nav 内部。:contentReference[oaicite:5]{index=5}
                 const cands = root.querySelectorAll('h2.__menu-label');
                 for (const h of cands) {
-                    const t = (h.textContent || '').trim();
-                    if (t === 'Chats') return h;
+                    return h;
                 }
                 return null;
             };
@@ -5542,7 +5541,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         document.head.appendChild(s);
     })();
 
-    // 侧边栏磨砂：先清空父层纯色，再给 nav 加模糊
     (function ensureFrostedSidebar() {
         const ID = 'cgpt-frosted-sidebar-style';
         if (document.getElementById(ID)) return;
@@ -5550,11 +5548,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         s.id = ID;
         s.textContent = [
             '#stage-slideover-sidebar,#stage-slideover-sidebar .bg-token-bg-elevated-secondary,#stage-slideover-sidebar [class*="bg-token-bg-elevated-secondary"]{background:transparent!important;background-color:transparent!important;}',
-            '#stage-slideover-sidebar nav[aria-label="Chat history"] .sticky{background:rgba(0,0,0,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
-            'html.light #stage-slideover-sidebar nav[aria-label="Chat history"] .sticky{background:rgba(255,255,255,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
 
-            '#stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, #stage-slideover-sidebar aside[class="bg-token-bg-elevated-secondary"]{background:rgba(0,0,0,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
-            'html.light #stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, html.light #stage-slideover-sidebar aside[class*="bg-token-bg-elevated-secondary"]{background:rgba(255,255,255,.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}'
+            /* 关键修复：不再依赖英文 aria-label，兼容中文等本地化 */
+            '#stage-slideover-sidebar nav .sticky{background:rgba(0,0,0,0.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
+            'html.light #stage-slideover-sidebar nav .sticky{background:rgba(255,255,255,0.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
+
+            /* 顺带修正 alpha 写法，避免不一致 */
+            '#stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, #stage-slideover-sidebar aside[class="bg-token-bg-elevated-secondary"]{background:rgba(0,0,0,0.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}',
+            'html.light #stage-slideover-sidebar aside.bg-token-bg-elevated-secondary, html.light #stage-slideover-sidebar aside[class*="bg-token-bg-elevated-secondary"]{background:rgba(255,255,255,0.15)!important;-webkit-backdrop-filter:blur(16px) saturate(120%);backdrop-filter:blur(16px) saturate(120%);}'
         ].join('');
         document.head.appendChild(s);
     })();

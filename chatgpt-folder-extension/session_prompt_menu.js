@@ -161,11 +161,30 @@
             const firstItem = g.querySelector('div[role="menuitem"]');
             if (!firstItem) return;
 
-            const hasAddFiles = Array
-                .from(g.querySelectorAll('div[role="menuitem"]'))
-                .some(n => /Add photos\s*&\s*files/i.test(n.textContent || ''));
+            /* NEW: 通过菜单根节点 → aria-labelledby → 触发器，确认是否为“输入框 +”菜单 */
+            const menuRoot =
+                g.closest('[role="menu"][data-radix-menu-content]') || g.closest('[role="menu"]');
 
-            if (!hasAddFiles) return;
+            let isFromPlus = false;
+            if (menuRoot) {
+                const triggerId = menuRoot.getAttribute('aria-labelledby');
+                const triggerEl = triggerId ? document.getElementById(triggerId) : null;
+
+                // 触发器就是 “+” 按钮，或其内部元素
+                const matchPlus = sel =>
+                    triggerEl && (triggerEl.matches?.(sel) || triggerEl.closest?.(sel));
+
+                isFromPlus = !!matchPlus('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]');
+
+                // 兜底：若触发器不可用，则用 plus 按钮的 aria-controls 对齐菜单 id
+                if (!isFromPlus && menuRoot.id) {
+                    const plusBtn = document.querySelector('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]');
+                    const controls = plusBtn?.getAttribute('aria-controls') || '';
+                    if (controls.split(/\s+/).includes(menuRoot.id)) isFromPlus = true;
+                }
+            }
+
+            if (!isFromPlus) return;
 
             const mi = document.createElement('div');
             mi.setAttribute('role', 'menuitem');
