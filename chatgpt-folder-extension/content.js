@@ -65,6 +65,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                       overflow:clip !important;
                       padding:10px !important;                  
                     }
+                    
+                    /* —— 新增：light 模式用纯白底与浅阴影 —— */
+                    html.light form[data-type="unified-composer"] .__zzy-fixed-composer{
+                      background:#fff !important;
+                      box-shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.08) !important;
+                    }
+                    
                     form[data-type="unified-composer"] .__zzy-fixed-composer [grid-area="primary"],
                     form[data-type="unified-composer"] .__zzy-fixed-composer [style*="grid-area: primary"]{
                       min-height:56px;      
@@ -169,6 +176,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     'padding:2px 8px', 'font-size:12px', 'user-select:none'
                 ].join(';');
 
+                /* —— 新增：light 模式白底与浅描边 —— */
+                if (document.documentElement.classList.contains('light')) {
+                    box.style.background = '#fff';
+                    box.style.border = '1px solid rgba(0,0,0,0.08)';
+                }
+
                 const label = document.createElement('span');
                 label.textContent = 'user instruction';
 
@@ -222,7 +235,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 const render = (mode) => {
                     sw.dataset.mode = String(mode);
-                    sw.style.background = (mode === 0) ? '#10a37f' : (mode === 1 ? '#888' : '#666');
+                    const isLight = document.documentElement.classList.contains('light');
+                    const offBg  = isLight ? '#000' : '#666';   // 全关：light→黑，dark→原灰
+                    const halfBg = isLight ? '#000' : '#888';   // 半关：light→黑，dark→原灰
+                    sw.style.background = (mode === 0) ? '#10a37f' : (mode === 1 ? halfBg : offBg);
                     knob.style.left = (mode === 0) ? '36px' : (mode === 1 ? '19px' : '2px');
                 };
 
@@ -549,7 +565,24 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         /* ===== 通用工具 ===== */
         const CLS = {tip: 'cgpt-tip'};
-        const COLOR = {bgLight: 'rgba(255,255,255,.05)', bgHover: 'rgba(255,255,255,.1)'};
+// NEW: 颜色随主题
+        const COLOR = (() => {
+            const light = document.documentElement.classList.contains('light');
+            return {
+                bgLight: light ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)',
+                bgHover: light ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.10)',
+            };
+        })();
+
+// NEW: 主题切换时同步已渲染组头背景
+        new MutationObserver(() => {
+            const light = document.documentElement.classList.contains('light');
+            COLOR.bgLight = light ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
+            COLOR.bgHover = light ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.10)';
+            document.querySelectorAll('.cgpt-folder-header').forEach(h => {
+                if (!h.matches(':hover')) h.style.background = COLOR.bgLight;
+            });
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
 
         function isBlockingOverlayExist() {
@@ -706,12 +739,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const s = document.createElement('style');
                 s.id = STYLE_ID;
                 s.textContent = `
-${SEL}, ${SEL} .grid { width:100%!important; max-width:100%!important; min-width:0!important; overflow:hidden; }
-${SEL} textarea{
-  width:100%!important; max-width:100%!important; min-width:0!important; box-sizing:border-box!important;
-  overflow-x:hidden!important; overflow-y:auto; white-space:pre-wrap; word-break:break-word; overflow-wrap:break-word;
-  resize:vertical; min-height:140px; height:auto!important;
-}`;
+                ${SEL}, ${SEL} .grid { width:100%!important; max-width:100%!important; min-width:0!important; overflow:hidden; }
+                ${SEL} textarea{
+                  width:100%!important; max-width:100%!important; min-width:0!important; box-sizing:border-box!important;
+                  overflow-x:hidden!important; overflow-y:auto; white-space:pre-wrap; word-break:break-word; overflow-wrap:break-word;
+                  resize:vertical; min-height:140px; height:auto!important;
+                }`;
                 document.head.appendChild(s);
             }
 
@@ -1518,6 +1551,19 @@ ${SEL} textarea{
                 // 内层工具条
                 const bar = document.createElement('div');
                 bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:rgba(255,255,255,0.05)';
+
+                (function applyBarBgByTheme(){
+                    const set = () => {
+                        const isLight = document.documentElement.classList.contains('light');
+                        bar.style.background = isLight ? '#f2f2f2' : 'rgba(255,255,255,0.05)';
+                    };
+                    set();
+                    new MutationObserver(set).observe(
+                        document.documentElement,
+                        { attributes: true, attributeFilter: ['class'] }
+                    );
+                })();
+
                 // 全选复选框（默认由样式隐藏）
                 const toggle = document.createElement('input');
                 toggle.type = 'checkbox';
@@ -1526,15 +1572,24 @@ ${SEL} textarea{
 
                 // 批量处理文字（可点击开关 + 文案切换）
                 const batchLabel = document.createElement('span');
-                batchLabel.style.cssText = 'font-size:13px;color:white;cursor:pointer';
+                batchLabel.style.cssText = 'font-size:13px;cursor:pointer';
+                (function applyBatchLabelColor(){
+                    const set = () => {
+                        const isLight = document.documentElement.classList.contains('light');
+                        batchLabel.style.setProperty('color', isLight ? '#111' : '#fff', 'important');
+                    };
+                    set();
+                    // 主题切换时同步
+                    new MutationObserver(set).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+                })();
+
                 bar.appendChild(batchLabel);
 
-                // [新增] 根据可见状态更新文案：打开 => [open]，关闭 => [close]
                 function updateBatchLabel() {
                     const open = document.body.classList.contains('__cgpt-multi-visible');
                     batchLabel.textContent = `Batch Processing${open ? '[👉]' : '[👈]'}`;
                 }
-                updateBatchLabel(); // 初始化为 [close]
+                updateBatchLabel();
 
                 // 右侧省略号
                 const menuBtn = document.createElement('span');
@@ -1582,6 +1637,16 @@ ${SEL} textarea{
                 const pop = document.createElement('div');
                 pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:120px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:9999';
                 document.body.appendChild(pop);
+
+                (function applyPopTheme(){
+                    const sync = () => {
+                        const isLight = document.documentElement.classList.contains('light');
+                        pop.style.background = isLight ? 'rgb(226 226 226)' : '#2b2b2b';
+                        pop.style.color = isLight ? '#111' : '';
+                    };
+                    sync();
+                    new MutationObserver(sync).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+                })();
 
                 function hide() {
                     pop.style.display = 'none';
@@ -1871,7 +1936,9 @@ ${SEL} textarea{
                 // ③ 选择目标分组
                 function showGroupList(bRect) {
                     const list = document.createElement('div');
-                    list.style.cssText = 'position:fixed;display:flex;flex-direction:column;min-width:140px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:10000';
+                    const isLight = document.documentElement.classList.contains('light');               // + 新增
+                    list.style.cssText = `position:fixed;display:flex;flex-direction:column;min-width:140px;` +
+                        `background:${isLight ? '#eee' : '#2b2b2b'};border-radius:6px;padding:4px 0;z-index:10000`; // * 改为按主题取色
                     document.body.appendChild(list);
 
                     const r = bRect || menuBtn.getBoundingClientRect();
@@ -2050,6 +2117,22 @@ ${SEL} textarea{
                 ].join(';')
             });
 
+            /* NEW: light 模式灰底黑字，并在主题切换时同步 */
+            (function applySelectTheme(){
+                const apply = () => {
+                    const isLight = document.documentElement.classList.contains('light');
+                    const bg = isLight ? '#f2f2f2' : 'rgb(23,22,22)';
+                    const fg = isLight ? '#000' : '#fff';
+                    [fontSelect, sizeSelect].forEach(sel => {
+                        sel.style.backgroundColor = bg;
+                        sel.style.color = fg;
+                        sel.style.border = isLight ? '1px solid rgba(0,0,0,0.1)' : 'none';
+                    });
+                };
+                apply();
+                new MutationObserver(apply).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+            })();
+
             // 原有字体选项保持不变
             ['inherit', 'serif', 'SimSun', 'SimHei', 'Microsoft YaHei', 'Segoe UI', 'Arial'].forEach(f => {
                 const o = document.createElement('option');
@@ -2113,9 +2196,19 @@ ${SEL} textarea{
 // 三点菜单按钮
             const addBtn = Object.assign(document.createElement('span'), {
                 textContent: '⋯',
-                style: 'color:white;cursor:pointer;margin-left:auto;font-size:18px;line-height:1'
+                // 去掉固定白色，改为统一由函数设置
+                style: 'cursor:pointer;margin-left:auto;font-size:18px;line-height:1'
             });
+
+// light=黑，dark=白；并监听主题切换（documentElement.class 变化）
+            const setDotColor = () => {
+                addBtn.style.color = document.documentElement.classList.contains('light') ? '#000' : 'white';
+            };
+            setDotColor();
+            new MutationObserver(setDotColor).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
             bar.appendChild(addBtn);
+
 
 // —— 把原来 “+” 的逻辑封装为函数 ——
             function addGroup() {
@@ -2208,8 +2301,19 @@ ${SEL} textarea{
 
 // —— 弹出菜单（add group / Export / Import）——
             const pop = document.createElement('div');
-            pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:140px;background:#2b2b2b;border-radius:8px;padding:6px 0;z-index:2147483647';
+            pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:120px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:9999';
             document.body.appendChild(pop);
+
+// 新增：light 模式白底黑字（含主题切换同步）
+            (function applyPopTheme(){
+                const sync = () => {
+                    const isLight = document.documentElement.classList.contains('light');
+                    pop.style.background = isLight ? 'rgb(226 226 226)' : '#2b2b2b';
+                    pop.style.color = isLight ? '#111' : '';
+                };
+                sync();
+                new MutationObserver(sync).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+            })();
 
             function hideMenu() {
                 pop.style.display = 'none';
@@ -3044,6 +3148,7 @@ ${SEL} textarea{
                 const box = document.createElement('div');
                 box.style.marginTop = '4px';
                 const header = document.createElement('div');
+                header.className = 'cgpt-folder-header';
                 header.style.cssText = `position:relative;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;padding:1.5px 6px;background:${COLOR.bgLight};border-radius:10px`;
                 const corner = document.createElement('div');
                 corner.className = 'cgpt-folder-corner';
@@ -3067,7 +3172,10 @@ ${SEL} textarea{
                     // 唯一 ID，用于区别组内 New chat 按钮
                     id: `cgpt-group-new-chat-${fid}`,
                 });
-                newBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;color:#e7d8c5;cursor:pointer;transition:background .15s'; // 基础外观同前
+                newBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;color:#e7d8c5;cursor:pointer;transition:background .15s';
+                /* 新增：light 模式下改为黑色 */
+                if (document.documentElement.classList.contains('light')) newBtn.style.color = '#000';
+
                 newBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' + // 引入图一完整 SVG
                     '<path d="M15.6729 3.91287C16.8918 2.69392 18.8682 2.69392 20.0871 3.91287C21.3061 5.13182 21.3061 7.10813 20.0871 8.32708L14.1499 14.2643C13.3849 15.0293 12.3925 15.5255 11.3215 15.6785L9.14142 15.9899C8.82983 16.0344 8.51546 15.9297 8.29289 15.7071C8.07033 15.4845 7.96554 15.1701 8.01005 14.8586L8.32149 12.6785C8.47449 11.6075 8.97072 10.615 9.7357 9.85006L15.6729 3.91287Z"></path>' + '<path d="M18.6729 5.32708C18.235 4.88918 17.525 4.88918 17.0871 5.32708L11.1499 11.2643C10.6909 11.7233 10.3932 12.3187 10.3014 12.9613L10.1785 13.8215L11.0386 13.6986C11.6812 13.6068 12.2767 13.3091 12.7357 12.8501L18.6729 6.91287C19.1108 6.47497 19.1108 5.76499 18.6729 5.32708Z"></path>' + '<path d="M11 3.99929C11.0004 4.55157 10.5531 4.99963 10.0008 5.00007C9.00227 5.00084 8.29769 5.00827 7.74651 5.06064C7.20685 5.11191 6.88488 5.20117 6.63803 5.32695C6.07354 5.61457 5.6146 6.07351 5.32698 6.63799C5.19279 6.90135 5.10062 7.24904 5.05118 7.8542C5.00078 8.47105 5 9.26336 5 10.4V13.6C5 14.7366 5.00078 15.5289 5.05118 16.1457C5.10062 16.7509 5.19279 17.0986 5.32698 17.3619C5.6146 17.9264 6.07354 18.3854 6.63803 18.673C6.90138 18.8072 7.24907 18.8993 7.85424 18.9488C8.47108 18.9992 9.26339 19 10.4 19H13.6C14.7366 19 15.5289 18.9992 16.1458 18.9488C16.7509 18.8993 17.0986 18.8072 17.362 18.673C17.9265 18.3854 18.3854 17.9264 18.673 17.3619C18.7988 17.1151 18.8881 16.7931 18.9393 16.2535C18.9917 15.7023 18.9991 14.9977 18.9999 13.9992C19.0003 13.4469 19.4484 12.9995 20.0007 13C20.553 13.0004 21.0003 13.4485 20.9999 14.0007C20.9991 14.9789 20.9932 15.7808 20.9304 16.4426C20.8664 17.116 20.7385 17.7136 20.455 18.2699C19.9757 19.2107 19.2108 19.9756 18.27 20.455C17.6777 20.7568 17.0375 20.8826 16.3086 20.9421C15.6008 21 14.7266 21 13.6428 21H10.3572C9.27339 21 8.39925 21 7.69138 20.9421C6.96253 20.8826 6.32234 20.7568 5.73005 20.455C4.78924 19.9756 4.02433 19.2107 3.54497 18.2699C3.24318 17.6776 3.11737 17.0374 3.05782 16.3086C2.99998 15.6007 2.99999 14.7266 3 13.6428V10.3572C2.99999 9.27337 2.99998 8.39922 3.05782 7.69134C3.11737 6.96249 3.24318 6.3223 3.54497 5.73001C4.02433 4.7892 4.78924 4.0243 5.73005 3.54493C6.28633 3.26149 6.88399 3.13358 7.55735 3.06961C8.21919 3.00673 9.02103 3.00083 9.99922 3.00007C10.5515 2.99964 10.9996 3.447 11 3.99929Z"></path>' + '</svg>';
                 let hideTip;                                                             // 保存提示关闭函数
@@ -3086,10 +3194,12 @@ ${SEL} textarea{
                 };
 
                 // ===== 替换后代码（三点菜单及弹框）=====
-                const menuBtn = Object.assign(document.createElement('span'), {          // 创建三点菜单按钮
-                    textContent: '⋯',                                                    // 使用省略号
-                    style: 'color:white;cursor:pointer;margin-left:6px;font-size:18px;line-height:1' // 样式
+                const menuBtn = Object.assign(document.createElement('span'), { // 创建三点菜单按钮
+                    textContent: '⋯',
+                    style: 'color:white;cursor:pointer;margin-left:6px;font-size:18px;line-height:1'
                 });
+                if (document.documentElement.classList.contains('light')) menuBtn.style.color = '#000';
+
                 header.append(left, newBtn, menuBtn);
                 menuBtn.addEventListener('click', e => {
                     e.stopPropagation();                              // 不触发折叠
@@ -3677,14 +3787,23 @@ ${SEL} textarea{
 
                 const link = document.createElement('a');
                 // 创建超链接节点
-                link.href = chat.url || 'javascript:void 0';
                 link.textContent = chat.title;
                 link.dataset.url = chat.url || '';
                 link.style.cssText = 'flex:1;min-width:0;margin-right:4px;font-size:13px;color:#b2b2b2;text-decoration:none;border-radius:6px;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.25';
+// ↓ 新增：light 模式未选中时用黑色
+                if (document.documentElement.classList.contains('light')) {
+                    link.style.color = '#000';
+                }
                 const active = chat.url && samePath(chat.url, location.href);
                 if (active) {
-                    link.style.background = 'rgba(255,255,255,.07)';
-                    link.style.color = '#fff';
+                    // ↓ 分主题设置选中态：light=浅灰底+黑字；dark=原样
+                    if (document.documentElement.classList.contains('light')) {
+                        link.style.background = 'rgba(0,0,0,0.06)';
+                        link.style.color = '#000';
+                    } else {
+                        link.style.background = 'rgba(255,255,255,0.07)';
+                        link.style.color = '#fff';
+                    }
                 }
                 link.onclick = e => {
                     window.__cgptPendingFid = null;
@@ -4728,12 +4847,11 @@ ${SEL} textarea{
                     // 复原上一次在分组里高亮的会话
                     try {
                         if (activePath) {
-                            const prevArr = liveSyncMap.get(activePath);
-                            prevArr && prevArr.forEach(({el}) => {
-                                if (el && el.isConnected) {
-                                    el.style.background = '';
-                                    el.style.color = '#b2b2b2';
-                                }
+                            const oldArr = liveSyncMap.get(activePath);
+                            if (oldArr) oldArr.forEach(({el}) => {
+                                el.style.background = '';
+                                // light 模式下保持黑字，dark 模式才用灰字
+                                el.style.color = document.documentElement.classList.contains('light') ? '#000' : '#b2b2b2';
                             });
                         }
                     } catch {
@@ -4777,7 +4895,7 @@ ${SEL} textarea{
                     const oldArr = liveSyncMap.get(activePath);
                     if (oldArr) oldArr.forEach(({el}) => {
                         el.style.background = '';
-                        el.style.color = '#b2b2b2';
+                        el.style.color = document.documentElement.classList.contains('light') ? '#000' : '#b2b2b2';
                     });
                 }
 
@@ -4791,11 +4909,14 @@ ${SEL} textarea{
 
                 if (arr && arr.length) {
                     arr.forEach(({el}) => {
-                        // 点击 history 会话时，也要同步高亮组内同一会话
-                        el.style.background = 'rgba(255,255,255,0.07)';
-                        el.style.color = '#fff';
+                        if (document.documentElement.classList.contains('light')) {
+                            el.style.background = 'rgba(0,0,0,0.06)'; // 浅灰叠一层
+                            el.style.color = '#000';                 // 黑字
+                        } else {
+                            el.style.background = 'rgba(255,255,255,0.07)';
+                            el.style.color = '#fff';
+                        }
                     });
-
                 }
                 activePath = path;
 
@@ -5280,6 +5401,14 @@ ${SEL} textarea{
             'position:fixed', 'inset:0', 'pointer-events:none',
             'z-index:0', 'contain:paint', 'opacity:1'
         ].join(';');
+
+        // —— 新增：light 模式用纯白底，去掉模糊图与渐变 —— //
+        const isLight = document.documentElement.classList.contains('light');
+        if (isLight) {
+            root.style.background = '#fff';
+            document.body.prepend(root);
+            return;
+        }
 
         // 使用与ss页一致的背景素材 + 模糊，贴合原观感
         const pic = document.createElement('picture');

@@ -80,6 +80,12 @@
             'transform-origin:left center',
         ].join(';');
 
+        /* —— 新增：light 模式白底浅描边 —— */
+        if (document.documentElement.classList.contains('light')) {
+            pill.style.background = '#fff';
+            pill.style.border = '1px solid rgba(0,0,0,0.08)';
+        }
+
         const icon = document.createElement('span');
         icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 14.5c4-4.2 7.2-7 9.5-8.3.5-.3 1.2.2 1 .8-1 2.9-4 7.4-9.1 9.5-.6.2-1.2-.4-1-1z"></path></svg>';
         icon.style.opacity = '.85';
