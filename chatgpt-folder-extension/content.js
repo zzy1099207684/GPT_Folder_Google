@@ -222,12 +222,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     'padding:2px 8px', 'font-size:12px', 'user-select:none'
                 ].join(';');
 
-                /* —— 新增：light 模式白底与浅描边 —— */
-                if (document.documentElement.classList.contains('light')) {
-                    box.style.background = '#fff';
-                    box.style.border = '1px solid rgba(0,0,0,0.08)';
-                }
-
                 const label = document.createElement('span');
                 label.textContent = 'user instruction';
 
@@ -281,9 +275,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 const render = (mode) => {
                     sw.dataset.mode = String(mode);
-                    const isLight = document.documentElement.classList.contains('light');
-                    const offBg  = isLight ? '#000' : '#666';   // 全关：light→黑，dark→原灰
-                    const halfBg = isLight ? '#000' : '#888';   // 半关：light→黑，dark→原灰
+                    const offBg  = '#666';
+                    const halfBg = '#888';
                     sw.style.background = (mode === 0) ? '#10a37f' : (mode === 1 ? halfBg : offBg);
                     knob.style.left = (mode === 0) ? '36px' : (mode === 1 ? '19px' : '2px');
                 };
