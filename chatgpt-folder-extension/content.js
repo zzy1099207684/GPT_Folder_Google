@@ -4989,8 +4989,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     }
                 }
 
+                const isLight = document.documentElement.classList.contains('light');
                 document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
-                    el.style.borderTopColor = el.dataset.fid === activeFid ? '#fff' : 'transparent';
+                    el.style.borderTopColor = el.dataset.fid === activeFid ? (isLight ? '#000' : '#fff') : 'transparent';
                 });
                 try {
                     refreshHistoryOrder();
