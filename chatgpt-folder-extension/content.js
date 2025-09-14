@@ -9,9 +9,55 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 } else {
     document.documentElement.setAttribute(INSTALLED, '1');
 
+    /* NEW: 监听页面主题切换（light/dark 或 color-scheme）→ 整页刷新 */
+    (function ensureThemeReloadOnSwitch(){
+        const KEY = 'cgptThemeKey';
+        const TS  = 'cgptThemeReloadTs';
+        const root = document.documentElement;
+
+        const readKey = () => {
+            // 仅关心主题明暗与 color-scheme；不因强调色变化而刷新
+            const mode = root.classList.contains('light') ? 'light'
+                : root.classList.contains('dark')  ? 'dark' : '';
+            const scheme = root.style?.colorScheme || '';
+            return `${mode}|${scheme}`;
+        };
+
+        // 初始化并记忆当前主题，防止首次装载产生循环刷新
+        let last = readKey();
+        try { sessionStorage.setItem(KEY, last); } catch {}
+
+        let scheduled = false;
+        const apply = () => {
+            scheduled = false;
+            const cur = readKey();
+            if (cur === last) return;
+
+            // 节流，避免短时间内多次切换引发抖动
+            const now = Date.now();
+            let lastTs = 0;
+            try { lastTs = parseInt(sessionStorage.getItem(TS) || '0', 10) || 0; } catch {}
+            if (now - lastTs < 1500) return;
+
+            last = cur;
+            try {
+                sessionStorage.setItem(KEY, cur);
+                sessionStorage.setItem(TS, String(now));
+            } catch {}
+
+            location.reload(); // 整页刷新
+        };
+
+        new MutationObserver(() => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(apply);
+        }).observe(root, { attributes: true, attributeFilter: ['class','style'] });
+    })();
+
     const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]';
     const MAX_PROMPTS = 4;
-    (() => { // 立即执行函数隔离作用域
+    (() => {
         function nanoid(size = 21) {
             let id = ''
             const chars = 'ModuleSymbhasOwnPr-0123456789ABCDEFGHIJKLNQRTUVWXYZ_cfgijkpqtvxz'
