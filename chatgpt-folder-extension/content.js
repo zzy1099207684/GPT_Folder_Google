@@ -3608,6 +3608,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     } else {
                         history.pushState({}, '', '/');
                         window.dispatchEvent(new Event('popstate'));
+                        // 新增：兜底导航不依赖“全局按钮点击”，避免残留抑制标志
+                        try { delete window.__cgptSuppressGroupClear; } catch {}
                     }
                     highlightActive();
 
@@ -4076,8 +4078,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         if (deletingCurrent) {
                             const btn = document.getElementById(`cgpt-group-new-chat-${fid}`);
                             if (btn) {
-                                // 复用既有保护逻辑，避免全局 New chat 清掉组选中
-                                try { window.__cgptSuppressGroupClear = true; } catch {}
+                                // 不再预设 __cgptSuppressGroupClear，交由 newBtn.onclick 内部按需设置
                                 btn.click(); // 相当于“点了一下当前组的 New chat”
                             }
                         }
