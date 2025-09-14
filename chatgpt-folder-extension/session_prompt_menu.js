@@ -115,6 +115,262 @@
         return pill;
     }
 
+    /* === NEW: 迷你模型切换器 === */
+
+// 迷你切换器容器类名
+    const MINI_MODEL_CLASS = 'cgpt-mini-model-switcher';
+
+// 映射常见项到 data-testid（用于“等同手动切换”点击）
+    const MODEL_MAP = [
+        { label: 'Auto',          testid: 'model-switcher-gpt-5' },
+        { label: 'Instant',       testid: 'model-switcher-gpt-5-instant' },
+        { label: 'Thinking mini', testid: 'model-switcher-gpt-5-t-mini' },
+        { label: 'Thinking',      testid: 'model-switcher-gpt-5-thinking' },
+        // { label: 'Pro',        testid: null }, // 页面可能为禁用项，保留但不绑定
+        // Legacy
+        { label: 'GPT-4o',        testid: 'model-switcher-gpt-4o',   group: 'legacy' },
+        { label: 'GPT-4.1',       testid: 'model-switcher-gpt-4-1',  group: 'legacy' },
+        { label: 'o3',            testid: 'model-switcher-o3',       group: 'legacy' },
+        { label: 'o4-mini',       testid: 'model-switcher-o4-mini',  group: 'legacy' },
+    ];
+
+// 注入一次性样式：缩小外观、弹层样式
+    (function ensureMiniModelStyle(){
+        if (document.getElementById('cgpt-mini-model-style')) return;
+        const s = document.createElement('style');
+        s.id = 'cgpt-mini-model-style';
+        s.textContent = `
+      .${MINI_MODEL_CLASS}{
+        display:inline-flex; align-items:center; margin-right:0px; transform:scale(.78);
+        transform-origin:left center; position:relative; z-index:3;
+      }
+      .${MINI_MODEL_CLASS} > button{
+        height:28px; padding:0 10px; border-radius:10px; border:1px solid rgba(0,0,0,.12);
+        background:rgba(255,255,255,.08); font-size:14px; line-height:28px; cursor:pointer;
+      }
+      html.light .${MINI_MODEL_CLASS} > button{
+        background:#fff; border-color:rgba(0,0,0,.08);
+      }
+      .${MINI_MODEL_CLASS}-menu{
+        position:fixed; min-width:160px; max-height:360px; overflow:auto;
+        background:var(--token-main-surface-primary,#2b2b2b); color:inherit;
+        border-radius:12px; padding:6px 4px; box-shadow:0 10px 30px rgba(0,0,0,.25);
+      }
+      .${MINI_MODEL_CLASS}-item{
+        display:flex; align-items:center; justify-content:space-between;
+        gap:6px; padding:8px 10px; cursor:pointer; border-radius:8px;
+      }
+      .${MINI_MODEL_CLASS}-item:hover{
+        background:rgba(255,255,255,.08);
+      }
+      html.light .${MINI_MODEL_CLASS}-menu{
+        background:#fff; box-shadow:0 10px 30px rgba(0,0,0,.12);
+      }
+    `;
+        document.head.appendChild(s);
+    })();
+
+// 找到页面顶部原生“模型选择”按钮
+    function findHeaderModelButton(){
+        const sel = 'button[data-testid="model-switcher-dropdown-button"],button[aria-label^="Model selector"]';
+        const list = Array.from(document.querySelectorAll(sel));
+        // 优先挑选“可见且有布局”的按钮，避免点到隐藏的移动端按钮
+        const vis = list.find(b => b.offsetParent !== null &&
+            b.getClientRects().length > 0 &&
+            getComputedStyle(b).visibility !== 'hidden');
+        // 回退：若未找到可见项，取最后一个（桌面版常在后）
+        return vis || list[list.length - 1] || null;
+    }
+
+// 读取当前模型名，用于迷你按钮文案
+    function readCurrentModelText(){
+        const btn = findHeaderModelButton();
+        if (!btn) return 'Model';
+        const aria = btn.getAttribute('aria-label') || '';
+        // 例： "Model selector, current model is 5 Instant"
+        const m = aria.match(/current model is\s+(.+)$/i);
+        if (m) return m[1].trim();
+        const txt = (btn.textContent || '').trim();
+        return txt || 'Model';
+    }
+
+// 打开并点击原生菜单的某项，使之“等同手动切换”
+    function clickNativeModel(label){
+        const headerBtn = findHeaderModelButton();
+        if (!headerBtn) return;
+
+        if (headerBtn.getAttribute('aria-expanded') !== 'true') {
+            headerBtn.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+        }
+
+        const map = MODEL_MAP.find(m => m.label === label);
+
+        // NEW: 如为“旧版模型”，先确保展开 Legacy 子菜单
+        const openLegacySubmenuOnce = (() => {
+            let done = false;
+            return () => {
+                if (done) return true;
+                const sub = document.querySelector('[data-testid="Legacy models-submenu"]'); // 原生子菜单触发项
+                if (!sub) return false; // 等待主菜单挂载
+                sub.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+                done = true;
+                return true;
+            };
+        })();
+
+        const pickTarget = () => {
+            let el = map?.testid ? document.querySelector(`[data-testid="${map.testid}"]`) : null;
+            if (!el) {
+                el = Array.from(document.querySelectorAll('[role="menuitem"]'))
+                    .find(n => (n.textContent || '').trim().toLowerCase().startsWith(label.toLowerCase()));
+            }
+            if (el && (el.offsetParent === null || el.getClientRects().length === 0)) el = null;
+            return el || null;
+        };
+
+        let tried = 0;
+        const tryClick = () => {
+            const target = pickTarget();
+            if (target) {
+                target.scrollIntoView({block:'nearest'});
+                target.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+                setTimeout(updateMiniModelText,160);
+                return;
+            }
+            if (tried++ < 60) requestAnimationFrame(tryClick);
+        };
+
+        // NEW: legacy 先展开子菜单，再开始轮询点击目标项
+        if (map?.group === 'legacy') {
+            let subTries = 0;
+            const ensureSubmenu = () => {
+                // 若目标已出现则直接进入点击
+                if (pickTarget()) { requestAnimationFrame(tryClick); return; }
+                // 未出现则尝试展开一次子菜单
+                openLegacySubmenuOnce();
+                if (subTries++ < 15) requestAnimationFrame(ensureSubmenu);
+                else requestAnimationFrame(tryClick); // 兜底仍尝试
+            };
+            requestAnimationFrame(ensureSubmenu);
+        } else {
+            requestAnimationFrame(tryClick);
+        }
+    }
+
+// 计算弹层位置：自动上/下翻转
+    function placeMenu(menuEl, anchorRect){
+        // 先临时显示以获得尺寸
+        menuEl.style.visibility = 'hidden';
+        document.body.appendChild(menuEl);
+        const mh = menuEl.offsetHeight || 260;
+        const mw = Math.max(menuEl.offsetWidth, 180);
+        const spaceBelow = window.innerHeight - anchorRect.bottom;
+        const spaceAbove = anchorRect.top;
+        const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+
+        const left = Math.min(Math.max(8, anchorRect.left), window.innerWidth - mw - 8);
+        const top  = openUp ? (anchorRect.top - mh - 8) : (anchorRect.bottom + 6);
+
+        menuEl.style.left = `${left}px`;
+        menuEl.style.top  = `${top}px`;
+        menuEl.style.visibility = '';
+        return openUp ? 'top' : 'bottom';
+    }
+
+// 构建迷你按钮
+    function buildMiniModelSwitcher(){
+        const wrap = document.createElement('span');
+        wrap.className = MINI_MODEL_CLASS;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('aria-haspopup', 'menu');
+        btn.textContent = readCurrentModelText();
+        wrap.appendChild(btn);
+
+        let openedMenu = null;
+
+        const openMenu = () => {
+            if (openedMenu) { closeMenu(); return; }
+            const m = document.createElement('div');
+            m.className = `${MINI_MODEL_CLASS}-menu`;
+            MODEL_MAP.forEach(opt => {
+                const row = document.createElement('div');
+                row.className = `${MINI_MODEL_CLASS}-item`;
+                row.textContent = opt.label;
+                row.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    closeMenu();
+                    clickNativeModel(opt.label);
+                });
+                m.appendChild(row);
+            });
+            // 定位
+            const r = btn.getBoundingClientRect();
+            placeMenu(m, r);
+            openedMenu = m;
+
+            setTimeout(() => {
+                const closer = (ev) => {
+                    if (!m.contains(ev.target)) { closeMenu(); document.removeEventListener('click', closer, true); }
+                };
+                document.addEventListener('click', closer, true);
+            }, 0);
+        };
+
+        const closeMenu = () => {
+            if (openedMenu) { try { openedMenu.remove(); } catch{} openedMenu = null; }
+        };
+
+        btn.addEventListener('click', (e) => { e.stopPropagation(); openMenu(); });
+
+        return wrap;
+    }
+
+// 确保迷你切换器已插入；并尽量紧跟在胶囊或“+”按钮之后
+    function ensureMiniModelSwitcher(host, plusBtn, pillEl){
+        let mini = host.querySelector('.' + MINI_MODEL_CLASS);
+        if (!mini) {
+            mini = buildMiniModelSwitcher();
+            const anchor = pillEl || host.querySelector('.' + PILL_CLASS) || plusBtn;
+            host.insertBefore(mini, anchor.nextSibling);
+        } else {
+            updateMiniModelText(mini);
+        }
+    }
+
+// 更新按钮文案（当前模型）
+    function updateMiniModelText(mini){
+        const root = mini || document.querySelector('.' + MINI_MODEL_CLASS);
+        if (!root) return;
+        const btn = root.querySelector('button');
+        if (!btn) return;
+        btn.textContent = readCurrentModelText();
+    }
+
+// 监听顶部模型按钮变化，自动刷新文案
+    (function observeHeaderModel(){
+        const btn = findHeaderModelButton();
+        if (!btn || btn.__cgptMiniModelObserved) return;
+        const mo = new MutationObserver(() => updateMiniModelText());
+        mo.observe(btn, { attributes:true, childList:true, subtree:true });
+        btn.__cgptMiniModelObserved = true;
+    })();
+
+
+    // 【修改版】在插入胶囊后，顺带插入迷你“模型切换器”
     function updatePromptPill() {
         const label = readStoredPromptLabel();
         const shouldShow = optionsList
@@ -129,28 +385,33 @@
             const existed = host.querySelector('.' + PILL_CLASS);
 
             if (!shouldShow) {
-                // 需要隐藏：仅当存在时移除，避免无谓操作
                 if (existed) existed.remove();
+                // NEW: 如果胶囊隐藏，也要确保模型切换器存在（与胶囊同行，但不依赖胶囊显示）
+                ensureMiniModelSwitcher(host, btn);
                 return;
             }
 
-            // 需要显示
             if (existed) {
-                // 标签相同则不动；不同只更新文本与 data-label，避免“删后再插”的闪烁
                 const current = existed.getAttribute('data-label') || '';
-                if (current === String(label || '')) return;
-
-                const textNode = existed.querySelector('span:nth-of-type(2)');
-                if (textNode) textNode.textContent = label || '';
-                existed.setAttribute('data-label', String(label || ''));
+                if (current !== String(label || '')) {
+                    const textNode = existed.querySelector('span:nth-of-type(2)');
+                    if (textNode) textNode.textContent = label || '';
+                    existed.setAttribute('data-label', String(label || ''));
+                }
+                // NEW: 胶囊已存在时，也确保模型切换器存在并更新当前模型文案
+                ensureMiniModelSwitcher(host, btn);
                 return;
             }
 
-            // 首次存在：创建并插入到 + 按钮右侧
             const pill = buildPill(label);
             host.insertBefore(pill, btn.nextSibling);
+            // NEW: 插入胶囊后，紧跟插入迷你模型切换器
+            ensureMiniModelSwitcher(host, btn, pill);
         });
     }
+
+
+
 
 
     // 观察下拉菜单出现，并注入「Prompt」入口
