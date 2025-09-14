@@ -3265,9 +3265,29 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
 
                             const box = document.createElement('div');
-                            // ① 增加 position:relative 便于在盒子内绝对定位按钮
+// ① 增加 position:relative 便于在盒子内绝对定位按钮
                             box.style.cssText = 'background:#2b2521;padding:16px;border-radius:6px;max-width:400px;width:80%;position:relative';
 
+                            /* NEW: light 模式灰底，同步主题 */
+                            (function applyBoxTheme(){
+                                const sync = () => {
+                                    const isLight = document.documentElement.classList.contains('light');
+                                    box.style.background = isLight ? 'rgb(226 226 226)' : '#2b2521';
+                                    box.style.color = isLight ? '#111' : '#e7d8c5';
+                                    // 同步内部输入控件（textarea / number）
+                                    box.querySelectorAll('textarea, input[type="number"]').forEach(el => {
+                                        el.style.background = isLight ? '#f2f2f2' : '#1e1815';
+                                        el.style.color = isLight ? '#111' : '#e7d8c5';
+                                    });
+                                };
+                                sync();
+                                new MutationObserver(sync).observe(
+                                    document.documentElement,
+                                    { attributes:true, attributeFilter:['class'] }
+                                );
+                                // 暴露给后续新增控件复用
+                                box.__applyTheme = sync;
+                            })();
                             /* ② 新增圆形问号帮助按钮 */
                             const helpBtn = document.createElement('button');
                             helpBtn.textContent = '?';
@@ -3337,7 +3357,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 // textarea 本身：宽度改为自动拉伸，占行内剩余空间
                                 const t = document.createElement('textarea');
                                 t.value = val;
-                                t.style.cssText = 'flex:1;height:80px;background:#1e1815;color:#e7d8c5;border:none;padding:8px;border-radius:6px;resize:vertical';
+                                t.style.cssText = 'flex:1;height:80px;border:none;padding:8px;border-radius:6px;resize:vertical';
+                                {
+                                    // NEW: 按主题设置背景与文字色
+                                    const isLight = document.documentElement.classList.contains('light');
+                                    t.style.background = isLight ? '#f2f2f2' : '#1e1815';
+                                    t.style.color      = isLight ? '#111'   : '#e7d8c5';
+                                    // 若弹框提供了同步函数，调用一次，确保后续切换也能更新
+                                    box.__applyTheme && box.__applyTheme();
+                                }
                                 t.onfocus = () => {
                                     activeTa = t;
                                 };
@@ -3400,12 +3428,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             gapWrap.style.cssText = 'margin-top:8px;font-size:12px;display:flex;align-items:center;gap:6px';
                             gapWrap.innerHTML = '<span>How often does this happen?</span>';
                             const gapInput = Object.assign(document.createElement('input'), {
-                                type: 'number',
-                                min: 0,
-                                step: 1,
-                                value: folders[fid].gap ?? 0,
-                                style: 'flex:0 0 ;width:155px; height:24px;border-radius:4px;border:1px solid #555;background:#1e1815;color:#e7d8c5;padding:0 6px'
+                                type:'number', min:0, step:1, value: folders[fid].gap ?? 0,
+                                style:'flex:0 0 0;width:155px;height:24px;border-radius:4px;border:1px solid #555;padding:0 6px'
                             });
+                            {
+                                // NEW: 按主题设置背景与文字色
+                                const isLight = document.documentElement.classList.contains('light');
+                                gapInput.style.background = isLight ? '#f2f2f2' : '#1e1815';
+                                gapInput.style.color      = isLight ? '#111'   : '#e7d8c5';
+                                box.__applyTheme && box.__applyTheme();
+                            }
                             gapWrap.appendChild(gapInput);
                             gapWrap.appendChild(helpBtn);
 
