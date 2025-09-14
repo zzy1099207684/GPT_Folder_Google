@@ -4051,10 +4051,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 del.dataset.fid = fid;
                 del.onclick = e => {
                     e.stopPropagation();
-                    // 从对应分组中删除这条聊天
                     const arr = folders[fid].chats;
                     const index = arr.findIndex(c => samePath(c.url, chat.url));
                     if (index !== -1) {
+                        // [新增] 先判断是否删除的是“当前打开的会话”
+                        const deletingCurrent = samePath(chat.url, location.href);
+
                         arr.splice(index, 1);
 
                         try {
@@ -4063,13 +4065,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 delete lastActiveMap[p];
                                 if (chrome?.runtime?.id) storage.set({lastActiveMap});
                             }
-                        } catch {
-                        }
+                        } catch {}
 
                         safeSendMessage({type: 'save-folders', data: folders});
                         detachLink(link);
                         li.remove();
                         highlightActive();
+
+                        // [新增] 若删的是当前会话，则自动点击本组 New chat 按钮
+                        if (deletingCurrent) {
+                            const btn = document.getElementById(`cgpt-group-new-chat-${fid}`);
+                            if (btn) {
+                                // 复用既有保护逻辑，避免全局 New chat 清掉组选中
+                                try { window.__cgptSuppressGroupClear = true; } catch {}
+                                btn.click(); // 相当于“点了一下当前组的 New chat”
+                            }
+                        }
                     }
                 };
                 li.append(link, del);
