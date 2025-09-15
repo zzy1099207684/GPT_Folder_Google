@@ -32,10 +32,22 @@
         const btn = ev.target && ev.target.closest(
             'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
         );
-        if (!btn) return; // 保持已选样式，不做重置
+        if (!btn) return;
         // no-op
     }, true);
 
+// 捕获“历史会话”点击，清除强制模型锁，并在切换后同步
+    document.addEventListener('click', (ev) => {
+        const a = ev.target && ev.target.closest(
+            'a[href^="/c/"],a[data-testid="conversation-item"],[data-testid="conversation-item"] a'
+        );
+        if (!a) return;
+        try { sessionStorage.removeItem(MINI_FORCE_KEY); } catch {}
+        // 给予路由切换时间，由上面的重绑逻辑与此兜底共同保证同步
+        setTimeout(() => { updateMiniModelText(); ensureHeaderModelObserved(); }, 600);
+    }, true);
+
+    const PILL_CLASS = 'cgpt-prompt-pill';
 
     function toast(msg) {
         try {
@@ -47,8 +59,7 @@
         } catch {}
     }
 
-    // 读取/更新输入框处的 Prompt 胶囊
-    const PILL_CLASS = 'cgpt-prompt-pill';
+
 
     function readStoredPromptLabel() {
         try {
@@ -418,13 +429,20 @@
         btn.textContent = readCurrentModelText();
     }
 
-// 监听顶部模型按钮变化，自动刷新文案
-    (function observeHeaderModel(){
+    function ensureHeaderModelObserved(){
         const btn = findHeaderModelButton();
         if (!btn || btn.__cgptMiniModelObserved) return;
         const mo = new MutationObserver(() => updateMiniModelText());
         mo.observe(btn, { attributes:true, childList:true, subtree:true });
         btn.__cgptMiniModelObserved = true;
+    }
+    ensureHeaderModelObserved();
+
+// 当页面 DOM 变化时，若按钮被替换则重新绑定
+    (function observeHeaderButtonMount(){
+        const rebinder = new MutationObserver(() => ensureHeaderModelObserved());
+        rebinder.observe(document.body, { childList:true, subtree:true });
+        window.addEventListener('popstate', ensureHeaderModelObserved, { passive:true });
     })();
 
     // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
