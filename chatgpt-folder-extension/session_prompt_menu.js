@@ -471,8 +471,9 @@
             if (existed) {
                 const current = existed.getAttribute('data-label') || '';
                 if (current !== String(label || '')) {
-                    const textNode = existed.querySelector('span:nth-of-type(2)');
-                    if (textNode) textNode.textContent = label || '';
+                    // 修复：胶囊只有一个 span，用它来更新文本
+                    const textNode = existed.querySelector('span') || existed.firstElementChild;
+                    if (textNode && textNode.tagName === 'SPAN') textNode.textContent = label || '';
                     existed.setAttribute('data-label', String(label || ''));
                 }
                 // NEW: 胶囊已存在时，也确保模型切换器存在并更新当前模型文案
