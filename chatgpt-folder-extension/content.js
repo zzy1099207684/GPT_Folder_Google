@@ -10,22 +10,25 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
     document.documentElement.setAttribute(INSTALLED, '1');
 
     /* NEW: 监听页面主题切换（light/dark 或 color-scheme）→ 整页刷新 */
-    (function ensureThemeReloadOnSwitch(){
+    (function ensureThemeReloadOnSwitch() {
         const KEY = 'cgptThemeKey';
-        const TS  = 'cgptThemeReloadTs';
+        const TS = 'cgptThemeReloadTs';
         const root = document.documentElement;
 
         const readKey = () => {
             // 仅关心主题明暗与 color-scheme；不因强调色变化而刷新
             const mode = root.classList.contains('light') ? 'light'
-                : root.classList.contains('dark')  ? 'dark' : '';
+                : root.classList.contains('dark') ? 'dark' : '';
             const scheme = root.style?.colorScheme || '';
             return `${mode}|${scheme}`;
         };
 
         // 初始化并记忆当前主题，防止首次装载产生循环刷新
         let last = readKey();
-        try { sessionStorage.setItem(KEY, last); } catch {}
+        try {
+            sessionStorage.setItem(KEY, last);
+        } catch {
+        }
 
         let scheduled = false;
         const apply = () => {
@@ -36,14 +39,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             // 节流，避免短时间内多次切换引发抖动
             const now = Date.now();
             let lastTs = 0;
-            try { lastTs = parseInt(sessionStorage.getItem(TS) || '0', 10) || 0; } catch {}
+            try {
+                lastTs = parseInt(sessionStorage.getItem(TS) || '0', 10) || 0;
+            } catch {
+            }
             if (now - lastTs < 1500) return;
 
             last = cur;
             try {
                 sessionStorage.setItem(KEY, cur);
                 sessionStorage.setItem(TS, String(now));
-            } catch {}
+            } catch {
+            }
 
             location.reload(); // 整页刷新
         };
@@ -52,7 +59,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (scheduled) return;
             scheduled = true;
             requestAnimationFrame(apply);
-        }).observe(root, { attributes: true, attributeFilter: ['class','style'] });
+        }).observe(root, {attributes: true, attributeFilter: ['class', 'style']});
     })();
 
     const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]';
@@ -66,10 +73,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             return id
         }
 
-        function afterHydration(fn){
-            const runner = () => (window.requestIdleCallback || (cb=>setTimeout(cb,120)))(fn);
+        function afterHydration(fn) {
+            const runner = () => (window.requestIdleCallback || (cb => setTimeout(cb, 120)))(fn);
             if (document.readyState === 'complete') runner();
-            else window.addEventListener('load', runner, { once:true, passive:true });
+            else window.addEventListener('load', runner, {once: true, passive: true});
         }
 
         function safeSendMessage(msg) {
@@ -85,7 +92,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         function ensurePromptToggle() {
             if (document.readyState !== 'complete') {
-                window.addEventListener('load', () => setTimeout(ensurePromptToggle, 0), { once:true });
+                window.addEventListener('load', () => setTimeout(ensurePromptToggle, 0), {once: true});
                 return;
             }
             const form = qs('form[data-type="unified-composer"]');
@@ -163,7 +170,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     toggles[key] = 0; // 0=全开
                     try {
                         sessionStorage.setItem('cgptPromptToggle', JSON.stringify(toggles));
-                    } catch {}
+                    } catch {
+                    }
                     window.__cgptPromptTogglePerPath = toggles;
                 }
             }
@@ -275,7 +283,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 const render = (mode) => {
                     sw.dataset.mode = String(mode);
-                    const offBg  = '#666';
+                    const offBg = '#666';
                     const halfBg = '#888';
                     sw.style.background = (mode === 0) ? '#10a37f' : (mode === 1 ? halfBg : offBg);
                     knob.style.left = (mode === 0) ? '36px' : (mode === 1 ? '19px' : '2px');
@@ -603,7 +611,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         /* ===== 通用工具 ===== */
         const CLS = {tip: 'cgpt-tip'};
-// NEW: 颜色随主题
+        // NEW: 颜色随主题
         const COLOR = (() => {
             const light = document.documentElement.classList.contains('light');
             return {
@@ -612,7 +620,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             };
         })();
 
-// NEW: 主题切换时同步已渲染组头背景
+        // NEW: 主题切换时同步已渲染组头背景
         new MutationObserver(() => {
             const light = document.documentElement.classList.contains('light');
             COLOR.bgLight = light ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
@@ -620,7 +628,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             document.querySelectorAll('.cgpt-folder-header').forEach(h => {
                 if (!h.matches(':hover')) h.style.background = COLOR.bgLight;
             });
-        }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        }).observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
 
 
         function isBlockingOverlayExist() {
@@ -772,6 +780,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             /* [新增，仅此处插入，便于定位]
                放在函数顶部，注入一次性样式，抵抗组件重渲染对内联样式的覆盖 */
             const STYLE_ID = 'cgpt-textarea-fix-style';
+
             function ensureTextareaFixStyle() {
                 if (document.getElementById(STYLE_ID)) return;
                 const s = document.createElement('style');
@@ -860,16 +869,28 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             function schedule() {
                 if (rafFlag) return;
                 rafFlag = true;
-                requestAnimationFrame(() => { rafFlag = false; fixTextareaWidth(); });
+                requestAnimationFrame(() => {
+                    rafFlag = false;
+                    fixTextareaWidth();
+                });
             }
 
             // 改动点：startOn 不再调用 teardown()，避免误断开文档级观察者
             function startOn(container) {
                 if (!container) return;
-                if (target === container && ro && mo) { schedule(); return; }
+                if (target === container && ro && mo) {
+                    schedule();
+                    return;
+                }
 
-                try { ro && ro.disconnect(); } catch {}
-                try { mo && mo.disconnect(); } catch {}
+                try {
+                    ro && ro.disconnect();
+                } catch {
+                }
+                try {
+                    mo && mo.disconnect();
+                } catch {
+                }
                 ro = mo = null;
 
                 target = container;
@@ -882,10 +903,16 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 if (grid) ro.observe(grid);
 
                 mo = new MutationObserver(() => schedule());
-                mo.observe(container, { childList: true, subtree: true });
+                mo.observe(container, {childList: true, subtree: true});
 
-                try { window.observers?.add?.(ro); } catch {}
-                try { window.observers?.add?.(mo); } catch {}
+                try {
+                    window.observers?.add?.(ro);
+                } catch {
+                }
+                try {
+                    window.observers?.add?.(mo);
+                } catch {
+                }
             }
 
             // 改动点：文档观察者常驻，任何新增/替换都会重绑
@@ -904,8 +931,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     pending = true;
                     requestAnimationFrame(check);
                 });
-                docMo.observe(document.body, { childList: true, subtree: true });
-                try { window.observers?.add?.(docMo); } catch {}
+                docMo.observe(document.body, {childList: true, subtree: true});
+                try {
+                    window.observers?.add?.(docMo);
+                } catch {
+                }
             }
 
             const boot = () => {
@@ -920,17 +950,27 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             } else {
                 window.addEventListener('load', () => (
                     window.requestIdleCallback || (cb => setTimeout(cb, 100))
-                )(boot), { once: true, passive: true });
+                )(boot), {once: true, passive: true});
             }
 
             function teardown() {
-                try { ro && ro.disconnect(); } catch {}
-                try { mo && mo.disconnect(); } catch {}
-                try { docMo && docMo.disconnect(); } catch {}
+                try {
+                    ro && ro.disconnect();
+                } catch {
+                }
+                try {
+                    mo && mo.disconnect();
+                } catch {
+                }
+                try {
+                    docMo && docMo.disconnect();
+                } catch {
+                }
                 ro = mo = docMo = null;
                 target = null;
             }
-            window.addEventListener('beforeunload', teardown, { passive: true });
+
+            window.addEventListener('beforeunload', teardown, {passive: true});
         })();
 
 
@@ -1242,7 +1282,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (!document.getElementById(TIP_ID)) {
                 const s = document.createElement('style');
                 s.id = TIP_ID;                                                                     // 赋 id
-            s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
+                s.textContent = `.${CLS.tip}{position:fixed;z-index:2147483647;padding:6px 10px;border-radius:6px;font-size:12px;background:#333;color:#fff;white-space:nowrap;box-shadow:0 4px 10px rgba(0,0,0,.12);animation:fade .15s both}@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}`;
                 (document.head || document.documentElement).appendChild(s);
             }
         });
@@ -1554,6 +1594,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (document.documentElement.dataset.cgptBuilding === '1') return;
             if (document.getElementById('cgpt-bookmarks-wrapper')) return;
             document.documentElement.dataset.cgptBuilding = '1';
+
             function insertMultiSelectHeader(root) {
                 /* 若块已存在就搬到 div#history 之上，避免重复创建 */
                 const exist = document.getElementById('cgpt-select-header');
@@ -1571,7 +1612,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 aside.id = 'cgpt-select-header';
                 aside.style.cssText = 'margin:0 12px 4px;width:calc(100% - 24px)';
 
-                (function ensureMultiSelectStyle(){
+                (function ensureMultiSelectStyle() {
                     if (document.getElementById('cgpt-multi-style')) return;
                     const st = document.createElement('style');
                     st.id = 'cgpt-multi-style';
@@ -1590,7 +1631,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const bar = document.createElement('div');
                 bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:rgba(255,255,255,0.05)';
 
-                (function applyBarBgByTheme(){
+                (function applyBarBgByTheme() {
                     const set = () => {
                         const isLight = document.documentElement.classList.contains('light');
                         bar.style.background = isLight ? '#f2f2f2' : 'rgba(255,255,255,0.05)';
@@ -1598,7 +1639,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     set();
                     new MutationObserver(set).observe(
                         document.documentElement,
-                        { attributes: true, attributeFilter: ['class'] }
+                        {attributes: true, attributeFilter: ['class']}
                     );
                 })();
 
@@ -1611,14 +1652,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 // 批量处理文字（可点击开关 + 文案切换）
                 const batchLabel = document.createElement('span');
                 batchLabel.style.cssText = 'font-size:13px;cursor:pointer';
-                (function applyBatchLabelColor(){
+                (function applyBatchLabelColor() {
                     const set = () => {
                         const isLight = document.documentElement.classList.contains('light');
                         batchLabel.style.setProperty('color', isLight ? '#111' : '#fff', 'important');
                     };
                     set();
                     // 主题切换时同步
-                    new MutationObserver(set).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+                    new MutationObserver(set).observe(document.documentElement, {
+                        attributes: true,
+                        attributeFilter: ['class']
+                    });
                 })();
 
                 bar.appendChild(batchLabel);
@@ -1627,6 +1671,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const open = document.body.classList.contains('__cgpt-multi-visible');
                     batchLabel.textContent = `Batch Processing${open ? '[👉]' : '[👈]'}`;
                 }
+
                 updateBatchLabel();
 
                 // 右侧省略号
@@ -1642,11 +1687,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 /* === 交互 === */
 
                 // 统一开关：显示/隐藏多选；隐藏时清空所有已选并复位“全选”
-                function setMultiVisible(show){
+                function setMultiVisible(show) {
                     document.body.classList.toggle('__cgpt-multi-visible', !!show);
                     if (!show) {
                         if (window.clearHistoryMultiSelected) window.clearHistoryMultiSelected();
-                        root.querySelectorAll('input.history-checkbox:checked').forEach(cb=>{
+                        root.querySelectorAll('input.history-checkbox:checked').forEach(cb => {
                             cb.checked = false;
                             cb.dispatchEvent(new Event('change'));
                         });
@@ -1676,14 +1721,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 pop.style.cssText = 'position:fixed;display:none;flex-direction:column;min-width:120px;background:#2b2b2b;border-radius:6px;padding:4px 0;z-index:9999';
                 document.body.appendChild(pop);
 
-                (function applyPopTheme(){
+                (function applyPopTheme() {
                     const sync = () => {
                         const isLight = document.documentElement.classList.contains('light');
                         pop.style.background = isLight ? 'rgb(226 226 226)' : '#2b2b2b';
                         pop.style.color = isLight ? '#111' : '';
                     };
                     sync();
-                    new MutationObserver(sync).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+                    new MutationObserver(sync).observe(document.documentElement, {
+                        attributes: true,
+                        attributeFilter: ['class']
+                    });
                 })();
 
                 function hide() {
@@ -2093,7 +2141,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (existingWrapper) {
                 const host2 = historyNode?.parentElement;
                 if (host2 && existingWrapper.parentElement !== host2) {
-                    try { host2.insertBefore(existingWrapper, historyNode); } catch (e) { console.warn('[Bookmark] Failed to relocate existing wrapper:', e); }
+                    try {
+                        host2.insertBefore(existingWrapper, historyNode);
+                    } catch (e) {
+                        console.warn('[Bookmark] Failed to relocate existing wrapper:', e);
+                    }
                 }
                 delete document.documentElement.dataset.cgptBuilding;  // 释放构建锁
                 return;
@@ -2156,7 +2208,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             });
 
             /* NEW: light 模式灰底黑字，并在主题切换时同步 */
-            (function applySelectTheme(){
+            (function applySelectTheme() {
                 const apply = () => {
                     const isLight = document.documentElement.classList.contains('light');
                     const bg = isLight ? '#f2f2f2' : 'rgb(23,22,22)';
@@ -2168,7 +2220,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     });
                 };
                 apply();
-                new MutationObserver(apply).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+                new MutationObserver(apply).observe(document.documentElement, {
+                    attributes: true,
+                    attributeFilter: ['class']
+                });
             })();
 
             // 原有字体选项保持不变
@@ -2243,7 +2298,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 addBtn.style.color = document.documentElement.classList.contains('light') ? '#000' : 'white';
             };
             setDotColor();
-            new MutationObserver(setDotColor).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+            new MutationObserver(setDotColor).observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ['class']
+            });
 
             bar.appendChild(addBtn);
 
@@ -2321,8 +2379,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const sz = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
                         document.documentElement.style.fontFamily = fnt;
                         document.documentElement.style.fontSize = sz;
-                        try { fontSelect.value = fnt; } catch {}
-                        try { sizeSelect.value = sz; } catch {}
+                        try {
+                            fontSelect.value = fnt;
+                        } catch {
+                        }
+                        try {
+                            sizeSelect.value = sz;
+                        } catch {
+                        }
 
                         if (chrome?.runtime?.id) {
                             await storage.set({folders, folderOrder: order});
@@ -2343,14 +2407,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             document.body.appendChild(pop);
 
 // 新增：light 模式白底黑字（含主题切换同步）
-            (function applyPopTheme(){
+            (function applyPopTheme() {
                 const sync = () => {
                     const isLight = document.documentElement.classList.contains('light');
                     pop.style.background = isLight ? 'rgb(226 226 226)' : '#2b2b2b';
                     pop.style.color = isLight ? '#111' : '';
                 };
                 sync();
-                new MutationObserver(sync).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+                new MutationObserver(sync).observe(document.documentElement, {
+                    attributes: true,
+                    attributeFilter: ['class']
+                });
             })();
 
             function hideMenu() {
@@ -2417,7 +2484,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             (() => {
                 const all = document.querySelectorAll('#cgpt-bookmarks-wrapper');
                 for (let i = 1; i < all.length; i++) {
-                    try { all[i].remove(); } catch(_) {}
+                    try {
+                        all[i].remove();
+                    } catch (_) {
+                    }
                 }
             })();
             delete document.documentElement.dataset.cgptBuilding;
@@ -2445,13 +2515,20 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     try {
                         document.getElementById('cgpt-bookmarks-wrapper')?.remove();
                         window.observers?.disconnectAll?.();
-                    } catch {}
+                    } catch {
+                    }
                     const hist =
                         document.querySelector('div#history') ||
                         document.querySelector('nav[aria-label="Chat history"]');
                     const idle = window.enqueueIdleTask ?? (fn => setTimeout(fn, 0));
                     if (hist && window.initBookmarks) {
-                        idle(() => { try { window.initBookmarks(hist); } finally { reloading = false; } });
+                        idle(() => {
+                            try {
+                                window.initBookmarks(hist);
+                            } finally {
+                                reloading = false;
+                            }
+                        });
                     } else {
                         reloading = false;
                     }
@@ -2469,7 +2546,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     missingTimer = setTimeout(() => {
                         try {
                             if (predicate()) softReset();
-                        } finally { missingTimer = null; }
+                        } finally {
+                            missingTimer = null;
+                        }
                     }, 1500);
                 };
 
@@ -2509,7 +2588,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         cancelConfirm();
                     }
                 });
-                moBody.observe(document.body, { childList: true, subtree: true });
+                moBody.observe(document.body, {childList: true, subtree: true});
 
                 // 初次尝试启动；若 zone 尚未就绪，短暂轮询几次
                 start();
@@ -3307,7 +3386,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             box.style.cssText = 'background:#2b2521;padding:16px;border-radius:6px;max-width:400px;width:80%;position:relative';
 
                             /* NEW: light 模式灰底，同步主题 */
-                            (function applyBoxTheme(){
+                            (function applyBoxTheme() {
                                 const sync = () => {
                                     const isLight = document.documentElement.classList.contains('light');
                                     box.style.background = isLight ? 'rgb(226 226 226)' : '#2b2521';
@@ -3321,7 +3400,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 sync();
                                 new MutationObserver(sync).observe(
                                     document.documentElement,
-                                    { attributes:true, attributeFilter:['class'] }
+                                    {attributes: true, attributeFilter: ['class']}
                                 );
                                 // 暴露给后续新增控件复用
                                 box.__applyTheme = sync;
@@ -3400,7 +3479,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     // NEW: 按主题设置背景与文字色
                                     const isLight = document.documentElement.classList.contains('light');
                                     t.style.background = isLight ? '#f2f2f2' : '#1e1815';
-                                    t.style.color      = isLight ? '#111'   : '#e7d8c5';
+                                    t.style.color = isLight ? '#111' : '#e7d8c5';
                                     // 若弹框提供了同步函数，调用一次，确保后续切换也能更新
                                     box.__applyTheme && box.__applyTheme();
                                 }
@@ -3466,14 +3545,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             gapWrap.style.cssText = 'margin-top:8px;font-size:12px;display:flex;align-items:center;gap:6px';
                             gapWrap.innerHTML = '<span>How often does this happen?</span>';
                             const gapInput = Object.assign(document.createElement('input'), {
-                                type:'number', min:0, step:1, value: folders[fid].gap ?? 0,
-                                style:'flex:0 0 0;width:155px;height:24px;border-radius:4px;border:1px solid #555;padding:0 6px'
+                                type: 'number', min: 0, step: 1, value: folders[fid].gap ?? 0,
+                                style: 'flex:0 0 0;width:155px;height:24px;border-radius:4px;border:1px solid #555;padding:0 6px'
                             });
                             {
                                 // NEW: 按主题设置背景与文字色
                                 const isLight = document.documentElement.classList.contains('light');
                                 gapInput.style.background = isLight ? '#f2f2f2' : '#1e1815';
-                                gapInput.style.color      = isLight ? '#111'   : '#e7d8c5';
+                                gapInput.style.color = isLight ? '#111' : '#e7d8c5';
                                 box.__applyTheme && box.__applyTheme();
                             }
                             gapWrap.appendChild(gapInput);
@@ -3609,7 +3688,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         history.pushState({}, '', '/');
                         window.dispatchEvent(new Event('popstate'));
                         // 新增：兜底导航不依赖“全局按钮点击”，避免残留抑制标志
-                        try { delete window.__cgptSuppressGroupClear; } catch {}
+                        try {
+                            delete window.__cgptSuppressGroupClear;
+                        } catch {
+                        }
                     }
                     highlightActive();
 
@@ -4067,7 +4149,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 delete lastActiveMap[p];
                                 if (chrome?.runtime?.id) storage.set({lastActiveMap});
                             }
-                        } catch {}
+                        } catch {
+                        }
 
                         safeSendMessage({type: 'save-folders', data: folders});
                         detachLink(link);
@@ -4098,7 +4181,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     ev.dataTransfer.setData('fid', fid);
                     li.style.opacity = '0.4';
                 });
-                li.addEventListener('dragend', () => { li.style.opacity = ''; });
+                li.addEventListener('dragend', () => {
+                    li.style.opacity = '';
+                });
                 parentUl.appendChild(li);
 
 
@@ -4762,6 +4847,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             } catch {
                             }
                         }
+
                         window.__cgptFetchConversationsAndRefresh = __cgptFetchConversationsAndRefresh;
 
                         function __cgptMonitorFirstAnswerThenReload() {
@@ -5396,51 +5482,52 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
         /* ===== 移除回答中的 <hr data-start data-end> 分隔线（新增） ===== */
         (function stripAnswerHrSeparators() {
-            function setup(){
+            function setup() {
                 const STYLE_ID = 'cgpt-hide-hr-sep';
                 if (!document.getElementById(STYLE_ID)) {
                     const s = document.createElement('style');
                     s.id = STYLE_ID;
-                s.textContent = [
-                    'article hr[data-start][data-end],',
-                    '[data-message-author-role] hr[data-start][data-end],',
-                    '.markdown hr[data-start][data-end]{display:none!important;}'
-                ].join('');
-                document.head.appendChild(s);
-            }
+                    s.textContent = [
+                        'article hr[data-start][data-end],',
+                        '[data-message-author-role] hr[data-start][data-end],',
+                        '.markdown hr[data-start][data-end]{display:none!important;}'
+                    ].join('');
+                    document.head.appendChild(s);
+                }
 
-            // 仅认为出现在消息气泡/回答容器内的 <hr> 为“需移除对象”
-            const isAnswerPiece = (el) =>
-                !!(el.closest?.('[data-testid^="conversation-turn-"]') ||
-                    el.closest?.('[data-message-author-role]') ||
-                    el.closest?.('article'));
+                // 仅认为出现在消息气泡/回答容器内的 <hr> 为“需移除对象”
+                const isAnswerPiece = (el) =>
+                    !!(el.closest?.('[data-testid^="conversation-turn-"]') ||
+                        el.closest?.('[data-message-author-role]') ||
+                        el.closest?.('article'));
 
-            // 初次清理 + 供增量清理复用
-            function sweep(root = document) {
-                root.querySelectorAll?.('hr[data-start][data-end]').forEach(hr => {
-                    if (isAnswerPiece(hr)) hr.remove();
-                });
-            }
+                // 初次清理 + 供增量清理复用
+                function sweep(root = document) {
+                    root.querySelectorAll?.('hr[data-start][data-end]').forEach(hr => {
+                        if (isAnswerPiece(hr)) hr.remove();
+                    });
+                }
 
-            // 首次进入页面即清理一次
-            sweep(document);
+                // 首次进入页面即清理一次
+                sweep(document);
 
-            // 监听后续新增节点，做增量清理（性能友好）
-            const mo = new MutationObserver(muts => {
-                for (const m of muts) {
-                    for (const n of m.addedNodes) {
-                        if (!(n instanceof Element)) continue;
-                        if (n.tagName === 'HR' && n.hasAttribute('data-start') && n.hasAttribute('data-end')) {
-                            if (isAnswerPiece(n)) n.remove();
-                        } else {
-                            sweep(n); // 只在新增分支里局部扫描
+                // 监听后续新增节点，做增量清理（性能友好）
+                const mo = new MutationObserver(muts => {
+                    for (const m of muts) {
+                        for (const n of m.addedNodes) {
+                            if (!(n instanceof Element)) continue;
+                            if (n.tagName === 'HR' && n.hasAttribute('data-start') && n.hasAttribute('data-end')) {
+                                if (isAnswerPiece(n)) n.remove();
+                            } else {
+                                sweep(n); // 只在新增分支里局部扫描
+                            }
                         }
                     }
-                }
-            });
-                mo.observe(document.body, {childList:true, subtree:true});
+                });
+                mo.observe(document.body, {childList: true, subtree: true});
                 window.observers?.add?.(mo);
             }
+
             afterHydration(setup);                                   // ← 延后到水合后
         })();
 
