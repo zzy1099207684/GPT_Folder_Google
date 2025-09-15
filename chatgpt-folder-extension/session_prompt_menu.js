@@ -66,18 +66,18 @@
         pill.style.cssText = [
             'display:inline-flex',
             'align-items:center',
+            'height:25px',
             'gap:6px',
             'margin-left:8px',
-            'padding:4px 10px',
-            'border-radius:12px',
-            'font-size:15px',
+            'margin-top:4px',
+            'padding:2px 8px',
+            'border-radius:9px',
+            'font-size:12px',
             'line-height:1',
             'background:rgba(255,255,255,.08)',
             'color:inherit',
             'border:1px solid rgba(255,255,255,.12)',
-            'user-select:none',
-            'transform:scale(0.7)',
-            'transform-origin:left center',
+            'user-select:none'
         ].join(';');
 
         /* —— 新增：light 模式白底浅描边 —— */
@@ -85,10 +85,6 @@
             pill.style.background = '#fff';
             pill.style.border = '1px solid rgba(0,0,0,0.08)';
         }
-
-        const icon = document.createElement('span');
-        icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M4 14.5c4-4.2 7.2-7 9.5-8.3.5-.3 1.2.2 1 .8-1 2.9-4 7.4-9.1 9.5-.6.2-1.2-.4-1-1z"></path></svg>';
-        icon.style.opacity = '.85';
 
         const text = document.createElement('span');
         text.textContent = label;
@@ -109,12 +105,349 @@
             updatePromptPill();
         });
 
-        pill.appendChild(icon);
         pill.appendChild(text);
         pill.appendChild(close);
         return pill;
     }
 
+    const MINI_MODEL_CLASS = 'cgpt-mini-model-switcher';
+
+    let MODEL_MAP = [];
+
+    const MINI_FORCE_KEY = 'cgptMiniModelForcedLabel';
+
+    function __cgptBuildAcceptLanguage() {
+        const ls = (Array.isArray(navigator.languages) && navigator.languages.length
+            ? navigator.languages : [navigator.language || 'en-US'])
+            .map(s => String(s || '').split(';')[0]).filter(Boolean);
+        const uniq = [...new Set(ls)].slice(0, 4);
+        if (!uniq.length) return 'en-US,en;q=0.9';
+        const qs = [1.0, 0.9, 0.8, 0.7];
+        return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
+    }
+    async function __cgptGetAuthHeaders() {
+        const h = { accept: '*/*', 'accept-language': __cgptBuildAcceptLanguage(), 'content-type': 'application/json' };
+        try {
+            const r = await fetch('/api/auth/session', { credentials: 'same-origin' });
+            if (r.ok) {
+                const j = await r.json();
+                if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
+            }
+        } catch {}
+        return h;
+    }
+
+// 拉取并重建 MODEL_MAP：使用 categories[*]
+    async function __cgptReloadModelMap() {
+        try {
+            const headers = await __cgptGetAuthHeaders();
+            const res = await fetch('/backend-api/models?is_gizmo=false', { headers, credentials: 'same-origin' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const cats = Array.isArray(data?.categories) ? data.categories : [];
+            const next = cats.map(c => ({
+                label: c?.human_category_short_name || '',
+                testid: c?.default_model ? `model-switcher-${c.default_model}` : null,
+                // group: c?.subcategory === 'Legacy models' ? 'legacy' : undefined,
+            })).filter(x => x.label && x.testid);
+
+            // 去重（按 label）
+            const seen = new Set();
+            MODEL_MAP = next.filter(x => (seen.has(x.label) ? false : (seen.add(x.label), true)));
+
+            // 追加额外模型：GPT-5-mini
+            const EXTRA_LABEL = 'GPT-5-mini';
+            if (!MODEL_MAP.some(m => m.label === EXTRA_LABEL)) {
+                MODEL_MAP.push({ label: EXTRA_LABEL });
+            }
+        } catch {}
+    }
+
+
+    (function ensureMiniModelStyle(){
+        if (document.getElementById('cgpt-mini-model-style')) return;
+        const s = document.createElement('style');
+        s.id = 'cgpt-mini-model-style';
+        s.textContent = `
+              .${MINI_MODEL_CLASS}{
+                display:inline-flex; align-items:center; margin-left:8px; margin-right:0px;
+                position:relative; z-index:3;
+              }
+              .${MINI_MODEL_CLASS} > button{
+                /* 用真实尺寸，避免布局与视觉不一致 */
+                height:28px; padding:0 8px; border-radius:10px; border:1px solid rgba(0,0,0,.12);
+                background:rgba(255,255,255,.08); font-size:12px; line-height:26px; cursor:pointer;
+              }
+              html.light .${MINI_MODEL_CLASS} > button{
+                background:#fff; border-color:rgba(0,0,0,.08);
+              }
+              .${MINI_MODEL_CLASS}-menu{
+                position:fixed; min-width:160px; max-height:360px; overflow:auto;
+                background:var(--token-main-surface-primary,#2b2b2b); color:inherit;
+                border-radius:12px; padding:6px 4px; box-shadow:0 10px 30px rgba(0,0,0,.25);
+              }
+            `;
+        document.head.appendChild(s);
+    })();
+
+// 找到页面顶部原生“模型选择”按钮
+    function findHeaderModelButton(){
+        const sel = 'button[data-testid="model-switcher-dropdown-button"],button[aria-label^="Model selector"]';
+        const list = Array.from(document.querySelectorAll(sel));
+        // 优先挑选“可见且有布局”的按钮，避免点到隐藏的移动端按钮
+        const vis = list.find(b => b.offsetParent !== null &&
+            b.getClientRects().length > 0 &&
+            getComputedStyle(b).visibility !== 'hidden');
+        // 回退：若未找到可见项，取最后一个（桌面版常在后）
+        return vis || list[list.length - 1] || null;
+    }
+
+    function readCurrentModelText(){
+        // NEW: 若已锁定或 URL 指定 gpt-5-mini，则强制显示 GPT-5-mini
+        try {
+            const forced = sessionStorage.getItem(MINI_FORCE_KEY);
+            if (forced) return forced;
+        } catch {}
+        try {
+            const url = new URL(location.href);
+            if (url.searchParams.get('model') === 'gpt-5-mini') return 'GPT-5-mini';
+        } catch {}
+
+        const btn = findHeaderModelButton();
+        if (!btn) return 'Model';
+        const aria = btn.getAttribute('aria-label') || '';
+        const m = aria.match(/current model is\s+(.+)$/i);
+        if (m) return m[1].trim();
+        const txt = (btn.textContent || '').trim();
+        return txt || 'Model';
+    }
+
+    function clickNativeModel(label){
+        // 选择 GPT-5-mini：直接以 ?model=gpt-5-mini 进入当前页
+        if (label === 'GPT-5-mini') {
+            // NEW: 加锁，确保胶囊始终显示 GPT-5-mini
+            try { sessionStorage.setItem(MINI_FORCE_KEY, 'GPT-5-mini'); } catch {}
+
+            try {
+                const url = new URL(location.href);
+                url.searchParams.set('model', 'gpt-5-mini');
+                location.assign(url.toString());
+            } catch {
+                if (location.search) {
+                    location.search = location.search.replace(/(^\?|&)?model=[^&]*/,'').replace(/^\?&/,'?');
+                }
+                location.search = (location.search ? location.search + '&' : '?') + 'model=gpt-5-mini';
+            }
+            return;
+        }
+
+        // NEW: 选择非 gpt-5-mini 时解锁，恢复跟随原生
+        try { sessionStorage.removeItem(MINI_FORCE_KEY); } catch {}
+
+        const headerBtn = findHeaderModelButton();
+        if (!headerBtn) return;
+
+        if (headerBtn.getAttribute('aria-expanded') !== 'true') {
+            headerBtn.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+        }
+
+        const map = MODEL_MAP.find(m => m.label === label);
+
+        // NEW: 如为“旧版模型”，先确保展开 Legacy 子菜单
+        const openLegacySubmenuOnce = (() => {
+            let done = false;
+            return () => {
+                if (done) return true;
+                const sub = document.querySelector('[data-testid="Legacy models-submenu"]'); // 原生子菜单触发项
+                if (!sub) return false; // 等待主菜单挂载
+                sub.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+                done = true;
+                return true;
+            };
+        })();
+
+        const pickTarget = () => {
+            let el = map?.testid ? document.querySelector(`[data-testid="${map.testid}"]`) : null;
+            if (!el) {
+                el = Array.from(document.querySelectorAll('[role="menuitem"]'))
+                    .find(n => (n.textContent || '').trim().toLowerCase().startsWith(label.toLowerCase()));
+            }
+            if (el && (el.offsetParent === null || el.getClientRects().length === 0)) el = null;
+            return el || null;
+        };
+
+        let tried = 0;
+        const tryClick = () => {
+            const target = pickTarget();
+            if (target) {
+                target.scrollIntoView({block:'nearest'});
+                target.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+                target.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+                setTimeout(updateMiniModelText,160);
+                return;
+            }
+            if (tried++ < 60) requestAnimationFrame(tryClick);
+        };
+
+        let subTries = 0;
+        const ensureAndClick = () => {
+            if (pickTarget()) { requestAnimationFrame(tryClick); return; }
+            const legacyBtn = document.querySelector('[data-testid="Legacy models-submenu"]');
+            if (legacyBtn) openLegacySubmenuOnce();
+            if (subTries++ < 15) requestAnimationFrame(ensureAndClick);
+            else requestAnimationFrame(tryClick); // 兜底
+        };
+        requestAnimationFrame(ensureAndClick);
+
+    }
+
+// 计算弹层位置：自动上/下翻转
+    function placeMenu(menuEl, anchorRect){
+        // 先临时显示以获得尺寸
+        menuEl.style.visibility = 'hidden';
+        document.body.appendChild(menuEl);
+        const mh = menuEl.offsetHeight || 260;
+        const mw = Math.max(menuEl.offsetWidth, 180);
+        const spaceBelow = window.innerHeight - anchorRect.bottom;
+        const spaceAbove = anchorRect.top;
+        const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+
+        const left = Math.min(Math.max(8, anchorRect.left), window.innerWidth - mw - 8);
+        const top  = openUp ? (anchorRect.top - mh - 8) : (anchorRect.bottom + 6);
+
+        menuEl.style.left = `${left}px`;
+        menuEl.style.top  = `${top}px`;
+        menuEl.style.visibility = '';
+        return openUp ? 'top' : 'bottom';
+    }
+
+// 构建迷你按钮
+    function buildMiniModelSwitcher(){
+        const wrap = document.createElement('span');
+        wrap.className = MINI_MODEL_CLASS;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('aria-haspopup', 'menu');
+        btn.textContent = readCurrentModelText();
+        wrap.appendChild(btn);
+
+        let openedMenu = null;
+
+        const openMenu = async () => {
+            if (openedMenu) { closeMenu(); return; }
+            const m = document.createElement('div');
+            m.className = `${MINI_MODEL_CLASS}-menu`;
+            const render = () => {
+                m.innerHTML = '';
+                MODEL_MAP.forEach(opt => {
+                    const row = document.createElement('div');
+                    row.className = `${MINI_MODEL_CLASS}-item`;
+                    row.textContent = opt.label;
+                    row.addEventListener('click', (e) => {
+                        e.stopPropagation(); closeMenu(); clickNativeModel(opt.label);
+                    });
+                    m.appendChild(row);
+                });
+            };
+            if (!MODEL_MAP.length) {
+                // 首次或切换后尚未加载，先占位再拉取
+                const row = document.createElement('div');
+                row.className = `${MINI_MODEL_CLASS}-item`;
+                row.textContent = 'Loading...';
+                m.appendChild(row);
+                const r0 = btn.getBoundingClientRect();
+                placeMenu(m, r0);
+                openedMenu = m;
+                await __cgptReloadModelMap();
+                render();
+            } else {
+                render();
+            }
+            const r = btn.getBoundingClientRect();
+            placeMenu(m, r);
+            openedMenu = m;
+
+            setTimeout(() => {
+                const closer = (ev) => {
+                    if (!m.contains(ev.target)) { closeMenu(); document.removeEventListener('click', closer, true); }
+                };
+                document.addEventListener('click', closer, true);
+            }, 0);
+        };
+
+
+        const closeMenu = () => {
+            if (openedMenu) { try { openedMenu.remove(); } catch{} openedMenu = null; }
+        };
+
+        btn.addEventListener('click', (e) => { e.stopPropagation(); openMenu(); });
+
+        return wrap;
+    }
+
+// 确保迷你切换器已插入；并尽量紧跟在胶囊或“+”按钮之后
+    function ensureMiniModelSwitcher(host, plusBtn, pillEl){
+        let mini = host.querySelector('.' + MINI_MODEL_CLASS);
+        if (!mini) {
+            mini = buildMiniModelSwitcher();
+            const anchor = pillEl || host.querySelector('.' + PILL_CLASS) || plusBtn;
+            host.insertBefore(mini, anchor.nextSibling);
+        } else {
+            updateMiniModelText(mini);
+        }
+    }
+
+// 更新按钮文案（当前模型）
+    function updateMiniModelText(mini){
+        const root = mini || document.querySelector('.' + MINI_MODEL_CLASS);
+        if (!root) return;
+        const btn = root.querySelector('button');
+        if (!btn) return;
+        btn.textContent = readCurrentModelText();
+    }
+
+// 监听顶部模型按钮变化，自动刷新文案
+    (function observeHeaderModel(){
+        const btn = findHeaderModelButton();
+        if (!btn || btn.__cgptMiniModelObserved) return;
+        const mo = new MutationObserver(() => updateMiniModelText());
+        mo.observe(btn, { attributes:true, childList:true, subtree:true });
+        btn.__cgptMiniModelObserved = true;
+    })();
+
+    // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
+    (function observeAdditionalModelsSwitch(){
+        function hook(btn){
+            if (!btn || btn.__cgptHooked) return;
+            btn.__cgptHooked = true;
+            const reload = () => { __cgptReloadModelMap(); };
+            btn.addEventListener('click', () => setTimeout(reload, 0), true);
+            new MutationObserver(muts => {
+                if (muts.some(m => m.attributeName === 'aria-checked')) reload();
+            }).observe(btn, { attributes:true, attributeFilter:['aria-checked'] });
+        }
+        const scan = () => {
+            const sw = document.querySelector('button[role="switch"][aria-label="Show additional models"]');
+            if (sw) hook(sw);
+        };
+        scan();
+        new MutationObserver(scan).observe(document.body, { childList:true, subtree:true });
+    })();
+
+
+    // 【修改版】在插入胶囊后，顺带插入迷你“模型切换器”
     function updatePromptPill() {
         const label = readStoredPromptLabel();
         const shouldShow = optionsList
@@ -129,28 +462,33 @@
             const existed = host.querySelector('.' + PILL_CLASS);
 
             if (!shouldShow) {
-                // 需要隐藏：仅当存在时移除，避免无谓操作
                 if (existed) existed.remove();
+                // NEW: 如果胶囊隐藏，也要确保模型切换器存在（与胶囊同行，但不依赖胶囊显示）
+                ensureMiniModelSwitcher(host, btn);
                 return;
             }
 
-            // 需要显示
             if (existed) {
-                // 标签相同则不动；不同只更新文本与 data-label，避免“删后再插”的闪烁
                 const current = existed.getAttribute('data-label') || '';
-                if (current === String(label || '')) return;
-
-                const textNode = existed.querySelector('span:nth-of-type(2)');
-                if (textNode) textNode.textContent = label || '';
-                existed.setAttribute('data-label', String(label || ''));
+                if (current !== String(label || '')) {
+                    const textNode = existed.querySelector('span:nth-of-type(2)');
+                    if (textNode) textNode.textContent = label || '';
+                    existed.setAttribute('data-label', String(label || ''));
+                }
+                // NEW: 胶囊已存在时，也确保模型切换器存在并更新当前模型文案
+                ensureMiniModelSwitcher(host, btn);
                 return;
             }
 
-            // 首次存在：创建并插入到 + 按钮右侧
             const pill = buildPill(label);
             host.insertBefore(pill, btn.nextSibling);
+            // NEW: 插入胶囊后，紧跟插入迷你模型切换器
+            ensureMiniModelSwitcher(host, btn, pill);
         });
     }
+
+
+
 
 
     // 观察下拉菜单出现，并注入「Prompt」入口
@@ -300,6 +638,16 @@
         }
         if (needRefresh) requestAnimationFrame(updatePromptPill);
     });
+    // NEW: 页面加载时，如 URL 带 ?model=gpt-5-mini 则加锁
+    (function __cgptSyncMiniLockFromURL(){
+        try {
+            const url = new URL(location.href);
+            if (url.searchParams.get('model') === 'gpt-5-mini') {
+                sessionStorage.setItem(MINI_FORCE_KEY, 'GPT-5-mini');
+            }
+        } catch {}
+    })();
+
     const __start = () => {
         mo.observe(document.body, { childList:true, subtree:true });
         requestAnimationFrame(updatePromptPill);
