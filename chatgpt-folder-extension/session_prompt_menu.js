@@ -197,6 +197,10 @@
                 background:var(--token-main-surface-primary,#2b2b2b); color:inherit;
                 border-radius:12px; padding:6px 4px; box-shadow:0 10px 30px rgba(0,0,0,.25);
               }
+              /* NEW: light 模式下将迷你模型切换器弹框设为浅灰底 */
+              html.light .${MINI_MODEL_CLASS}-menu{
+                background:#f5f5f5;
+              }
             `;
         document.head.appendChild(s);
     })();
