@@ -4017,16 +4017,24 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     const oldTitle = link.textContent || 'New chat';
 
-                    // 内联输入框
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.value = oldTitle;
                     input.maxLength = 200;
                     input.style.cssText = [
-                        'flex:1', 'min-width:0', 'margin-right:4px', 'font-size:13px', 'color:#fff',
-                        'background:rgba(255,255,255,.06)', 'border:1px solid rgba(255,255,255,.2)',
+                        'flex:1', 'min-width:0', 'margin-right:4px', 'font-size:13px',
+                        'background:rgba(255,255,255,06)', 'border:1px solid rgba(255,255,255,2)',
                         'border-radius:6px', 'padding:2px 4px', 'line-height:1.25'
                     ].join(';');
+                    // 仅在 light 模式下覆盖为黑字（并用浅底边框保证可读）；dark 保持原视觉
+                    if (document.documentElement.classList.contains('light')) {
+                        input.style.color = '#000';
+                        input.style.background = '#fff';
+                        input.style.border = '1px solid rgba(0,0,0,0.2)';
+                    } else {
+                        input.style.color = '#ffffff';
+                        input.style.background = 'rgba(255,255,255,0.07)';
+                    }
 
                     // 替换呈现
                     const parent = link.parentElement || li;
