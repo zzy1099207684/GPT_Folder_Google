@@ -983,6 +983,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 window.__deepCleanerId && clearInterval(window.__deepCleanerId);
             } catch {
             }
+            try { storage._clearPendingWrites(); } catch {}
         }, {passive: true});
 
 
@@ -1041,6 +1042,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 return [];
             }
         };
+
+        // 新增：安全插入，防止 NotFoundError
+        function safeInsertBefore(parent, node, ref) {
+            try {
+                if (!parent || !node) return false;
+                // 父或参照节点若不在文档中，跳过本次插入
+                if (!parent.isConnected || (ref && !ref.isConnected)) return false;
+                // 参照节点不是该父的子节点时，改为 append
+                if (!ref || ref.parentNode !== parent) parent.appendChild(node);
+                else parent.insertBefore(node, ref);
+                return true;
+            } catch (e) {
+                console.warn('[Bookmark] safeInsertBefore failed:', e);
+                return false;
+            }
+        }
 
         // ① preset prompt and group
         const hints = [
@@ -1169,6 +1186,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     this._writeTimer = setTimeout(async () => {
                         try {
+                            // 新增：上下文失效保护
+                            if (!chrome?.runtime?.id) {
+                                this._clearPendingWrites();
+                                return;
+                            }
                             const dataToWrite = {...this._pendingWrites};
                             await chrome.storage.sync.set(dataToWrite);
                             this._pendingWrites = {};
@@ -1254,6 +1276,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             this._retryCount = 0;
                         } catch (e) {
                             console.warn(`[Bookmark] Retry ${this._retryCount} failed:`, e);
+
+                            if (e?.message && /context invalidated/i.test(e.message)) {
+                                console.warn('[Bookmark] Extension context invalidated. Abort pending writes.');
+                                this._clearPendingWrites();
+                                return;
+                            }
 
                             if (e?.message?.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {     // 新增：写入过频
                                 this._retryWrite(Math.max(delay * 2, 60000));                  // 强制 60 s 退避
@@ -1350,11 +1378,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const wrapper = wrappers[0];
 
                     if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
-                        try {
-                            hist.parentElement.insertBefore(wrapper, hist);
-                        } catch (e) {
-                            console.warn('[Bookmark] Failed to relocate wrapper:', e);
-                        }
+                        safeInsertBefore(hist.parentElement, wrapper, hist);
                     }
 
                     const selHeader = qs('#cgpt-select-header');
@@ -1362,11 +1386,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
                         const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
                         if (selHeader.parentElement !== chatsAside || selHeader.nextSibling !== chatsH2) {
-                            try {
-                                chatsAside.insertBefore(selHeader, chatsH2);
-                            } catch (e) {
-                                console.warn('[Bookmark] Failed to relocate select header:', e);
-                            }
+                            safeInsertBefore(chatsAside, selHeader, chatsH2);
                         }
                     }
                     if (!hist && wrapper) {
@@ -1601,9 +1621,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const chatsAside = root.querySelector('aside[aria-labelledby]') || root;
                 const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
                 if (exist) {
-                    // 目标：始终位于 Chats 标题正上方
                     if (exist.parentElement !== chatsAside || exist.nextSibling !== chatsH2) {
-                        chatsAside.insertBefore(exist, chatsH2);
+                        safeInsertBefore(chatsAside, exist, chatsH2);
                     }
                     return;
                 }
@@ -1681,7 +1700,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 bar.appendChild(menuBtn);
 
                 aside.appendChild(bar);
-                chatsAside.insertBefore(aside, chatsH2);
+                safeInsertBefore(chatsAside, aside, chatsH2);
 
 
                 /* === 交互 === */
@@ -2141,11 +2160,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (existingWrapper) {
                 const host2 = historyNode?.parentElement;
                 if (host2 && existingWrapper.parentElement !== host2) {
-                    try {
-                        host2.insertBefore(existingWrapper, historyNode);
-                    } catch (e) {
-                        console.warn('[Bookmark] Failed to relocate existing wrapper:', e);
-                    }
+                    safeInsertBefore(host2, existingWrapper, historyNode);
                 }
                 delete document.documentElement.dataset.cgptBuilding;  // 释放构建锁
                 return;
@@ -2469,10 +2484,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 return;
             }
             try {
-                if (host && host.isConnected && historyNode.isConnected) {
-                    host.insertBefore(wrap, historyNode);
+                if (host && historyNode) {
+                    if (!safeInsertBefore(host, wrap, historyNode)) {
+                        delete document.documentElement.dataset.cgptBuilding;
+                        return;
+                    }
                 } else {
-                    delete document.documentElement.dataset.cgptBuilding; // 释放构建锁
+                    delete document.documentElement.dataset.cgptBuilding;
                     return;
                 }
             } catch (e) {
@@ -2604,7 +2622,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (selHeader) {
                 const chatsAside = historyNode.querySelector('aside[aria-labelledby]') || historyNode;
                 const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
-                chatsAside.insertBefore(selHeader, chatsH2);
+                safeInsertBefore(chatsAside, selHeader, chatsH2);
             }
             /* ---------- 数据读取 ---------- */
             const storedFolders = (await storage.get('folders')) || {};
@@ -4757,7 +4775,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                         });
                                         const listEl = tplItem.parentElement && /^(UL|OL)$/.test(tplItem.parentElement.tagName) ? tplItem.parentElement : null;
                                         if (listEl) listEl.insertBefore(clone, listEl.firstChild);
-                                        else chatsAside.insertBefore(clone, tplItem);
+                                        else safeInsertBefore(chatsAside, clone, tplItem);
                                         row = link;
                                     } else {
                                         const li = document.createElement('li');
@@ -4770,7 +4788,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                         li.appendChild(a);
                                         const ul = chatsAside.querySelector('ul,ol');
                                         if (ul) ul.insertBefore(li, ul.firstChild);
-                                        else chatsAside.insertBefore(li, chatsAside.firstChild);
+                                        else safeInsertBefore(chatsAside, li, chatsAside.firstChild);
                                         row = a;
                                     }
                                 } else {
