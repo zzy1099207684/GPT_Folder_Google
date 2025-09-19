@@ -517,40 +517,44 @@
     // 观察下拉菜单出现，并注入「Prompt」入口
     const mo = new MutationObserver((mutations) => {
         const patchGroup = (g) => {
-            if (!g || g.__cgptPromptMenuPatched) return;
+            if (!g) return;
 
-            const firstItem = g.querySelector('div[role="menuitem"]');
-            if (!firstItem) return;
-
-            /* NEW: 通过菜单根节点 → aria-labelledby → 触发器，确认是否为“输入框 +”菜单 */
+            // ① 先确定所属菜单根节点
             const menuRoot =
                 g.closest('[role="menu"][data-radix-menu-content]') || g.closest('[role="menu"]');
+            if (!menuRoot) return;
+
+            // ② 若当前菜单根节点已插入过，直接跳过（保证“每个菜单一个”）
+            if (menuRoot.__cgptUseStylePatched || menuRoot.querySelector('.cgpt-use-style-item')) {
+                return;
+            }
+
+            // ③ 仍保留“只处理输入框 + 菜单”的判断
+            const firstItem = g.querySelector('div[role="menuitem"]') || menuRoot.querySelector('div[role="menuitem"]');
+            if (!firstItem) return;
 
             let isFromPlus = false;
-            if (menuRoot) {
+            {
                 const triggerId = menuRoot.getAttribute('aria-labelledby');
                 const triggerEl = triggerId ? document.getElementById(triggerId) : null;
-
-                // 触发器就是 “+” 按钮，或其内部元素
-                const matchPlus = sel =>
-                    triggerEl && (triggerEl.matches?.(sel) || triggerEl.closest?.(sel));
-
+                const matchPlus = sel => triggerEl && (triggerEl.matches?.(sel) || triggerEl.closest?.(sel));
                 isFromPlus = !!matchPlus('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]');
-
-                // 兜底：若触发器不可用，则用 plus 按钮的 aria-controls 对齐菜单 id
                 if (!isFromPlus && menuRoot.id) {
                     const plusBtn = document.querySelector('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]');
                     const controls = plusBtn?.getAttribute('aria-controls') || '';
                     if (controls.split(/\s+/).includes(menuRoot.id)) isFromPlus = true;
                 }
             }
-
             if (!isFromPlus) return;
 
+            // ④ 统一选择“菜单内的第一个 group”作为插入容器，避免多 group 多次插入
+            const insertGroup = menuRoot.querySelector('div[role="group"]') || g;
+
+            // ⑤ 构建条目并加唯一类名用于去重
             const mi = document.createElement('div');
             mi.setAttribute('role', 'menuitem');
             mi.setAttribute('tabindex', '0');
-            mi.className = 'group __menu-item gap-1.5';
+            mi.className = 'group __menu-item gap-1.5 cgpt-use-style-item';
             mi.style.cursor = 'pointer';
 
             const icon = document.createElement('div');
@@ -632,11 +636,12 @@
                 }, 0);
             });
 
-            const anchor = g.querySelector('div[role="menuitem"]');
-            if (anchor && anchor.parentNode === g) g.insertBefore(mi, anchor);
-            else g.appendChild(mi);
+            const anchor = insertGroup.querySelector('div[role="menuitem"]');
+            if (anchor && anchor.parentNode === insertGroup) insertGroup.insertBefore(mi, anchor);
+            else insertGroup.appendChild(mi);
 
-            g.__cgptPromptMenuPatched = true;
+            // ⑥ 标记“该菜单已插入”，保证后续 group 不会再插
+            menuRoot.__cgptUseStylePatched = true;
         };
 
         // 保持原逻辑，并在 DOM 有新增时轻量刷新一次胶囊
