@@ -417,8 +417,13 @@
         let mini = host.querySelector('.' + MINI_MODEL_CLASS);
         if (!mini) {
             mini = buildMiniModelSwitcher();
-            const anchor = pillEl || host.querySelector('.' + PILL_CLASS) || plusBtn;
-            host.insertBefore(mini, anchor.nextSibling);
+            const anchor = [pillEl, host.querySelector('.' + PILL_CLASS), plusBtn]
+                .find(node => node && node.parentNode === host);
+            if (anchor) {
+                host.insertBefore(mini, anchor.nextSibling);
+            } else {
+                host.appendChild(mini);
+            }
         } else {
             updateMiniModelText(mini);
         }
@@ -511,15 +516,15 @@
             }
 
             const pill = buildPill(label);
-            host.insertBefore(pill, btn.nextSibling);
+            if (btn && btn.parentNode === host) {
+                host.insertBefore(pill, btn.nextSibling);
+            } else {
+                host.appendChild(pill);
+            }
             // NEW: 插入胶囊后，紧跟插入迷你模型切换器
             ensureMiniModelSwitcher(host, btn, pill);
         });
     }
-
-
-
-
 
     // 观察下拉菜单出现，并注入「Prompt」入口
     const mo = new MutationObserver((mutations) => {
