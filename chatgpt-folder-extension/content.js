@@ -3977,12 +3977,103 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         link.style.color = '#fff';
                     }
                 }
+
+                const hydrateTitleIfNeeded = () => {
+                    if (link.__cgptHydratingTitle) return;
+                    const textNow = (link.textContent || '').trim();
+                    if (!textNow || textNow.toLowerCase() !== 'new chat') return;
+
+                    const href = chat.url || link.dataset.url || '';
+                    const match = /\/c\/([^/?#]+)/.exec(href);
+                    const convId = match && match[1];
+                    if (!convId) return;
+
+                    const buildAcceptLanguage = () => {
+                        const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
+                            .map(s => String(s || '').split(';')[0])
+                            .filter(Boolean);
+                        const uniq = [...new Set(ls)].slice(0, 4);
+                        if (!uniq.length) return 'en-US,en;q=0.9';
+                        const qs = [1.0, 0.9, 0.8, 0.7];
+                        return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
+                    };
+
+                    const getHeaders = async () => {
+                        const h = {
+                            accept: '*/*',
+                            'accept-language': buildAcceptLanguage(),
+                            'content-type': 'application/json'
+                        };
+                        try {
+                            const res = await fetch('/api/auth/session', {credentials: 'same-origin'});
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (data && data.accessToken) h.authorization = `Bearer ${data.accessToken}`;
+                            }
+                        } catch {
+                        }
+                        return h;
+                    };
+
+                    link.__cgptHydratingTitle = true;
+
+                    (async () => {
+                        try {
+                            const headers = await getHeaders();
+                            const resp = await fetch(`/backend-api/conversation/${convId}`, {
+                                headers,
+                                credentials: 'same-origin'
+                            });
+                            if (!resp.ok) return;
+                            const json = await resp.json().catch(() => null);
+                            const title = String(json?.title || '').trim();
+                            if (!title || title.toLowerCase() === 'new chat') return;
+
+                            const prevText = (link.textContent || '').trim();
+                            if (prevText !== title) link.textContent = title;
+
+                            let updated = false;
+                            if (chat.title !== title) {
+                                chat.title = title;
+                                updated = true;
+                            }
+
+                            if (updated) {
+                                try {
+                                    if (chrome?.runtime?.id) storage.set({folders});
+                                } catch {
+                                }
+                                safeSendMessage({type: 'save-folders', data: folders});
+                            }
+
+                            try {
+                                const fn = window.__cgptFetchConversationsAndRefresh;
+                                if (typeof fn === 'function') {
+                                    fn(convId);
+                                } else if (chat.url) {
+                                    const p = new URL(chat.url, location.origin).pathname;
+                                    const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                                    const a = hist && hist.querySelector(`a[href*="${p}"]`);
+                                    const t = a && (a.querySelector('.truncate') || a);
+                                    if (t) t.textContent = title;
+                                }
+                            } catch {
+                            }
+                        } catch {
+                        } finally {
+                            link.__cgptHydratingTitle = false;
+                        }
+                    })();
+                };
+
                 link.onclick = e => {
                     window.__cgptPendingFid = null;
                     window.__cgptPendingToken = null;
                     clearActiveOnHistoryClick = false;
                     if (!chat.url) return;
                     e.preventDefault();
+
+                    hydrateTitleIfNeeded();
 
                     try {
                         window.__cgptIgnoreNextHistoryClickPath = new URL(chat.url, location.origin).pathname;
