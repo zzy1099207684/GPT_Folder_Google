@@ -454,10 +454,17 @@
         function hook(btn){
             if (!btn || btn.__cgptHooked) return;
             btn.__cgptHooked = true;
-            const reload = () => { __cgptReloadModelMap(); };
-            btn.addEventListener('click', () => setTimeout(reload, 0), true);
+            let scheduled = false;
+            const refresh = () => {
+                if (scheduled) return;
+                scheduled = true;
+                setTimeout(() => {
+                    try { window.location.reload(); } catch {}
+                }, 0);
+            };
+            btn.addEventListener('click', refresh, true);
             new MutationObserver(muts => {
-                if (muts.some(m => m.attributeName === 'aria-checked')) reload();
+                if (muts.some(m => m.attributeName === 'aria-checked')) refresh();
             }).observe(btn, { attributes:true, attributeFilter:['aria-checked'] });
         }
         const scan = () => {
