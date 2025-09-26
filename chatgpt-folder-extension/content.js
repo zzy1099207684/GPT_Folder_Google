@@ -64,6 +64,9 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
     const HIST_ANCHOR = 'div#history a[href*="/c/"], nav[aria-label="Chat history"] a[href*="/c/"]';
     const MAX_PROMPTS = 4;
+    const BACKGROUND_MODE_KEY = 'backgroundMode';
+    let backgroundMode = 'pure';
+    let backgroundMenuUpdater = null;
     (() => {
         function nanoid(size = 21) {
             let id = ''
@@ -2356,6 +2359,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     exportedAt: new Date().toISOString(),
                     pageFont: font,
                     pageFontSize: size,
+                    [BACKGROUND_MODE_KEY]: backgroundMode,
                     folders
                 };
                 const blob = new Blob([JSON.stringify(payload)], {type: 'application/json'});
@@ -2392,20 +2396,21 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                         const fnt = normalizeFontValue(obj.pageFont);
                         const sz = (typeof obj.pageFontSize === 'string' && obj.pageFontSize.endsWith('%')) ? obj.pageFontSize : '100%';
+                        const bgMode = obj[BACKGROUND_MODE_KEY] === 'color' ? 'color' : 'pure';
                         document.documentElement.style.fontFamily = fnt;
                         document.documentElement.style.fontSize = sz;
                         try {
                             fontSelect.value = fnt;
                         } catch {
                         }
-                        try {
-                            sizeSelect.value = sz;
-                        } catch {
-                        }
+
+                        applyBackgroundMode(bgMode, false);
 
                         if (chrome?.runtime?.id) {
                             await storage.set({folders, folderOrder: order});
-                            await storage.set({pageFont: fnt, pageFontSize: sz});
+                            const cfg = {pageFont: fnt, pageFontSize: sz};
+                            cfg[BACKGROUND_MODE_KEY] = bgMode;
+                            await storage.set(cfg);
                             safeSendMessage({type: 'save-folders', data: folders});
                         }
                         render();
@@ -2437,6 +2442,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             function hideMenu() {
                 pop.style.display = 'none';
+                backgroundMenuUpdater = null;
             }
 
             window.addEventListener('click', e => {
@@ -2449,6 +2455,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     return;
                 }
                 pop.innerHTML = '';
+                backgroundMenuUpdater = null;
 
                 const mkItem = (txt, handler, danger) => {
                     const d = document.createElement('div');
@@ -2464,6 +2471,70 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 pop.appendChild(mkItem('add group', addGroup));
                 pop.appendChild(mkItem('Config Export', doExport));
                 pop.appendChild(mkItem('Config Import', doImport));
+
+                if (!document.documentElement.classList.contains('light')) {
+                    const bgContainer = document.createElement('div');
+                    bgContainer.style.cssText = 'padding:6px 12px;display:flex;flex-direction:column;gap:6px;';
+
+                    const header = document.createElement('div');
+                    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;';
+
+                    const headerLabel = document.createElement('span');
+                    headerLabel.textContent = 'background';
+
+                    const arrow = document.createElement('span');
+                    arrow.textContent = '▸';
+                    arrow.style.cssText = 'font-size:12px;';
+
+                    header.append(headerLabel, arrow);
+
+                    const options = document.createElement('div');
+                    options.style.cssText = 'display:none;flex-direction:column;gap:4px;margin-top:4px;';
+
+                    let expanded = false;
+                    header.onclick = ev => {
+                        ev.stopPropagation();
+                        expanded = !expanded;
+                        options.style.display = expanded ? 'flex' : 'none';
+                        arrow.textContent = expanded ? '▾' : '▸';
+                    };
+
+                    const optionMap = new Map();
+                    const updateBgOptionUI = () => {
+                        optionMap.forEach((meta, mode) => {
+                            const active = backgroundMode === mode;
+                            meta.mark.style.opacity = active ? '1' : '0';
+                            meta.row.style.background = active ? 'rgba(255,255,255,0.12)' : 'transparent';
+                        });
+                    };
+
+                    const createBgOption = (mode, label) => {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'padding:4px 8px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;';
+                        const text = document.createElement('span');
+                        text.textContent = label;
+                        const mark = document.createElement('span');
+                        mark.textContent = '✓';
+                        mark.style.cssText = 'font-size:12px;color:#10a37f;opacity:0;';
+                        row.append(text, mark);
+                        row.onclick = ev => {
+                            ev.stopPropagation();
+                            applyBackgroundMode(mode);
+                            updateBgOptionUI();
+                        };
+                        optionMap.set(mode, {row, mark});
+                        options.appendChild(row);
+                    };
+
+                    createBgOption('color', 'color');
+                    createBgOption('pure', 'pure');
+
+                    bgContainer.append(header, options);
+                    pop.appendChild(bgContainer);
+
+                    backgroundMenuUpdater = updateBgOptionUI;
+                    updateBgOptionUI();
+                }
 
                 const r = addBtn.getBoundingClientRect();
                 const left = Math.max(0, Math.min(r.right - 160, window.innerWidth - 160));
@@ -2898,44 +2969,24 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             });
 
 
-            // 统一版本 —— 自动选根节点，兼容旧/新版侧栏
+            // 统一版本 —— 以 folders[*].chats[].title 为唯一可信源
             const syncTitles = () => {
-                let updated = false;
-
-                const histRoot =
-                    qs('div#history') ||
-                    qs('nav[aria-label="Chat history"]') ||
-                    document;
-
-                const anchorMap = new Map();
-                qsa('a[href*="/c/"]', histRoot).forEach(link => {
-                    const p = link.pathname;            // 直接取现成 pathname
-                    if (p) anchorMap.set(p.split('?')[0], link);
-                });
-
-
+                let touched = false;
                 liveSyncMap.forEach((arr, path) => {
-                    const a = anchorMap.get(path);
-                    if (!a) return;
-
-                    const text = (a.textContent || 'New chat').trim();
                     arr.forEach(({fid, el}) => {
-                        if (el.textContent !== text) el.textContent = text;
                         const folder = folders[fid];
                         if (!folder) return;
                         const chat = folder.chats.find(c => samePath(c.url, location.origin + path));
-                        if (chat && chat.title !== text) {
-                            chat.title = text;
-                            updated = true;
+                        const t = (chat && chat.title) ? chat.title : 'New chat';
+                        if (el.textContent !== t) {
+                            el.textContent = t;
+                            touched = true;
                         }
                     });
                 });
-
-                if (updated) {
-                    safeSendMessage({type: 'save-folders', data: folders});
-                    highlightActive();
-                }
+                if (touched) highlightActive();
             };
+
 
             const syncTitlesDebounced = debounce(syncTitles, 200);
 
@@ -3977,103 +4028,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         link.style.color = '#fff';
                     }
                 }
-
-                const hydrateTitleIfNeeded = () => {
-                    if (link.__cgptHydratingTitle) return;
-                    const textNow = (link.textContent || '').trim();
-                    if (!textNow || textNow.toLowerCase() !== 'new chat') return;
-
-                    const href = chat.url || link.dataset.url || '';
-                    const match = /\/c\/([^/?#]+)/.exec(href);
-                    const convId = match && match[1];
-                    if (!convId) return;
-
-                    const buildAcceptLanguage = () => {
-                        const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
-                            .map(s => String(s || '').split(';')[0])
-                            .filter(Boolean);
-                        const uniq = [...new Set(ls)].slice(0, 4);
-                        if (!uniq.length) return 'en-US,en;q=0.9';
-                        const qs = [1.0, 0.9, 0.8, 0.7];
-                        return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
-                    };
-
-                    const getHeaders = async () => {
-                        const h = {
-                            accept: '*/*',
-                            'accept-language': buildAcceptLanguage(),
-                            'content-type': 'application/json'
-                        };
-                        try {
-                            const res = await fetch('/api/auth/session', {credentials: 'same-origin'});
-                            if (res.ok) {
-                                const data = await res.json();
-                                if (data && data.accessToken) h.authorization = `Bearer ${data.accessToken}`;
-                            }
-                        } catch {
-                        }
-                        return h;
-                    };
-
-                    link.__cgptHydratingTitle = true;
-
-                    (async () => {
-                        try {
-                            const headers = await getHeaders();
-                            const resp = await fetch(`/backend-api/conversation/${convId}`, {
-                                headers,
-                                credentials: 'same-origin'
-                            });
-                            if (!resp.ok) return;
-                            const json = await resp.json().catch(() => null);
-                            const title = String(json?.title || '').trim();
-                            if (!title || title.toLowerCase() === 'new chat') return;
-
-                            const prevText = (link.textContent || '').trim();
-                            if (prevText !== title) link.textContent = title;
-
-                            let updated = false;
-                            if (chat.title !== title) {
-                                chat.title = title;
-                                updated = true;
-                            }
-
-                            if (updated) {
-                                try {
-                                    if (chrome?.runtime?.id) storage.set({folders});
-                                } catch {
-                                }
-                                safeSendMessage({type: 'save-folders', data: folders});
-                            }
-
-                            try {
-                                const fn = window.__cgptFetchConversationsAndRefresh;
-                                if (typeof fn === 'function') {
-                                    fn(convId);
-                                } else if (chat.url) {
-                                    const p = new URL(chat.url, location.origin).pathname;
-                                    const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
-                                    const a = hist && hist.querySelector(`a[href*="${p}"]`);
-                                    const t = a && (a.querySelector('.truncate') || a);
-                                    if (t) t.textContent = title;
-                                }
-                            } catch {
-                            }
-                        } catch {
-                        } finally {
-                            link.__cgptHydratingTitle = false;
-                        }
-                    })();
-                };
-
                 link.onclick = e => {
                     window.__cgptPendingFid = null;
                     window.__cgptPendingToken = null;
                     clearActiveOnHistoryClick = false;
                     if (!chat.url) return;
                     e.preventDefault();
-
-                    hydrateTitleIfNeeded();
 
                     try {
                         window.__cgptIgnoreNextHistoryClickPath = new URL(chat.url, location.origin).pathname;
@@ -4889,6 +4849,31 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     if (li && li.style.display === 'none') li.style.display = '';
                                 }
 
+                                /* === 新增：当拿到真实标题时，回写到分组存储 === */
+                                try {
+                                    if (title && title.toLowerCase() !== 'new chat' && typeof folders === 'object') {
+                                        const abs = location.origin + path;    // 例如 https://chatgpt.com/c/<id>
+                                        let changed = false;
+                                        Object.values(folders || {}).forEach(f => {
+                                            if (!Array.isArray(f?.chats)) return;
+                                            f.chats.forEach(c => {
+                                                try {
+                                                    if (samePath(c.url, abs) && c.title !== title) {
+                                                        c.title = title;
+                                                        changed = true;
+                                                    }
+                                                } catch {}
+                                            });
+                                        });
+                                        if (changed) {
+                                            if (chrome?.runtime?.id) storage.set({folders});
+                                            safeSendMessage({type: 'save-folders', data: folders});
+                                            try { (typeof syncTitles === 'function') && syncTitles(); } catch {}
+                                        }
+                                    }
+                                } catch {}
+
+
                                 /* 新增：给条目绑定一次性 SPA 导航，避免整页刷新 */
                                 if (row && !row.__cgptSpaBound) {
                                     row.__cgptSpaBound = 1;
@@ -4949,13 +4934,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     : Array.isArray(json.conversations) ? json.conversations
                                         : [];
 
-                                const hasNewChat = list.some(it => String(it?.title || '').trim().toLowerCase() === 'new chat');
-                                if (hasNewChat) return;
+// 精准拦截：仅当“目标会话”的标题仍为 New chat 时跳过
+                                const targetId =
+                                    typeof explicitIdOrPath === 'string'
+                                        ? (explicitIdOrPath.startsWith('/c/')
+                                            ? ((/\/c\/([^/?#]+)/.exec(explicitIdOrPath) || [])[1])
+                                            : explicitIdOrPath)
+                                        : ((/\/c\/([^/?#]+)/.exec(location.pathname) || [])[1]);
+
+                                const curItem = list.find(it => it?.id === targetId || it?.conversation_id === targetId);
+                                if (curItem && String(curItem.title || '').trim().toLowerCase() === 'new chat') return;
 
                                 const opts = typeof explicitIdOrPath === 'string'
                                     ? (explicitIdOrPath.startsWith('/c/') ? {path: explicitIdOrPath} : {id: explicitIdOrPath})
                                     : {};
                                 __cgptPatchChatsFromResponse(json, opts);
+
 
                                 try {
                                     scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
@@ -5679,25 +5673,52 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         }, interval);
     })();
 
+    function applyBackgroundMode(mode, persist = true) {
+        const next = mode === 'color' ? 'color' : 'pure';
+        const changed = next !== backgroundMode;
+        backgroundMode = next;
+        ensureFrostedBG();
+        if (persist && changed && chrome?.runtime?.id) {
+            chrome.storage?.sync?.set?.({ [BACKGROUND_MODE_KEY]: backgroundMode }).catch?.(() => {});
+        }
+        if (typeof backgroundMenuUpdater === 'function') backgroundMenuUpdater();
+    }
+
 // 全局保留首页“磨砂背景”的兜底层
     function ensureFrostedBG() {
-        if (document.getElementById('cgpt-frosted-bg')) return;
+        if (!document.body) return;
 
-        const root = Object.assign(document.createElement('div'), {id: 'cgpt-frosted-bg'});
+        const isLight = document.documentElement.classList.contains('light');
+        const desiredState = isLight ? 'light' : (backgroundMode === 'color' ? 'color' : 'pure');
+        let root = document.getElementById('cgpt-frosted-bg');
+
+        if (desiredState === 'pure') {
+            if (root) root.remove();
+            return;
+        }
+
+        if (!root) {
+            root = Object.assign(document.createElement('div'), {id: 'cgpt-frosted-bg'});
+            document.body.prepend(root);
+        } else if (!document.body.contains(root)) {
+            document.body.prepend(root);
+        }
+
+        if (root.dataset.state === desiredState) return;
+        root.dataset.state = desiredState;
+        root.innerHTML = '';
         root.style.cssText = [
             'position:fixed', 'inset:0', 'pointer-events:none',
             'z-index:0', 'contain:paint', 'opacity:1'
         ].join(';');
 
-        // —— 新增：light 模式用纯白底，去掉模糊图与渐变 —— //
-        const isLight = document.documentElement.classList.contains('light');
-        if (isLight) {
+        if (desiredState === 'light') {
             root.style.background = '#fff';
-            document.body.prepend(root);
             return;
         }
 
-        // 使用与ss页一致的背景素材 + 模糊，贴合原观感
+        root.style.background = '';
+
         const pic = document.createElement('picture');
         const src = document.createElement('source');
         src.type = 'image/webp';
@@ -5720,7 +5741,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         ].join(';');
         pic.appendChild(img);
 
-        // 顶部到下方的渐变，暗色模式下更贴近ss页表达
         const grad = document.createElement('div');
         grad.style.cssText = [
             'position:absolute', 'inset:0',
@@ -5729,16 +5749,34 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         ].join(';');
 
         root.append(pic, grad);
-        document.body.prepend(root);
     }
 
 // 兜底：若节点被SPA切换移除，自动恢复
     (function keepFrostedBgAlive() {
-        const ob = new MutationObserver(() => {
-            if (!document.getElementById('cgpt-frosted-bg')) ensureFrostedBG();
-        });
-        ob.observe(document.body, {childList: true});
-        ensureFrostedBG();
+        const start = () => {
+            const ob = new MutationObserver(() => {
+                if (backgroundMode !== 'color') return;
+                if (!document.getElementById('cgpt-frosted-bg')) ensureFrostedBG();
+            });
+            ob.observe(document.body, {childList: true});
+            ensureFrostedBG();
+        };
+        if (document.body) start();
+        else window.addEventListener('DOMContentLoaded', start, {once: true});
+    })();
+
+    (async () => {
+        try {
+            const obj = await chrome.storage?.sync?.get?.(BACKGROUND_MODE_KEY) || {};
+            const saved = obj[BACKGROUND_MODE_KEY];
+            if (saved === 'color' || saved === 'pure') {
+                applyBackgroundMode(saved, false);
+            } else {
+                ensureFrostedBG();
+            }
+        } catch {
+            ensureFrostedBG();
+        }
     })();
 
 // 新增：顶栏磨砂，限定 header#page-header，避免误伤其它区域
