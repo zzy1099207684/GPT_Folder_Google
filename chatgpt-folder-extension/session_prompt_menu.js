@@ -469,10 +469,6 @@
                     try { window.location.reload(); } catch {}
                 }, 250); // 小延迟，避免与原生写入竞争
             };
-
-            // 移除点击捕获阶段的立刻刷新，避免状态还未更新就刷新
-            // btn.addEventListener('click', refresh, true);
-
             // 仅观察状态属性变化后再刷新
             new MutationObserver(muts => {
                 if (muts.some(m => m.attributeName === 'aria-checked')) scheduleReload();
