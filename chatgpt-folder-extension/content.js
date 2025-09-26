@@ -4052,45 +4052,101 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     if (!chat.url) return;
                     e.preventDefault();
 
+                    // === [新增] 若标题为 New chat，则后台拉取会话title并更新 ===
+                    (function resolveTitleIfNeeded() {
+                        try {
+                            const current = String((link.textContent || '').trim()).toLowerCase();
+                            if (current !== 'new chat') return;
+
+                            // 从 URL 提取会话 ID
+                            const m = /\/c\/([^/?#]+)/.exec(chat.url);
+                            const convId = m && m[1];
+                            if (!convId) return;
+
+                            // 防重复请求
+                            if (link.dataset.titleResolving === '1') return;
+                            link.dataset.titleResolving = '1';
+
+                            // 与 Batch Delete 相同的鉴权头构建（最小内联实现）
+                            function buildAcceptLanguage() {
+                                const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
+                                    .map(s => String(s || '').split(';')[0]).filter(Boolean);
+                                const uniq = [...new Set(ls)].slice(0, 4);
+                                if (!uniq.length) return 'en-US,en;q=0.9';
+                                const qs = [1.0, 0.9, 0.8, 0.7];
+                                return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
+                            }
+                            async function getHeaders() {                // 参考 Delete 的 getHeaders 实现
+                                const h = {
+                                    accept: '*/*',
+                                    'accept-language': buildAcceptLanguage(),
+                                    'content-type': 'application/json'
+                                };
+                                try {
+                                    const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
+                                    if (r.ok) {
+                                        const j = await r.json();
+                                        if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
+                                    }
+                                } catch {}
+                                return h;
+                            }
+
+                            // 非阻塞地拉取并更新
+                            (async () => {
+                                try {
+                                    const headers = await getHeaders();                      // 鉴权同 Delete。:contentReference[oaicite:5]{index=5}
+                                    const res = await fetch(`/backend-api/conversation/${convId}`, {
+                                        headers,
+                                        credentials: 'same-origin'
+                                    });
+                                    if (!res.ok) return;
+                                    const json = await res.json().catch(() => null);
+                                    const t = String(json?.title || '').trim();
+                                    if (t && t.toLowerCase() !== 'new chat') {
+                                        // 更新 UI
+                                        link.textContent = t;
+                                        // 更新分组数据并持久化
+                                        chat.title = t;
+                                        try { if (chrome?.runtime?.id) storage.set({folders}); } catch {}
+                                        safeSendMessage({type: 'save-folders', data: folders});
+                                        // 同步刷新历史区对应标题
+                                        try { window.__cgptFetchConversationsAndRefresh?.(convId); } catch {}  // 利用已存在的刷新函数。:contentReference[oaicite:6]{index=6}
+                                    }
+                                } finally {
+                                    delete link.dataset.titleResolving;
+                                }
+                            })();
+                        } catch {}
+                    })();
+                    // === [新增结束] ===
+
                     try {
                         window.__cgptIgnoreNextHistoryClickPath = new URL(chat.url, location.origin).pathname;
                     } catch {
                         window.__cgptIgnoreNextHistoryClickPath = null;
                     }
                     setTimeout(() => {
-                        try {
-                            delete window.__cgptIgnoreNextHistoryClickPath;
-                        } catch {
-                        }
+                        try { delete window.__cgptIgnoreNextHistoryClickPath; } catch {}
                     }, 500);
 
                     const stillExists = qsa(HIST_ANCHOR).some(a => samePath(a.href, chat.url));
                     if (!stillExists) {
-                        try {
-                            window.scheduleHistoryRefresh?.(chat.url);
-                        } catch {
-                        }
-                        try {
-                            window.__cgptEnsureHistoryRowFor?.(chat.url);
-                        } catch {
-                        }
+                        try { window.scheduleHistoryRefresh?.(chat.url); } catch {}
+                        try { window.__cgptEnsureHistoryRowFor?.(chat.url); } catch {}
                         // 不中断，继续导航
                     }
 
                     lastClickedChatEl = link;
                     const path = new URL(chat.url, location.origin).pathname;
                     lastActiveMap[path] = fid;
-                    try {
-                        if (chrome?.runtime?.id) storage.set({lastActiveMap});
-                    } catch (err) {
+                    try { if (chrome?.runtime?.id) storage.set({lastActiveMap}); } catch (err) {
                         console.warn('[Bookmark] Error saving lastActiveMap:', err);
                     }
                     history.pushState({}, '', chat.url);
                     window.dispatchEvent(new Event('popstate'));
                     highlightActive();
-                    setTimeout(() => {
-                        if (lastClickedChatEl === link) lastClickedChatEl = null;
-                    }, 100);
+                    setTimeout(() => { if (lastClickedChatEl === link) lastClickedChatEl = null; }, 100);
                 };
 
                 /* 新增：双击组内会话条目→内联重命名并 PATCH 后端，再刷新 Chats 列表 */
