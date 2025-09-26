@@ -2969,24 +2969,41 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             });
 
 
-            // 统一版本 —— 以 folders[*].chats[].title 为唯一可信源
             const syncTitles = () => {
-                let touched = false;
+                let updated = false;
+                const histRoot =
+                    qs('div#history') ||
+                    qs('nav[aria-label="Chat history"]') ||
+                    document;
+
+                const anchorMap = new Map();
+                qsa('a[href*="/c/"]', histRoot).forEach(link => {
+                    const p = link.pathname;
+                    if (p) anchorMap.set(p.split('?')[0], link);
+                });
+
                 liveSyncMap.forEach((arr, path) => {
+                    const a = anchorMap.get(path);
+                    if (!a) return;
+
+                    const text = (a.textContent || 'New chat').trim();
                     arr.forEach(({fid, el}) => {
+                        if (el.textContent !== text) el.textContent = text;
                         const folder = folders[fid];
                         if (!folder) return;
                         const chat = folder.chats.find(c => samePath(c.url, location.origin + path));
-                        const t = (chat && chat.title) ? chat.title : 'New chat';
-                        if (el.textContent !== t) {
-                            el.textContent = t;
-                            touched = true;
+                        if (chat && chat.title !== text) {
+                            chat.title = text;
+                            updated = true;
                         }
                     });
                 });
-                if (touched) highlightActive();
-            };
 
+                if (updated) {
+                    safeSendMessage({type: 'save-folders', data: folders});
+                    highlightActive();
+                }
+            };
 
             const syncTitlesDebounced = debounce(syncTitles, 200);
 
@@ -4849,30 +4866,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     if (li && li.style.display === 'none') li.style.display = '';
                                 }
 
-                                /* === 新增：当拿到真实标题时，回写到分组存储 === */
-                                try {
-                                    if (title && title.toLowerCase() !== 'new chat' && typeof folders === 'object') {
-                                        const abs = location.origin + path;    // 例如 https://chatgpt.com/c/<id>
-                                        let changed = false;
-                                        Object.values(folders || {}).forEach(f => {
-                                            if (!Array.isArray(f?.chats)) return;
-                                            f.chats.forEach(c => {
-                                                try {
-                                                    if (samePath(c.url, abs) && c.title !== title) {
-                                                        c.title = title;
-                                                        changed = true;
-                                                    }
-                                                } catch {}
-                                            });
-                                        });
-                                        if (changed) {
-                                            if (chrome?.runtime?.id) storage.set({folders});
-                                            safeSendMessage({type: 'save-folders', data: folders});
-                                            try { (typeof syncTitles === 'function') && syncTitles(); } catch {}
-                                        }
-                                    }
-                                } catch {}
-
 
                                 /* 新增：给条目绑定一次性 SPA 导航，避免整页刷新 */
                                 if (row && !row.__cgptSpaBound) {
@@ -4934,21 +4927,14 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     : Array.isArray(json.conversations) ? json.conversations
                                         : [];
 
-// 精准拦截：仅当“目标会话”的标题仍为 New chat 时跳过
-                                const targetId =
-                                    typeof explicitIdOrPath === 'string'
-                                        ? (explicitIdOrPath.startsWith('/c/')
-                                            ? ((/\/c\/([^/?#]+)/.exec(explicitIdOrPath) || [])[1])
-                                            : explicitIdOrPath)
-                                        : ((/\/c\/([^/?#]+)/.exec(location.pathname) || [])[1]);
-
-                                const curItem = list.find(it => it?.id === targetId || it?.conversation_id === targetId);
-                                if (curItem && String(curItem.title || '').trim().toLowerCase() === 'new chat') return;
+                                const hasNewChat = list.some(it => String(it?.title || '').trim().toLowerCase() === 'new chat');
+                                if (hasNewChat) return;
 
                                 const opts = typeof explicitIdOrPath === 'string'
                                     ? (explicitIdOrPath.startsWith('/c/') ? {path: explicitIdOrPath} : {id: explicitIdOrPath})
                                     : {};
                                 __cgptPatchChatsFromResponse(json, opts);
+
 
 
                                 try {
