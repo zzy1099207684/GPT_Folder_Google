@@ -3686,11 +3686,23 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 f.chats.splice(insertAt, 0, chat);
 
                                 safeSendMessage({type: 'save-folders', data: folders});
-                                render();
+
+                                // ↓↓↓ 新增：仅替换当前分组 DOM，不触发整栏 render() ↓↓↓
+                                const folderZone = qs('#cgpt-bookmarks-wrapper > div > div:nth-child(3)');
+                                const fidList = Object.keys(folders);
+                                const idx = fidList.indexOf(fid);
+                                if (folderZone && idx > -1 && folderZone.children[idx]) {
+                                    const oldBox = folderZone.children[idx];
+                                    const newBox = renderFolder(fid, folders[fid]);
+                                    folderZone.replaceChild(newBox, oldBox);
+                                }
+                                // ↑↑↑ 新增结束
+
                                 highlightActive();
                             }
                             close();
                         }
+
 
                     });
                 });
@@ -3913,18 +3925,17 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     // 如果超出阈值，添加“显示更多 / 收起” 控制项
                     if (chatsForRender.length > MAX_VISIBLE) {
                         const toggleLi = document.createElement('li');
-                        toggleLi.textContent = showAll
-                            ? '▲ close all'
+                        toggleLi.textContent = showAll ? '▲ close all'
                             : `▼ more (${chatsForRender.length - MAX_VISIBLE})`;
-                        toggleLi.style.cssText =
-                            'cursor:pointer;font-size:12px;color:#888;margin:2px 0;padding:2px 4px;text-align:center';
+                        toggleLi.style.cssText = 'cursor:pointer;font-size:12px;color:#888;margin:2px 0;padding:2px 4px;text-align:center';
                         toggleLi.onclick = e => {
                             e.stopPropagation();
                             f.__showAll = !showAll;
-                            render();
+                            renderChatsLocal();    // ← 改为仅重绘当前分组列表
                         };
                         ul.appendChild(toggleLi);
                     }
+
                 }
 
 
