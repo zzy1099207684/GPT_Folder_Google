@@ -459,17 +459,23 @@
         function hook(btn){
             if (!btn || btn.__cgptHooked) return;
             btn.__cgptHooked = true;
+
             let scheduled = false;
-            const refresh = () => {
+            // 关键修复：仅在 aria-checked 变化后再调度刷新，给原生切换与持久化留时间
+            const scheduleReload = () => {
                 if (scheduled) return;
                 scheduled = true;
                 setTimeout(() => {
                     try { window.location.reload(); } catch {}
-                }, 0);
+                }, 250); // 小延迟，避免与原生写入竞争
             };
-            btn.addEventListener('click', refresh, true);
+
+            // 移除点击捕获阶段的立刻刷新，避免状态还未更新就刷新
+            // btn.addEventListener('click', refresh, true);
+
+            // 仅观察状态属性变化后再刷新
             new MutationObserver(muts => {
-                if (muts.some(m => m.attributeName === 'aria-checked')) refresh();
+                if (muts.some(m => m.attributeName === 'aria-checked')) scheduleReload();
             }).observe(btn, { attributes:true, attributeFilter:['aria-checked'] });
         }
         const scan = () => {
@@ -479,6 +485,7 @@
         scan();
         new MutationObserver(scan).observe(document.body, { childList:true, subtree:true });
     })();
+
 
 
     // 【修改版】在插入胶囊后，顺带插入迷你“模型切换器”
