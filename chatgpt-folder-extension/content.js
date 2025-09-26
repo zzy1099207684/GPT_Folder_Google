@@ -2987,7 +2987,12 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     if (!a) return;
 
                     const text = (a.textContent || 'New chat').trim();
+                    const lower = text.toLowerCase();                // 新增：统一大小写
+
                     arr.forEach(({fid, el}) => {
+                        // 新增：优先级规则——历史区为占位 "New chat" 时不覆盖分组标题与链接文本
+                        if (lower === 'new chat') return;
+
                         if (el.textContent !== text) el.textContent = text;
                         const folder = folders[fid];
                         if (!folder) return;
