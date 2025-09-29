@@ -2,7 +2,7 @@
     const optionsList = [
         { label: 'Normal', text: '※Balanced responses with natural flow;※' },
         { label: 'Concise', text: '※Shorter responses & more messages;※' },
-        { label: 'Clear', text: '※Basic, Clear explanation that anyone can understand easily;※' },
+        { label: 'Clear', text: '※Clear explanation that anyone can understand easily;※' },
         { label: 'Explanatory', text: '※Detailed responses & comprehensive context;※' },
         { label: 'Learning', text: '※Patient, educational responses that build understanding※' },
         { label: 'Formal', text: '※Clear and well-structured responses;※' }
@@ -13,6 +13,11 @@
         sessionStorage.setItem('cgptPromptOptions', JSON.stringify(slim));
         window.__cgptPromptOptions = slim;
     } catch {}
+
+    // NEW: Beginner Mode 默认开启（'1'=on, '0'=off）
+    try { if (sessionStorage.getItem('cgptBeginnerMode') === null) {
+        sessionStorage.setItem('cgptBeginnerMode', '0');
+    } } catch {}
 
     // 集中设置“默认 Normal”
     function __cgptSetDefaultNormal() {
@@ -97,9 +102,16 @@
             pill.style.border = '1px solid rgba(0,0,0,0.08)';
         }
 
+        try {
+            const isBeginner = sessionStorage.getItem('cgptBeginnerMode') !== '0';
+            if (isBeginner) {
+                pill.style.background = 'rgb(169,181,194)'; // 169,181,194
+                pill.style.color = '#111';
+            }
+        } catch {}
+
         const text = document.createElement('span');
         text.textContent = label;
-
         const close = document.createElement('button');
 
         close.type = 'button';
@@ -487,38 +499,49 @@
     // 【修改版】在插入胶囊后，顺带插入迷你“模型切换器”
     function updatePromptPill() {
         const label = readStoredPromptLabel();
-        const shouldShow = optionsList
-            .filter(opt => opt.label !== 'Normal')
-            .some(opt => opt.label === label);
-
+        const shouldShow = optionsList.filter(opt => opt.label !== 'Normal').some(opt => opt.label === label);
         const plusButtons = Array.from(document.querySelectorAll('form[data-type="unified-composer"] [data-testid="composer-plus-btn"]'));
+
+        const applyBeginnerLook = (pill) => {
+            if (!pill) return;
+            try {
+                const on = sessionStorage.getItem('cgptBeginnerMode') !== '0';
+                if (on) {
+                    pill.style.background = 'rgb(169,181,194)';
+                    pill.style.color = '#111';
+                } else {
+                    // 恢复默认（按主题）
+                    if (document.documentElement.classList.contains('light')) {
+                        pill.style.background = '#fff';
+                    } else {
+                        pill.style.background = 'rgba(255,255,255,0.08)';
+                    }
+                    pill.style.color = 'inherit';
+                }
+            } catch {}
+        };
+
         plusButtons.forEach(btn => {
             const host = btn && btn.parentElement;
             if (!host) return;
-
             const existed = host.querySelector('.' + PILL_CLASS);
 
-            if (!shouldShow) {
-                if (existed) existed.remove();
-                // NEW: 如果胶囊隐藏，也要确保模型切换器存在（与胶囊同行，但不依赖胶囊显示）
-                ensureMiniModelSwitcher(host, btn);
-                return;
-            }
+            if (!shouldShow) { if (existed) existed.remove(); ensureMiniModelSwitcher(host, btn); return; }
 
             if (existed) {
                 const current = existed.getAttribute('data-label') || '';
                 if (current !== String(label || '')) {
-                    // 修复：胶囊只有一个 span，用它来更新文本
                     const textNode = existed.querySelector('span') || existed.firstElementChild;
                     if (textNode && textNode.tagName === 'SPAN') textNode.textContent = label || '';
                     existed.setAttribute('data-label', String(label || ''));
                 }
-                // NEW: 胶囊已存在时，也确保模型切换器存在并更新当前模型文案
+                applyBeginnerLook(existed);           // NEW
                 ensureMiniModelSwitcher(host, btn);
                 return;
             }
 
             const pill = buildPill(label);
+            applyBeginnerLook(pill);
             if (btn && btn.parentNode === host) {
                 host.insertBefore(pill, btn.nextSibling);
             } else {
@@ -643,6 +666,30 @@
 
                     pop.appendChild(row);
                 });
+
+                // --- NEW: Beginner Mode 切换 ---
+                const bmRow = document.createElement('div');
+                bmRow.style.cssText = 'padding:6px 12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between';
+                const bmText = document.createElement('span');
+                bmText.textContent = 'Beginner Mode';
+                const bmMark = document.createElement('span');
+                bmMark.textContent = '✓';
+                try {
+                    const on = sessionStorage.getItem('cgptBeginnerMode') !== '0';
+                    bmMark.style.opacity = on ? '1' : '0';
+                } catch { bmMark.style.opacity = '1'; }
+                bmRow.append(bmText, bmMark);
+                bmRow.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    try {
+                        const cur = sessionStorage.getItem('cgptBeginnerMode') !== '0';
+                        sessionStorage.setItem('cgptBeginnerMode', cur ? '0' : '1');
+                    } catch {}
+                    // 即时更新胶囊外观
+                    updatePromptPill();
+                    pop.remove();
+                });
+                pop.appendChild(bmRow);
 
                 document.body.appendChild(pop);
                 setTimeout(() => {

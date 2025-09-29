@@ -4519,7 +4519,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 // 计算本次允许注入的两类 prompt
                 const gpAllowed = allowGroup ? groupPrompt : '';
-                const inAllowed = allowStyle ? inputPrompt : '';
+                let inAllowed = allowStyle ? inputPrompt : '';
+
+// NEW: Beginner Mode → 仅处理 Use style 段
+                let isBeginner = false;
+                try { isBeginner = sessionStorage.getItem('cgptBeginnerMode') !== '0'; } catch {}
 
                 if (injectNow && (gpAllowed || inAllowed)) {
                     qsa('p', ed).forEach((p, i, arr) => {
@@ -4533,9 +4537,20 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     let merged = gpAllowed || inAllowed;
                     if (gpAllowed && inAllowed) {
                         const clean = s => String(s).replace(/^※+/, '').replace(/※+$/, '').trim();
-                        const left = clean(inAllowed).replace(/[;；:。!? \t]+$/, '');
+                        let left = clean(inAllowed).replace(/[;；:。!? \t]+$/, '');
+                        if (isBeginner && left && !left.toLowerCase().startsWith("speak in layman's terms")) {
+                            left = "Speak in layman's terms, " + left;      // 只前置在 Use style 段
+                        }
                         const right = clean(gpAllowed).replace(/^[;；:。!? \t]+/, '');
                         const inner = left && right ? `${left}; ${right}` : (left || right);
+                        merged = `※${inner}※`;
+                    } else if (!gpAllowed && inAllowed) {
+                        // 仅 Use style 时也需前置
+                        const clean = s => String(s).replace(/^※+/, '').replace(/※+$/, '').trim();
+                        let inner = clean(inAllowed);
+                        if (isBeginner && inner && !inner.toLowerCase().startsWith("speak in layman's terms")) {
+                            inner = "Speak in layman's terms, " + inner;
+                        }
                         merged = `※${inner}※`;
                     }
 
