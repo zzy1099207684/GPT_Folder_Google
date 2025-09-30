@@ -1267,16 +1267,19 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     const wrapper = wrappers[0];
 
-                    if (hist && wrapper && hist.parentElement && wrapper.parentElement !== hist.parentElement) {
-                        safeInsertBefore(hist.parentElement, wrapper, hist);
-                    }
+                    // 目标：插到“Chats”整块（sidebar-expando-section）之前
+                    const section = hist?.closest('div[class*="sidebar-expando-section"]');
+                    const sectionHost = section?.parentElement || hist?.parentElement;
 
+                    if (hist && wrapper && sectionHost) {
+                        if (wrapper.parentElement !== sectionHost) {
+                            safeInsertBefore(sectionHost, wrapper, section || hist);
+                        }
+                    }
                     const selHeader = qs('#cgpt-select-header');
-                    if (hist && selHeader) {
-                        const chatsAside = hist.querySelector('aside[aria-labelledby]') || hist;
-                        const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
-                        if (selHeader.parentElement !== chatsAside || selHeader.nextSibling !== chatsH2) {
-                            safeInsertBefore(chatsAside, selHeader, chatsH2);
+                    if (hist && selHeader && sectionHost) {
+                        if (selHeader.parentElement !== sectionHost) {
+                            safeInsertBefore(sectionHost, selHeader, section || hist);
                         }
                     }
                     if (!hist && wrapper) {
@@ -1506,13 +1509,15 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             document.documentElement.dataset.cgptBuilding = '1';
 
             function insertMultiSelectHeader(root) {
-                /* 若块已存在就搬到 div#history 之上，避免重复创建 */
+                // 优先搬到“Chats”整块前；回退到 #history 前
                 const exist = document.getElementById('cgpt-select-header');
-                const chatsAside = root.querySelector('aside[aria-labelledby]') || root;
-                const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
+                const section = root?.closest('div[class*="sidebar-expando-section"]');
+                const host = section?.parentElement || root?.parentElement;
+
                 if (exist) {
-                    if (exist.parentElement !== chatsAside || exist.nextSibling !== chatsH2) {
-                        safeInsertBefore(chatsAside, exist, chatsH2);
+                    // 只在父节点不一致时移动，避免因 nextSibling 变化产生抖动
+                    if (host && exist.parentElement !== host) {
+                        safeInsertBefore(host, exist, section || root);
                     }
                     return;
                 }
@@ -1590,7 +1595,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 bar.appendChild(menuBtn);
 
                 aside.appendChild(bar);
-                safeInsertBefore(chatsAside, aside, chatsH2);
+                if (host) {
+                    // 关键改动：首次创建也插在 #history 之前
+                    safeInsertBefore(host, aside, section || root);
+                }
 
 
                 /* === 交互 === */
@@ -2436,14 +2444,18 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             inner.append(fontBlock, bar, folderZone);
             wrap.appendChild(inner);
 
+// 新增：优先把模块插到“Chats”整块（sidebar-expando-section）之前
             const host = historyNode?.parentElement;
+            const section = historyNode?.closest('div[class*="sidebar-expando-section"]');
+            const sectionHost = section?.parentElement || host;
+
             if (document.getElementById('cgpt-bookmarks-wrapper')) {
                 delete document.documentElement.dataset.cgptBuilding;
                 return;
             }
             try {
-                if (host && historyNode) {
-                    if (!safeInsertBefore(host, wrap, historyNode)) {
+                if (sectionHost && (section || historyNode)) {
+                    if (!safeInsertBefore(sectionHost, wrap, section || historyNode)) {
                         delete document.documentElement.dataset.cgptBuilding;
                         return;
                     }
@@ -2453,9 +2465,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
             } catch (e) {
                 console.warn('[Bookmark] Safe insert failed, will retry later:', e);
-                delete document.documentElement.dataset.cgptBuilding;   // 释放构建锁
+                delete document.documentElement.dataset.cgptBuilding;
                 return;
             }
+
 
             (() => {
                 const all = document.querySelectorAll('#cgpt-bookmarks-wrapper');
@@ -2578,9 +2591,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             })();
 
             if (selHeader) {
-                const chatsAside = historyNode.querySelector('aside[aria-labelledby]') || historyNode;
-                const chatsH2 = chatsAside.querySelector('h2') || chatsAside.firstChild;
-                safeInsertBefore(chatsAside, selHeader, chatsH2);
+                const host = historyNode?.parentElement;
+                if (host) safeInsertBefore(host, selHeader, historyNode);
             }
             /* ---------- 数据读取 ---------- */
             const storedFolders = (await storage.get('folders')) || {};
@@ -3357,6 +3369,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                         if (act === 'prompt') {                       // 设置 prompt
                             const modal = document.createElement('div');
+                            modal.setAttribute('role', 'dialog');
+                            modal.setAttribute('aria-label', 'Group settings');
                             modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2147483648';
 
                             const box = document.createElement('div');
