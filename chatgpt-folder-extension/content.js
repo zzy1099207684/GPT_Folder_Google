@@ -49,10 +49,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             try {
                 sessionStorage.setItem(KEY, cur);
                 sessionStorage.setItem(TS, String(now));
-            } catch {
-            }
-
-            location.reload(); // 整页刷新
+            } catch {}
         };
 
         new MutationObserver(() => {
@@ -3843,13 +3840,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             }
 
                             highlightActive();
-                            setTimeout(() => {                     // 保证第一次编辑区就有 prompt
-                                try {
-                                    if (typeof appendSuffix === 'function') appendSuffix();
-                                } catch (e) {
-                                    console.warn('[Bookmark] appendSuffix error:', e);
-                                }
-                            }, 0);
                         } catch (err) {
                             console.warn('[Bookmark] Error processing new chat metadata:', err);
                         }
