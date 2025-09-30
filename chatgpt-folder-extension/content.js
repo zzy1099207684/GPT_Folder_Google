@@ -1255,6 +1255,64 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             }
         })();
 
+        function ensureChatsHeaderNotClickable() {
+            try {
+                // 1) 锚点
+                const hist = qs('div#history') || qs('nav[aria-label="Chat history"]');
+                if (!hist) return;
+
+                // 2) Chats 区块与标题
+                const section = hist.closest('div[class*="sidebar-expando-section"]') || hist.parentElement;
+                if (!section) return;
+
+                const header =
+                    section.querySelector(':scope > .group.__menu-item.hoverable') ||
+                    section.querySelector(':scope > div.__menu-item') ||
+                    section.querySelector(':scope > div[tabindex][aria-expanded]');
+                if (!header) return;
+
+                // 3) 复原旧版“禁用点击”的副作用 + 防重复绑定
+                header.removeAttribute('aria-disabled');
+                header.style.pointerEvents = '';
+                header.style.cursor = '';
+                if (!header.hasAttribute('tabindex')) header.setAttribute('tabindex', '0');
+                if (header.dataset.cgptToggleBound === '1') {
+                    // 重建时应用持久化状态
+                    const collapsed = sessionStorage.getItem('cgptChatsCollapsed') === '1';
+                    hist.style.display = collapsed ? 'none' : '';
+                    header.setAttribute('aria-expanded', String(!collapsed));
+                    header.setAttribute('aria-label', collapsed ? 'Expand section' : 'Collapse section');
+                    return;
+                }
+                header.dataset.cgptToggleBound = '1';
+
+                // 4) 仅控制历史记录显隐，不影响 cgpt-select-header/cgpt-bookmarks-wrapper
+                const apply = (collapsed) => {
+                    hist.style.display = collapsed ? 'none' : '';
+                    header.setAttribute('aria-expanded', String(!collapsed));
+                    header.setAttribute('aria-label', collapsed ? 'Expand section' : 'Collapse section');
+                };
+
+                let collapsed = false;
+                try { collapsed = sessionStorage.getItem('cgptChatsCollapsed') === '1'; } catch {}
+                apply(collapsed);
+
+                const toggle = () => {
+                    collapsed = !collapsed;
+                    try { sessionStorage.setItem('cgptChatsCollapsed', collapsed ? '1' : '0'); } catch {}
+                    apply(collapsed);
+                };
+
+                // 5) 点击与键盘切换；捕获阶段阻断页面内置折叠，保持我们仅折叠 #history
+                header.addEventListener('click', (e) => { toggle(); e.preventDefault(); e.stopImmediatePropagation(); }, true);
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { toggle(); e.preventDefault(); e.stopImmediatePropagation(); }
+                }, true);
+
+                // 不再删除标题 SVG，避免 UI 抖动
+            } catch {}
+        }
+
         function bootAfterHydration() {
             const start = () => {
                 const readyObs = observers.add(new MutationObserver(debounce(() => {
@@ -1311,6 +1369,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 });
                         }
                     }
+                    ensureChatsHeaderNotClickable();
                 }, 16)));
                 readyObs.observe(document.body, {childList: true, subtree: true});
             };
