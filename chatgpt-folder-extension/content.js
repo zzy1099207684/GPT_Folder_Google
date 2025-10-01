@@ -278,7 +278,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const readMode = (v) => {
                     if (typeof v === 'number') return Math.min(2, Math.max(0, v));
                     if (v === false) return 2;         // 旧 false -> 全关
-                    return 0;                          // 旧 true/undefined -> 全开
+                    return 1;                          // 旧 true/undefined -> 全开
                 };
 
                 const render = (mode) => {
