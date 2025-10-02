@@ -167,11 +167,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (path === '/' && window.__cgptPendingToken) {
                 const toggles = window.__cgptPromptTogglePerPath || {};
                 if (toggles[key] === undefined) {
-                    toggles[key] = 0; // 0=全开
+                    // 默认改为中间档
+                    toggles[key] = 1; // 1=中间档
                     try {
                         sessionStorage.setItem('cgptPromptToggle', JSON.stringify(toggles));
-                    } catch {
-                    }
+                    } catch {}
                     window.__cgptPromptTogglePerPath = toggles;
                 }
             }
