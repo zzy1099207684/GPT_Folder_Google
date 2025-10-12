@@ -2112,9 +2112,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             const existingWrapper = qs('#cgpt-bookmarks-wrapper');
             if (existingWrapper) {
-                const host2 = historyNode?.parentElement;
+                const section = historyNode?.closest('div[class*="sidebar-expando-section"]');
+                const host2  = section?.parentElement || historyNode?.parentElement;
+                const ref    = section || historyNode;
                 if (host2 && existingWrapper.parentElement !== host2) {
-                    safeInsertBefore(host2, existingWrapper, historyNode);
+                    safeInsertBefore(host2, existingWrapper, ref);
                 }
                 delete document.documentElement.dataset.cgptBuilding;  // 释放构建锁
                 return;
@@ -2647,8 +2649,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             })();
 
             if (selHeader) {
-                const host = historyNode?.parentElement;
-                if (host) safeInsertBefore(host, selHeader, historyNode);
+                const section = historyNode?.closest('div[class*="sidebar-expando-section"]');
+                const host = section?.parentElement || historyNode?.parentElement;
+                const ref  = section || historyNode;
+                if (host) safeInsertBefore(host, selHeader, ref);
             }
             /* ---------- 数据读取 ---------- */
             const storedFolders = (await storage.get('folders')) || {};
