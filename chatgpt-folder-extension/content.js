@@ -4337,7 +4337,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     skipSuffixOnce = true;
                 }
                 if (isUploading()) return;
-                const ed = qs('.ProseMirror');
+                const ed = qs('.ProseMirror') || qs('#prompt-textarea') || qs('[contenteditable="true"]');
                 if (!ed) return;
                 const SUFFIX = '';
                 let changed = false;
@@ -4533,15 +4533,25 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     const mergedClean = String(merged).replace(/^※+/, '').replace(/※+$/, '').trim();
                     if (mergedClean) {
-                        const hadUserText = ((ed.innerText || '').trim().length > 0); // 可留可删
-                        gp.textContent = merged;
-                        frag.appendChild(gp);
-                        if (hadUserText) {
-                            const tc = document.createElement('p');
-                            tc.textContent = 'Task content:';
-                            frag.appendChild(tc);
+                        // === 新增：textarea 直接前置字符串，否则沿用 ProseMirror DOM 注入 ===
+                        if (ed.tagName === 'TEXTAREA') {
+                            const v = ed.value || '';
+                            const hadUserText = v.trim().length > 0;
+                            const prefix = merged + (hadUserText ? '\nTask content:\n' : '\n');
+                            ed.value = prefix + v;
+                            // 触发输入事件以同步内部状态
+                            ed.dispatchEvent(new Event('input', { bubbles: true }));
+                        } else {
+                            const hadUserText = ((ed.innerText || '').trim().length > 0); // 可留可删
+                            gp.textContent = merged;
+                            frag.appendChild(gp);
+                            if (hadUserText) {
+                                const tc = document.createElement('p');
+                                tc.textContent = 'Task content:';
+                                frag.appendChild(tc);
+                            }
+                            ed.insertBefore(frag, ed.firstChild);
                         }
-                        ed.insertBefore(frag, ed.firstChild);
                     }
                 }
 
@@ -4625,6 +4635,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const histRoot = qs('div#history') || qs('nav[aria-label="Chat history"]');
                         const title = histRoot?.querySelector(`a[href*="${location.pathname}"]`)?.textContent.trim() || 'New chat';
                         const curPath = new URL(cur).pathname;
+
+                        if (lastActiveMap[curPath] === '__history__' || clearActiveOnHistoryClick) {
+                            return; // 不改 activeFid、不写 lastActiveMap、不动分组
+                        }
 
                         if (window.__cgptPendingToken) {
                             const oldKey = '/' + window.__cgptPendingToken;
