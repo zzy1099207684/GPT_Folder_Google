@@ -2085,6 +2085,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     return;
                 }
 
+                delete window.__cgptPendingFid;
+                window.__cgptPendingToken = null;
+                delete lastActiveMap['/'];
+
                 if (p) {
                     try {
                         lastActiveMap[p] = '__history__';
@@ -4387,7 +4391,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
 
                 /* 新增：仅当“角标”可见或处于挂起建联态时才允许注入组 prompt */
-                const allowByPending = !!(window.__cgptPendingFid && folders[window.__cgptPendingFid]);
+                const allowByPending  = !!(window.__cgptPendingFid && folders[window.__cgptPendingFid] && location.pathname === '/');
                 let allowByTriangle = false;
                 if (activeFid) {
                     const cornerEl = document.querySelector(`.cgpt-folder-corner[data-fid="${activeFid}"]`);
