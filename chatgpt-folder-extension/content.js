@@ -619,6 +619,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                 const text = getText(editor);
                 // 按区块扫描：※…※
+                // 按区块扫描：※…※
                 const BLOCK_RE = /※([\s\S]*?)※/g;
                 const opts = readPromptOptions();
                 const optionInners = opts.map(o => stripMarkers(o.text));
@@ -649,10 +650,47 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         break;
                     }
                 }
-                if (replaced) {
-                    const nextText = out + text.slice(last);
-                    if (nextText !== text) setText(editor, nextText);
-                }
+
+// --- Beginner Mode sync --- 仅针对首个 ※…※ 块的 Use style 左段做前置/移除
+                let nextText = replaced ? (out + text.slice(last)) : text;
+                try {
+                    const bmOn = (sessionStorage.getItem('cgptBeginnerMode') !== '0'); // '1' on, '0' off
+                    const FIRST_RE = /※([\s\S]*?)※/;  // 只处理首块
+                    const mm = FIRST_RE.exec(nextText);
+                    if (mm) {
+                        let inner = mm[1];
+
+                        // 兼容 "Switch style:" 前缀
+                        let head = '';
+                        if (inner.startsWith('Switch style:')) {
+                            head = 'Switch style:';
+                            inner = inner.slice(13);
+                        }
+
+                        // 拆分左(Use style)与右(组内)；仅改左段
+                        const semi = inner.indexOf(';');
+                        let left = semi >= 0 ? inner.slice(0, semi) : inner;
+                        const right = semi >= 0 ? inner.slice(semi) : '';
+
+                        const rmRe = /^\s*speak in layman's terms\s*,\s*/i;
+
+                        let newLeft = left;
+                        if (bmOn) {
+                            if (!rmRe.test(left)) newLeft = "Speak in layman's terms, " + left;
+                        } else {
+                            newLeft = left.replace(rmRe, '');
+                        }
+
+                        const newInner = head + newLeft + right;
+                        if (newInner !== mm[1]) {
+                            nextText = nextText.slice(0, mm.index) + '※' + newInner + '※' + nextText.slice(mm.index + mm[0].length);
+                        }
+                    }
+                } catch {}
+
+// 统一一次性写回（避免重复触发 input）
+                if (nextText !== text) setText(editor, nextText);
+
             }, true);
         })();
         // === NEW END ===
