@@ -1980,15 +1980,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     try {
                                         window.__cgptPendingFid = null;
                                         window.__cgptPendingToken = null;
+                                        window.__cgptPendingNewChatPath = null; // 新增：清理悬挂的新建路径指针
                                         const counters = window.__cgptPromptGapCounters || {};
-                                        const indices = window.__cgptPromptIndexMap || {};
-                                        delete counters['/'];
-                                        delete indices['/'];
+                                        const indices  = window.__cgptPromptIndexMap || {};
+                                        delete counters['/']; delete indices['/'];
                                         sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
                                         sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices));
-                                    } catch {
-                                    }
-
+                                    } catch {}
                                     // 软跳转：优先点击现有“New chat”入口，其次用 pushState
                                     const softGoHome = () => {
                                         const btn =
@@ -3784,51 +3782,47 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     const prevPaths = new Set(
                         qsa(HIST_ANCHOR).map(a => new URL(a.href).pathname)
                     );
-                    const globalNewBtn = qs('button[aria-label="New chat"]');
+// 支持 a 与 button 两种形态
+                    const globalNewBtn = qs(
+                        'button[aria-label="New chat"], a[data-testid="create-new-chat-button"], a[aria-label*="New chat" i]'
+                    );
+
+                    const initPath2 = location.pathname;
+                    let __ensureNavTimer = setTimeout(() => {
+                        try {
+                            if (token === window.__cgptPendingToken && location.pathname === initPath2) {
+                                history.pushState({}, '', '/');
+                                window.dispatchEvent(new Event('popstate'));
+                            }
+                        } catch {}
+                    }, 400); // 保守兜底
 
                     if (globalNewBtn) {
-                        // ↓ 避免全局按钮把刚设好的组高亮清掉
                         window.__cgptSuppressGroupClear = true;
                         globalNewBtn.click();
                     } else {
                         history.pushState({}, '', '/');
                         window.dispatchEvent(new Event('popstate'));
-                        // 新增：兜底导航不依赖“全局按钮点击”，避免残留抑制标志
-                        try {
-                            delete window.__cgptSuppressGroupClear;
-                        } catch {
-                        }
+                        try { delete window.__cgptSuppressGroupClear; } catch {}
                     }
                     highlightActive();
-
 
                     // 定义observer - 监视history区域变化以检测新聊天
                     const observer = new MutationObserver(() => {
                         if (token !== window.__cgptPendingToken) return;
                         const anchors = qsa(HIST_ANCHOR);
-
                         const currentPaths = new Set(
                             anchors.map(a => {
-                                try {
-                                    return new URL(a.href, location.origin).pathname;
-                                } catch {
-                                    return '';
-                                }
+                                try { return new URL(a.href, location.origin).pathname; }
+                                catch { return ''; }
                             }).filter(Boolean)
                         );
 
-                        // 仅保留本次真正新增的路径
-                        let newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
-
-                        if (!newPaths.length && anchors[0]) {
-                            try {
-                                const topPath = new URL(anchors[0].href, location.origin).pathname;
-                                if (!prevPaths.has(topPath)) newPaths = [topPath];
-                            } catch {
-                            }
-                        }
-
+// 仅保留“本次新增”的路径；不再使用 anchors[0] 回退
+                        const newPaths = [...currentPaths].filter(p => !prevPaths.has(p));
                         if (!newPaths.length) return;
+
+                        clearTimeout(__ensureNavTimer);
 
 
                         observer.disconnect();
@@ -5200,6 +5194,38 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
             function highlightActive() {
                 const path = location.pathname;
+
+                // === NEW: 正在执行“组内 New chat”流程 → 强制以挂起分组为准，先清旧高亮，再标组角 ===
+                if (window.__cgptPendingFid && folders[window.__cgptPendingFid]) {
+                    activeFid = window.__cgptPendingFid;
+                    try {
+                        // 清除上一条路径的组内高亮
+                        if (activePath) {
+                            const prevArr = liveSyncMap.get(activePath);
+                            prevArr && prevArr.forEach(({el}) => {
+                                if (el && el.isConnected) {
+                                    el.style.background = '';
+                                    el.style.color = document.documentElement.classList.contains('light') ? '#000' : '#b2b2b2';
+                                }
+                            });
+                        }
+                        // 清除当前旧路径的残留高亮（避免“回灯”）
+                        const curArr = liveSyncMap.get(path);
+                        curArr && curArr.forEach(({el}) => {
+                            if (el && el.isConnected) {
+                                el.style.background = '';
+                                el.style.color = document.documentElement.classList.contains('light') ? '#000' : '#b2b2b2';
+                            }
+                        });
+                    } catch {}
+                    // 本轮不再按旧路径重高亮
+                    activePath = null;
+                    const isLight = document.documentElement.classList.contains('light');
+                    document.querySelectorAll('.cgpt-folder-corner').forEach(el => {
+                        el.style.borderTopColor = el.dataset.fid === activeFid ? (isLight ? '#000' : '#fff') : 'transparent';
+                    });
+                    return;
+                }
 
                 if (path.startsWith('/g/')) {
                     activeFid = null;
