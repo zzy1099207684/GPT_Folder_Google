@@ -47,8 +47,6 @@
             'a[href^="/c/"],a[data-testid="conversation-item"],[data-testid="conversation-item"] a'
         );
         if (!a) return;
-        try { sessionStorage.removeItem(MINI_FORCE_KEY); } catch {}
-        // 给予路由切换时间，由上面的重绑逻辑与此兜底共同保证同步
         setTimeout(() => { updateMiniModelText(); ensureHeaderModelObserved(); }, 600);
     }, true);
 
@@ -137,8 +135,6 @@
 
     let MODEL_MAP = [];
 
-    const MINI_FORCE_KEY = 'cgptMiniModelForcedLabel';
-
     function __cgptBuildAcceptLanguage() {
         const ls = (Array.isArray(navigator.languages) && navigator.languages.length
             ? navigator.languages : [navigator.language || 'en-US'])
@@ -178,11 +174,6 @@
             const seen = new Set();
             MODEL_MAP = next.filter(x => (seen.has(x.label) ? false : (seen.add(x.label), true)));
 
-            // 追加额外模型：GPT-5-mini
-            const EXTRA_LABEL = 'GPT-5-mini';
-            if (!MODEL_MAP.some(m => m.label === EXTRA_LABEL)) {
-                MODEL_MAP.push({ label: EXTRA_LABEL });
-            }
         } catch {}
     }
 
@@ -230,16 +221,6 @@
     }
 
     function readCurrentModelText(){
-        // NEW: 若已锁定或 URL 指定 gpt-5-mini，则强制显示 GPT-5-mini
-        try {
-            const forced = sessionStorage.getItem(MINI_FORCE_KEY);
-            if (forced) return forced;
-        } catch {}
-        try {
-            const url = new URL(location.href);
-            if (url.searchParams.get('model') === 'gpt-5-mini') return 'GPT-5-mini';
-        } catch {}
-
         const btn = findHeaderModelButton();
         if (!btn) return 'Model';
         const aria = btn.getAttribute('aria-label') || '';
@@ -250,27 +231,6 @@
     }
 
     function clickNativeModel(label){
-        // 选择 GPT-5-mini：直接以 ?model=gpt-5-mini 进入当前页
-        if (label === 'GPT-5-mini') {
-            // NEW: 加锁，确保胶囊始终显示 GPT-5-mini
-            try { sessionStorage.setItem(MINI_FORCE_KEY, 'GPT-5-mini'); } catch {}
-
-            try {
-                const url = new URL(location.href);
-                url.searchParams.set('model', 'gpt-5-mini');
-                location.assign(url.toString());
-            } catch {
-                if (location.search) {
-                    location.search = location.search.replace(/(^\?|&)?model=[^&]*/,'').replace(/^\?&/,'?');
-                }
-                location.search = (location.search ? location.search + '&' : '?') + 'model=gpt-5-mini';
-            }
-            return;
-        }
-
-        // NEW: 选择非 gpt-5-mini 时解锁，恢复跟随原生
-        try { sessionStorage.removeItem(MINI_FORCE_KEY); } catch {}
-
         const headerBtn = findHeaderModelButton();
         if (!headerBtn) return;
 
@@ -468,6 +428,9 @@
 
     // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
     (function observeAdditionalModelsSwitch(){
+        if (window.__cgptObsAdditionalModelsInstalled) return;
+        window.__cgptObsAdditionalModelsInstalled = true;
+
         function hook(btn){
             if (!btn || btn.__cgptHooked) return;
             btn.__cgptHooked = true;
@@ -483,14 +446,13 @@
                 scheduled = true;
                 setTimeout(async () => {
                     try {
-                        // 仅重载模型映射，避免整页刷新导致的循环
-                        await __cgptReloadModelMap?.();       // 已存在函数，用于拉取 categories 并重建 MODEL_MAP
-                        // 更新迷你按钮文案（当前模型名），保持 UI 同步
-                        try { updateMiniModelText?.(); } catch {}
+                        await __cgptReloadModelMap(); // 轻量更新 MODEL_MAP
+                        // 若迷你模型菜单当前已打开，关闭以避免显示旧数据
+                        document.querySelectorAll('.' + MINI_MODEL_CLASS + '-menu').forEach(n => n.remove());
                     } finally {
                         scheduled = false;
                     }
-                }, 250); // 保留原延迟，避免与原生持久化竞争
+                }, 250);
             };
 
             // 仅观察状态属性变化；初始化阶段的变化直接忽略
@@ -744,15 +706,6 @@
         }
         if (needRefresh) requestAnimationFrame(updatePromptPill);
     });
-    // NEW: 页面加载时，如 URL 带 ?model=gpt-5-mini 则加锁
-    (function __cgptSyncMiniLockFromURL(){
-        try {
-            const url = new URL(location.href);
-            if (url.searchParams.get('model') === 'gpt-5-mini') {
-                sessionStorage.setItem(MINI_FORCE_KEY, 'GPT-5-mini');
-            }
-        } catch {}
-    })();
 
     const __start = () => {
         mo.observe(document.body, { childList:true, subtree:true });
