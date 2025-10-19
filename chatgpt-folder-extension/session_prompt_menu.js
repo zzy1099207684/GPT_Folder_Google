@@ -467,7 +467,6 @@
     })();
 
     // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
-    // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
     (function observeAdditionalModelsSwitch(){
         function hook(btn){
             if (!btn || btn.__cgptHooked) return;
