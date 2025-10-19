@@ -467,25 +467,42 @@
     })();
 
     // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
+    // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
     (function observeAdditionalModelsSwitch(){
         function hook(btn){
             if (!btn || btn.__cgptHooked) return;
             btn.__cgptHooked = true;
 
             let scheduled = false;
-            // 关键修复：仅在 aria-checked 变化后再调度刷新，给原生切换与持久化留时间
-            const scheduleReload = () => {
+            let initialized = false;     // ← 新增：用于屏蔽初始化阶段的属性抖动
+            // 等下一轮事件循环后再认为“已初始化”
+            setTimeout(() => { initialized = true; }, 0);
+
+            // 改为轻量刷新模型映射，而不是整页刷新
+            const scheduleRefreshModels = () => {
                 if (scheduled) return;
                 scheduled = true;
-                setTimeout(() => {
-                    try { window.location.reload(); } catch {}
-                }, 250); // 小延迟，避免与原生写入竞争
+                setTimeout(async () => {
+                    try {
+                        // 仅重载模型映射，避免整页刷新导致的循环
+                        await __cgptReloadModelMap?.();       // 已存在函数，用于拉取 categories 并重建 MODEL_MAP
+                        // 更新迷你按钮文案（当前模型名），保持 UI 同步
+                        try { updateMiniModelText?.(); } catch {}
+                    } finally {
+                        scheduled = false;
+                    }
+                }, 250); // 保留原延迟，避免与原生持久化竞争
             };
-            // 仅观察状态属性变化后再刷新
+
+            // 仅观察状态属性变化；初始化阶段的变化直接忽略
             new MutationObserver(muts => {
-                if (muts.some(m => m.attributeName === 'aria-checked')) scheduleReload();
+                if (!initialized) return; // ← 新增：忽略初始渲染阶段的属性写入
+                if (muts.some(m => m.attributeName === 'aria-checked')) {
+                    scheduleRefreshModels();
+                }
             }).observe(btn, { attributes:true, attributeFilter:['aria-checked'] });
         }
+
         const scan = () => {
             const sw = document.querySelector('button[role="switch"][aria-label="Show additional models"]');
             if (sw) hook(sw);
