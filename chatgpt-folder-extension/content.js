@@ -49,7 +49,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             try {
                 sessionStorage.setItem(KEY, cur);
                 sessionStorage.setItem(TS, String(now));
-            } catch {}
+            } catch {
+            }
         };
 
         new MutationObserver(() => {
@@ -171,7 +172,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     toggles[key] = 1; // 1=中间档
                     try {
                         sessionStorage.setItem('cgptPromptToggle', JSON.stringify(toggles));
-                    } catch {}
+                    } catch {
+                    }
                     window.__cgptPromptTogglePerPath = toggles;
                 }
             }
@@ -686,7 +688,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             nextText = nextText.slice(0, mm.index) + '※' + newInner + '※' + nextText.slice(mm.index + mm[0].length);
                         }
                     }
-                } catch {}
+                } catch {
+                }
 
 // 统一一次性写回（避免重复触发 input）
                 if (nextText !== text) setText(editor, nextText);
@@ -908,7 +911,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 window.__deepCleanerId && clearInterval(window.__deepCleanerId);
             } catch {
             }
-            try { storage._clearPendingWrites(); } catch {}
+            try {
+                storage._clearPendingWrites();
+            } catch {
+            }
         }, {passive: true});
 
 
@@ -1329,23 +1335,38 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 };
 
                 let collapsed = false;
-                try { collapsed = sessionStorage.getItem('cgptChatsCollapsed') === '1'; } catch {}
+                try {
+                    collapsed = sessionStorage.getItem('cgptChatsCollapsed') === '1';
+                } catch {
+                }
                 apply(collapsed);
 
                 const toggle = () => {
                     collapsed = !collapsed;
-                    try { sessionStorage.setItem('cgptChatsCollapsed', collapsed ? '1' : '0'); } catch {}
+                    try {
+                        sessionStorage.setItem('cgptChatsCollapsed', collapsed ? '1' : '0');
+                    } catch {
+                    }
                     apply(collapsed);
                 };
 
                 // 5) 点击与键盘切换；捕获阶段阻断页面内置折叠，保持我们仅折叠 #history
-                header.addEventListener('click', (e) => { toggle(); e.preventDefault(); e.stopImmediatePropagation(); }, true);
+                header.addEventListener('click', (e) => {
+                    toggle();
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                }, true);
                 header.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') { toggle(); e.preventDefault(); e.stopImmediatePropagation(); }
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        toggle();
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                    }
                 }, true);
 
                 // 不再删除标题 SVG，避免 UI 抖动
-            } catch {}
+            } catch {
+            }
         }
 
         function bootAfterHydration() {
@@ -1982,11 +2003,13 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                         window.__cgptPendingToken = null;
                                         window.__cgptPendingNewChatPath = null; // 新增：清理悬挂的新建路径指针
                                         const counters = window.__cgptPromptGapCounters || {};
-                                        const indices  = window.__cgptPromptIndexMap || {};
-                                        delete counters['/']; delete indices['/'];
+                                        const indices = window.__cgptPromptIndexMap || {};
+                                        delete counters['/'];
+                                        delete indices['/'];
                                         sessionStorage.setItem('cgptPromptGapCounters', JSON.stringify(counters));
                                         sessionStorage.setItem('cgptPromptIndexMap', JSON.stringify(indices));
-                                    } catch {}
+                                    } catch {
+                                    }
                                     // 软跳转：优先点击现有“New chat”入口，其次用 pushState
                                     const softGoHome = () => {
                                         const btn =
@@ -2153,8 +2176,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             const existingWrapper = qs('#cgpt-bookmarks-wrapper');
             if (existingWrapper) {
                 const section = historyNode?.closest('div[class*="sidebar-expando-section"]');
-                const host2  = section?.parentElement || historyNode?.parentElement;
-                const ref    = section || historyNode;
+                const host2 = section?.parentElement || historyNode?.parentElement;
+                const ref = section || historyNode;
                 if (host2 && existingWrapper.parentElement !== host2) {
                     safeInsertBefore(host2, existingWrapper, ref);
                 }
@@ -2474,7 +2497,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         box.style.color = light ? '#111' : '#e7d8c5';
                     };
                     syncTheme();
-                    new MutationObserver(syncTheme).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+                    new MutationObserver(syncTheme).observe(document.documentElement, {
+                        attributes: true,
+                        attributeFilter: ['class']
+                    });
 
                     box.innerHTML = `
     <div style="font-weight:600;margin:2px 0 8px">Set default model</div>
@@ -2492,28 +2518,41 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
                     // 2) 复用站点认证：/api/auth/session -> Bearer accessToken（与文件中其它处一致） :contentReference[oaicite:3]{index=3}
                     const buildAcceptLanguage = () => {
-                        const ls = (Array.isArray(navigator.languages)&&navigator.languages.length ? navigator.languages : [navigator.language||'en-US'])
-                            .map(s=>String(s||'').split(';')[0]).filter(Boolean);
-                        const uniq = [...new Set(ls)].slice(0,4); const qs=[1.0,0.9,0.8,0.7];
-                        return uniq.length ? uniq.map((l,i)=>i===0?l:`${l};q=${qs[i].toFixed(1)}`).join(',') : 'en-US,en;q=0.9';
+                        const ls = (Array.isArray(navigator.languages) && navigator.languages.length ? navigator.languages : [navigator.language || 'en-US'])
+                            .map(s => String(s || '').split(';')[0]).filter(Boolean);
+                        const uniq = [...new Set(ls)].slice(0, 4);
+                        const qs = [1.0, 0.9, 0.8, 0.7];
+                        return uniq.length ? uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',') : 'en-US,en;q=0.9';
                     };
-                    async function getHeaders(){
-                        const h={accept:'*/*','accept-language':buildAcceptLanguage(),'content-type':'application/json'};
-                        try{
-                            const r=await fetch('/api/auth/session',{credentials:'same-origin'});
-                            if(r.ok){const j=await r.json(); if(j&&j.accessToken) h.authorization=`Bearer ${j.accessToken}`;}
-                        }catch{}
+
+                    async function getHeaders() {
+                        const h = {
+                            accept: '*/*',
+                            'accept-language': buildAcceptLanguage(),
+                            'content-type': 'application/json'
+                        };
+                        try {
+                            const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
+                            if (r.ok) {
+                                const j = await r.json();
+                                if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
+                            }
+                        } catch {
+                        }
                         return h;
                     }
 
                     // 3) 拉取模型 → categories[*].human_category_short_name
                     (async () => {
-                        try{
-                            const res = await fetch('/backend-api/models?is_gizmo=false', { headers: await getHeaders(), credentials:'same-origin' });
+                        try {
+                            const res = await fetch('/backend-api/models?is_gizmo=false', {
+                                headers: await getHeaders(),
+                                credentials: 'same-origin'
+                            });
                             const data = res.ok ? await res.json() : null;
                             const cats = Array.isArray(data?.categories) ? data.categories : [];
                             const rows = cats
-                                .map(c => ({ label: c?.human_category_short_name || '' }))
+                                .map(c => ({label: c?.human_category_short_name || ''}))
                                 .filter(x => x.label);
 
                             list.innerHTML = '';
@@ -2522,21 +2561,34 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 row.textContent = label;
                                 row.style.cssText = 'padding:8px 10px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.06)';
                                 row.addEventListener('click', () => {
-                                    try { localStorage.setItem('cgptDefaultModelLabel', label); } catch {}
+                                    try {
+                                        localStorage.setItem('cgptDefaultModelLabel', label);
+                                    } catch {
+                                    }
                                     overlay.remove();
                                 });
                                 list.appendChild(row);
                             });
-                            if(!rows.length){ list.textContent = 'No models'; }
-                        }catch{
+                            if (!rows.length) {
+                                list.textContent = 'No models';
+                            }
+                        } catch {
                             list.textContent = 'Load failed';
                         }
                     })();
 
                     // 4) 按钮
                     box.querySelector('#closeBtn').onclick = () => overlay.remove();
-                    box.querySelector('#clearBtn').onclick = () => { try{ localStorage.removeItem('cgptDefaultModelLabel'); }catch{} overlay.remove(); };
-                    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); }, {capture:true});
+                    box.querySelector('#clearBtn').onclick = () => {
+                        try {
+                            localStorage.removeItem('cgptDefaultModelLabel');
+                        } catch {
+                        }
+                        overlay.remove();
+                    };
+                    overlay.addEventListener('click', (e) => {
+                        if (e.target === overlay) overlay.remove();
+                    }, {capture: true});
                 }
 
                 pop.appendChild(mkItem('add group', addGroup));
@@ -2770,7 +2822,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
             if (selHeader) {
                 const section = historyNode?.closest('div[class*="sidebar-expando-section"]');
                 const host = section?.parentElement || historyNode?.parentElement;
-                const ref  = section || historyNode;
+                const ref = section || historyNode;
                 if (host) safeInsertBefore(host, selHeader, ref);
             }
             /* ---------- 数据读取 ---------- */
@@ -3873,7 +3925,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 history.pushState({}, '', '/');
                                 window.dispatchEvent(new Event('popstate'));
                             }
-                        } catch {}
+                        } catch {
+                        }
                     }, 400); // 保守兜底
 
                     if (globalNewBtn) {
@@ -3882,7 +3935,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     } else {
                         history.pushState({}, '', '/');
                         window.dispatchEvent(new Event('popstate'));
-                        try { delete window.__cgptSuppressGroupClear; } catch {}
+                        try {
+                            delete window.__cgptSuppressGroupClear;
+                        } catch {
+                        }
                     }
                     highlightActive();
 
@@ -3892,8 +3948,11 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         const anchors = qsa(HIST_ANCHOR);
                         const currentPaths = new Set(
                             anchors.map(a => {
-                                try { return new URL(a.href, location.origin).pathname; }
-                                catch { return ''; }
+                                try {
+                                    return new URL(a.href, location.origin).pathname;
+                                } catch {
+                                    return '';
+                                }
                             }).filter(Boolean)
                         );
 
@@ -4161,6 +4220,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 const qs = [1.0, 0.9, 0.8, 0.7];
                                 return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
                             }
+
                             async function getHeaders() {                // 参考 Delete 的 getHeaders 实现
                                 const h = {
                                     accept: '*/*',
@@ -4173,7 +4233,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                         const j = await r.json();
                                         if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
                                     }
-                                } catch {}
+                                } catch {
+                                }
                                 return h;
                             }
 
@@ -4193,16 +4254,23 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                         link.textContent = t;
                                         // 更新分组数据并持久化
                                         chat.title = t;
-                                        try { if (chrome?.runtime?.id) storage.set({folders}); } catch {}
+                                        try {
+                                            if (chrome?.runtime?.id) storage.set({folders});
+                                        } catch {
+                                        }
                                         safeSendMessage({type: 'save-folders', data: folders});
                                         // 同步刷新历史区对应标题
-                                        try { window.__cgptFetchConversationsAndRefresh?.(convId); } catch {}  // 利用已存在的刷新函数。:contentReference[oaicite:6]{index=6}
+                                        try {
+                                            window.__cgptFetchConversationsAndRefresh?.(convId);
+                                        } catch {
+                                        }  // 利用已存在的刷新函数。:contentReference[oaicite:6]{index=6}
                                     }
                                 } finally {
                                     delete link.dataset.titleResolving;
                                 }
                             })();
-                        } catch {}
+                        } catch {
+                        }
                     })();
                     // === [新增结束] ===
 
@@ -4212,26 +4280,39 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                         window.__cgptIgnoreNextHistoryClickPath = null;
                     }
                     setTimeout(() => {
-                        try { delete window.__cgptIgnoreNextHistoryClickPath; } catch {}
+                        try {
+                            delete window.__cgptIgnoreNextHistoryClickPath;
+                        } catch {
+                        }
                     }, 500);
 
                     const stillExists = qsa(HIST_ANCHOR).some(a => samePath(a.href, chat.url));
                     if (!stillExists) {
-                        try { window.scheduleHistoryRefresh?.(chat.url); } catch {}
-                        try { window.__cgptEnsureHistoryRowFor?.(chat.url); } catch {}
+                        try {
+                            window.scheduleHistoryRefresh?.(chat.url);
+                        } catch {
+                        }
+                        try {
+                            window.__cgptEnsureHistoryRowFor?.(chat.url);
+                        } catch {
+                        }
                         // 不中断，继续导航
                     }
 
                     lastClickedChatEl = link;
                     const path = new URL(chat.url, location.origin).pathname;
                     lastActiveMap[path] = fid;
-                    try { if (chrome?.runtime?.id) storage.set({lastActiveMap}); } catch (err) {
+                    try {
+                        if (chrome?.runtime?.id) storage.set({lastActiveMap});
+                    } catch (err) {
                         console.warn('[Bookmark] Error saving lastActiveMap:', err);
                     }
                     history.pushState({}, '', chat.url);
                     window.dispatchEvent(new Event('popstate'));
                     highlightActive();
-                    setTimeout(() => { if (lastClickedChatEl === link) lastClickedChatEl = null; }, 100);
+                    setTimeout(() => {
+                        if (lastClickedChatEl === link) lastClickedChatEl = null;
+                    }, 100);
                 };
 
                 /* 新增：双击组内会话条目→内联重命名并 PATCH 后端，再刷新 Chats 列表 */
@@ -4502,7 +4583,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 }
 
                 /* 新增：仅当“角标”可见或处于挂起建联态时才允许注入组 prompt */
-                const allowByPending  = !!(window.__cgptPendingFid && folders[window.__cgptPendingFid] && location.pathname === '/');
+                const allowByPending = !!(window.__cgptPendingFid && folders[window.__cgptPendingFid] && location.pathname === '/');
                 let allowByTriangle = false;
                 if (activeFid) {
                     const cornerEl = document.querySelector(`.cgpt-folder-corner[data-fid="${activeFid}"]`);
@@ -4592,7 +4673,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
 
 // NEW: Beginner Mode → 仅处理 Use style 段
                 let isBeginner = false;
-                try { isBeginner = sessionStorage.getItem('cgptBeginnerMode') !== '0'; } catch {}
+                try {
+                    isBeginner = sessionStorage.getItem('cgptBeginnerMode') !== '0';
+                } catch {
+                }
 
                 if (injectNow && (gpAllowed || inAllowed)) {
                     qsa('p', ed).forEach((p, i, arr) => {
@@ -4655,7 +4739,7 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                             const prefix = merged + (hadUserText ? '\nTask content:\n' : '\n');
                             ed.value = prefix + v;
                             // 触发输入事件以同步内部状态
-                            ed.dispatchEvent(new Event('input', { bubbles: true }));
+                            ed.dispatchEvent(new Event('input', {bubbles: true}));
                         } else {
                             const hadUserText = ((ed.innerText || '').trim().length > 0); // 可留可删
                             gp.textContent = merged;
@@ -5106,7 +5190,6 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 __cgptPatchChatsFromResponse(json, opts);
 
 
-
                                 try {
                                     scheduleHistoryRefresh(explicitIdOrPath && explicitIdOrPath.startsWith('/c/') ? explicitIdOrPath : undefined);
                                 } catch {
@@ -5296,7 +5379,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 el.style.color = document.documentElement.classList.contains('light') ? '#000' : '#b2b2b2';
                             }
                         });
-                    } catch {}
+                    } catch {
+                    }
                     // 本轮不再按旧路径重高亮
                     activePath = null;
                     const isLight = document.documentElement.classList.contains('light');
@@ -5867,7 +5951,8 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
         backgroundMode = next;
         ensureFrostedBG();
         if (persist && changed && chrome?.runtime?.id) {
-            chrome.storage?.sync?.set?.({ [BACKGROUND_MODE_KEY]: backgroundMode }).catch?.(() => {});
+            chrome.storage?.sync?.set?.({[BACKGROUND_MODE_KEY]: backgroundMode}).catch?.(() => {
+            });
         }
         if (typeof backgroundMenuUpdater === 'function') backgroundMenuUpdater();
     }
