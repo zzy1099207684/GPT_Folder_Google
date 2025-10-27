@@ -32,13 +32,25 @@
     // 首次进入页确保默认 Normal
     try { if (!sessionStorage.getItem('cgptSessionPrompt')) __cgptSetDefaultNormal(); } catch {}
 
-    // 捕获“New chat”点击（全局/原生入口）
+    function __cgptReadDefaultModelLabel(){
+        try { return localStorage.getItem('cgptDefaultModelLabel') || ''; } catch { return ''; }
+    }
+
     document.addEventListener('click', (ev) => {
         const btn = ev.target && ev.target.closest(
             'button[aria-label="New chat"],a[data-testid="create-new-chat-button"]'
         );
         if (!btn) return;
-        // no-op
+
+        const label = __cgptReadDefaultModelLabel();
+        if (!label) return;
+
+        const apply = async () => {
+            if (!MODEL_MAP.length) { try { await __cgptReloadModelMap(); } catch {} }
+            clickNativeModel(label);   // 内部已处理展开/查找/点击与回退重试 :contentReference[oaicite:9]{index=9}
+        };
+        // 多次定时触发，覆盖导航与菜单渲染的时序抖动
+        setTimeout(apply, 300);
     }, true);
 
 // 捕获“历史会话”点击，清除强制模型锁，并在切换后同步

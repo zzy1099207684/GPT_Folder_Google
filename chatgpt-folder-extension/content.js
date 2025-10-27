@@ -2461,9 +2461,88 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                     return d;
                 };
 
+                function openDefaultModelPicker() {
+                    // 1) 基础弹窗
+                    const overlay = document.createElement('div');
+                    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center';
+                    const box = document.createElement('div');
+                    box.style.cssText = 'max-width:420px;width:86%;border-radius:10px;padding:12px 12px 8px';
+                    // 主题自适配（与现有弹层风格一致）
+                    const syncTheme = () => {
+                        const light = document.documentElement.classList.contains('light');
+                        box.style.background = light ? 'rgb(226 226 226)' : '#2b2b2b';
+                        box.style.color = light ? '#111' : '#e7d8c5';
+                    };
+                    syncTheme();
+                    new MutationObserver(syncTheme).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+
+                    box.innerHTML = `
+    <div style="font-weight:600;margin:2px 0 8px">Set default model</div>
+    <div id="mdlList" style="max-height:320px;overflow:auto;border-radius:8px;background:rgba(0,0,0,0.06)"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id="clearBtn" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:transparent">Clear default</button>
+      <button id="closeBtn" style="padding:6px 10px;border-radius:8px;border:0;background:#10a37f;color:#fff">Close</button>
+    </div>
+  `;
+                    overlay.appendChild(box);
+                    document.body.appendChild(overlay);
+
+                    const list = box.querySelector('#mdlList');
+                    list.textContent = 'Loading...';
+
+                    // 2) 复用站点认证：/api/auth/session -> Bearer accessToken（与文件中其它处一致） :contentReference[oaicite:3]{index=3}
+                    const buildAcceptLanguage = () => {
+                        const ls = (Array.isArray(navigator.languages)&&navigator.languages.length ? navigator.languages : [navigator.language||'en-US'])
+                            .map(s=>String(s||'').split(';')[0]).filter(Boolean);
+                        const uniq = [...new Set(ls)].slice(0,4); const qs=[1.0,0.9,0.8,0.7];
+                        return uniq.length ? uniq.map((l,i)=>i===0?l:`${l};q=${qs[i].toFixed(1)}`).join(',') : 'en-US,en;q=0.9';
+                    };
+                    async function getHeaders(){
+                        const h={accept:'*/*','accept-language':buildAcceptLanguage(),'content-type':'application/json'};
+                        try{
+                            const r=await fetch('/api/auth/session',{credentials:'same-origin'});
+                            if(r.ok){const j=await r.json(); if(j&&j.accessToken) h.authorization=`Bearer ${j.accessToken}`;}
+                        }catch{}
+                        return h;
+                    }
+
+                    // 3) 拉取模型 → categories[*].human_category_short_name
+                    (async () => {
+                        try{
+                            const res = await fetch('/backend-api/models?is_gizmo=false', { headers: await getHeaders(), credentials:'same-origin' });
+                            const data = res.ok ? await res.json() : null;
+                            const cats = Array.isArray(data?.categories) ? data.categories : [];
+                            const rows = cats
+                                .map(c => ({ label: c?.human_category_short_name || '' }))
+                                .filter(x => x.label);
+
+                            list.innerHTML = '';
+                            rows.forEach(({label}) => {
+                                const row = document.createElement('div');
+                                row.textContent = label;
+                                row.style.cssText = 'padding:8px 10px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.06)';
+                                row.addEventListener('click', () => {
+                                    try { localStorage.setItem('cgptDefaultModelLabel', label); } catch {}
+                                    overlay.remove();
+                                });
+                                list.appendChild(row);
+                            });
+                            if(!rows.length){ list.textContent = 'No models'; }
+                        }catch{
+                            list.textContent = 'Load failed';
+                        }
+                    })();
+
+                    // 4) 按钮
+                    box.querySelector('#closeBtn').onclick = () => overlay.remove();
+                    box.querySelector('#clearBtn').onclick = () => { try{ localStorage.removeItem('cgptDefaultModelLabel'); }catch{} overlay.remove(); };
+                    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); }, {capture:true});
+                }
+
                 pop.appendChild(mkItem('add group', addGroup));
                 pop.appendChild(mkItem('Config Export', doExport));
                 pop.appendChild(mkItem('Config Import', doImport));
+                pop.appendChild(mkItem('set default model', openDefaultModelPicker));   // ← 新增
 
                 if (!document.documentElement.classList.contains('light')) {
                     const bgContainer = document.createElement('div');
