@@ -58,17 +58,46 @@
         if (!label) return;
 
         const apply = async () => {
-            if (!MODEL_MAP.length) {
-                try {
-                    await __cgptReloadModelMap();
-                } catch {
-                }
-            }
-            clickNativeModel(label);   // 内部已处理展开/查找/点击与回退重试 :contentReference[oaicite:9]{index=9}
+            if (!MODEL_MAP.length) { try { await __cgptReloadModelMap(); } catch {} }
+            clickNativeModel(label);   // 内部已处理展开/查找/点击与回退重试
         };
         // 多次定时触发，覆盖导航与菜单渲染的时序抖动
         setTimeout(apply, 300);
     }, true);
+
+// === 新增：在“新建会话初始页(/)”刷新或回到页面时，自动应用默认模型（不影响历史会话页） ===
+
+// NEW: 防重复应用锁（同一页面生命周期内，合并 load/pageshow 的双触发）
+    let __cgptHomeModelApplyLock = false;
+
+    function __cgptApplyDefaultModelIfHome(){
+        if (location.pathname !== '/') return;           // 仅首页（新建会话初始页）
+        const label = __cgptReadDefaultModelLabel();
+        if (!label) return;
+
+        // 若已是目标模型则跳过，避免无谓点击；使用前缀判断覆盖“可见文案”差异
+        const cur = (readCurrentModelText() || '').toLowerCase();
+        if (cur && cur.startsWith(label.toLowerCase())) return;
+
+        // NEW: 同一刷新/回显周期只安排一次应用任务
+        if (__cgptHomeModelApplyLock) return;
+        __cgptHomeModelApplyLock = true;
+
+        const apply = async () => {
+            if (!MODEL_MAP.length) { try { await __cgptReloadModelMap(); } catch {} }
+            clickNativeModel(label);
+            // NEW: 稍后释放锁，允许后续真正的返回首页(bfcache)再次生效
+            setTimeout(() => { __cgptHomeModelApplyLock = false; }, 1000);
+        };
+        // 分阶段尝试，覆盖首屏/延迟挂载
+        setTimeout(apply, 400);
+    }
+
+// 刷新加载与 bfcache 返回均覆盖
+    window.addEventListener('load',     () => __cgptApplyDefaultModelIfHome(), { once:true });
+    window.addEventListener('pageshow', () => __cgptApplyDefaultModelIfHome(), { passive:true });
+// === 新增结束 ===
+
 
 // 捕获“历史会话”点击，清除强制模型锁，并在切换后同步
     document.addEventListener('click', (ev) => {
