@@ -1,39 +1,51 @@
 (function () {
     const optionsList = [
-        { label: 'Normal', text: '※Balanced responses with natural flow;※' },
-        { label: 'Concise', text: '※Shorter responses & more messages;※' },
-        { label: 'Clear', text: '※Clear explanation that anyone can understand easily;※' },
-        { label: 'Explanatory', text: '※Detailed responses & comprehensive context;※' },
-        { label: 'Learning', text: '※Patient, educational responses that build understanding※' },
-        { label: 'Formal', text: '※Clear and well-structured responses;※' }
+        {label: 'Normal', text: '※Balanced responses with natural flow;※'},
+        {label: 'Concise', text: '※Shorter responses & more messages;※'},
+        {label: 'Clear', text: '※Clear explanation that anyone can understand easily;※'},
+        {label: 'Explanatory', text: '※Detailed responses & comprehensive context;※'},
+        {label: 'Learning', text: '※Patient, educational responses that build understanding※'},
+        {label: 'Formal', text: '※Clear and well-structured responses;※'}
     ];
 
     try {
-        const slim = optionsList.map(o => ({ label: o.label, text: o.text }));
+        const slim = optionsList.map(o => ({label: o.label, text: o.text}));
         sessionStorage.setItem('cgptPromptOptions', JSON.stringify(slim));
         window.__cgptPromptOptions = slim;
-    } catch {}
+    } catch {
+    }
 
     // NEW: Beginner Mode 默认开启（'1'=on, '0'=off）
-    try { if (sessionStorage.getItem('cgptBeginnerMode') === null) {
-        sessionStorage.setItem('cgptBeginnerMode', '0');
-    } } catch {}
+    try {
+        if (sessionStorage.getItem('cgptBeginnerMode') === null) {
+            sessionStorage.setItem('cgptBeginnerMode', '0');
+        }
+    } catch {
+    }
 
     // 集中设置“默认 Normal”
     function __cgptSetDefaultNormal() {
         try {
             sessionStorage.setItem(
                 'cgptSessionPrompt',
-                JSON.stringify({ label: optionsList[0].label, text: optionsList[0].text })
+                JSON.stringify({label: optionsList[0].label, text: optionsList[0].text})
             );
-        } catch {}
+        } catch {
+        }
     }
 
     // 首次进入页确保默认 Normal
-    try { if (!sessionStorage.getItem('cgptSessionPrompt')) __cgptSetDefaultNormal(); } catch {}
+    try {
+        if (!sessionStorage.getItem('cgptSessionPrompt')) __cgptSetDefaultNormal();
+    } catch {
+    }
 
-    function __cgptReadDefaultModelLabel(){
-        try { return localStorage.getItem('cgptDefaultModelLabel') || ''; } catch { return ''; }
+    function __cgptReadDefaultModelLabel() {
+        try {
+            return localStorage.getItem('cgptDefaultModelLabel') || '';
+        } catch {
+            return '';
+        }
     }
 
     document.addEventListener('click', (ev) => {
@@ -46,7 +58,12 @@
         if (!label) return;
 
         const apply = async () => {
-            if (!MODEL_MAP.length) { try { await __cgptReloadModelMap(); } catch {} }
+            if (!MODEL_MAP.length) {
+                try {
+                    await __cgptReloadModelMap();
+                } catch {
+                }
+            }
             clickNativeModel(label);   // 内部已处理展开/查找/点击与回退重试 :contentReference[oaicite:9]{index=9}
         };
         // 多次定时触发，覆盖导航与菜单渲染的时序抖动
@@ -59,7 +76,10 @@
             'a[href^="/c/"],a[data-testid="conversation-item"],[data-testid="conversation-item"] a'
         );
         if (!a) return;
-        setTimeout(() => { updateMiniModelText(); ensureHeaderModelObserved(); }, 600);
+        setTimeout(() => {
+            updateMiniModelText();
+            ensureHeaderModelObserved();
+        }, 600);
     }, true);
 
     const PILL_CLASS = 'cgpt-prompt-pill';
@@ -71,9 +91,9 @@
             el.style.cssText = 'position:fixed;z-index:2147483647;left:50%;top:24px;transform:translateX(-50%);background:#333;color:#fff;padding:6px 10px;border-radius:6px;font-size:12px';
             document.body.appendChild(el);
             setTimeout(() => el.remove(), 1200);
-        } catch {}
+        } catch {
+        }
     }
-
 
 
     function readStoredPromptLabel() {
@@ -81,7 +101,9 @@
             const raw = sessionStorage.getItem('cgptSessionPrompt');
             const obj = raw ? JSON.parse(raw) : null;
             return obj && typeof obj.label === 'string' ? obj.label.trim() : null;
-        } catch { return null; }
+        } catch {
+            return null;
+        }
     }
 
     // 构建胶囊元素，放在 + 按钮右侧
@@ -118,7 +140,8 @@
                 pill.style.background = 'rgb(169,181,194)'; // 169,181,194
                 pill.style.color = '#111';
             }
-        } catch {}
+        } catch {
+        }
 
         const text = document.createElement('span');
         text.textContent = label;
@@ -132,9 +155,13 @@
         close.addEventListener('click', (e) => {
             e.stopPropagation();
             try {
-                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: optionsList[0].label, text: optionsList[0].text }));
+                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({
+                    label: optionsList[0].label,
+                    text: optionsList[0].text
+                }));
                 toast('Start Prompt：off');
-            } catch {}
+            } catch {
+            }
             updatePromptPill();
         });
 
@@ -156,15 +183,17 @@
         const qs = [1.0, 0.9, 0.8, 0.7];
         return uniq.map((l, i) => i === 0 ? l : `${l};q=${qs[i].toFixed(1)}`).join(',');
     }
+
     async function __cgptGetAuthHeaders() {
-        const h = { accept: '*/*', 'accept-language': __cgptBuildAcceptLanguage(), 'content-type': 'application/json' };
+        const h = {accept: '*/*', 'accept-language': __cgptBuildAcceptLanguage(), 'content-type': 'application/json'};
         try {
-            const r = await fetch('/api/auth/session', { credentials: 'same-origin' });
+            const r = await fetch('/api/auth/session', {credentials: 'same-origin'});
             if (r.ok) {
                 const j = await r.json();
                 if (j && j.accessToken) h.authorization = `Bearer ${j.accessToken}`;
             }
-        } catch {}
+        } catch {
+        }
         return h;
     }
 
@@ -172,7 +201,7 @@
     async function __cgptReloadModelMap() {
         try {
             const headers = await __cgptGetAuthHeaders();
-            const res = await fetch('/backend-api/models?is_gizmo=false', { headers, credentials: 'same-origin' });
+            const res = await fetch('/backend-api/models?is_gizmo=false', {headers, credentials: 'same-origin'});
             if (!res.ok) return;
             const data = await res.json();
             const cats = Array.isArray(data?.categories) ? data.categories : [];
@@ -186,11 +215,12 @@
             const seen = new Set();
             MODEL_MAP = next.filter(x => (seen.has(x.label) ? false : (seen.add(x.label), true)));
 
-        } catch {}
+        } catch {
+        }
     }
 
 
-    (function ensureMiniModelStyle(){
+    (function ensureMiniModelStyle() {
         if (document.getElementById('cgpt-mini-model-style')) return;
         const s = document.createElement('style');
         s.id = 'cgpt-mini-model-style';
@@ -221,7 +251,7 @@
     })();
 
 // 找到页面顶部原生“模型选择”按钮
-    function findHeaderModelButton(){
+    function findHeaderModelButton() {
         const sel = 'button[data-testid="model-switcher-dropdown-button"],button[aria-label^="Model selector"]';
         const list = Array.from(document.querySelectorAll(sel));
         // 优先挑选“可见且有布局”的按钮，避免点到隐藏的移动端按钮
@@ -232,7 +262,7 @@
         return vis || list[list.length - 1] || null;
     }
 
-    function readCurrentModelText(){
+    function readCurrentModelText() {
         const btn = findHeaderModelButton();
         if (!btn) return 'Model';
         const aria = btn.getAttribute('aria-label') || '';
@@ -242,16 +272,16 @@
         return txt || 'Model';
     }
 
-    function clickNativeModel(label){
+    function clickNativeModel(label) {
         const headerBtn = findHeaderModelButton();
         if (!headerBtn) return;
 
         if (headerBtn.getAttribute('aria-expanded') !== 'true') {
-            headerBtn.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
-            headerBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
-            headerBtn.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
-            headerBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
-            headerBtn.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+            headerBtn.dispatchEvent(new MouseEvent('pointerdown', {bubbles: true}));
+            headerBtn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+            headerBtn.dispatchEvent(new MouseEvent('pointerup', {bubbles: true}));
+            headerBtn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+            headerBtn.dispatchEvent(new MouseEvent('click', {bubbles: true}));
         }
 
         const map = MODEL_MAP.find(m => m.label === label);
@@ -263,11 +293,11 @@
                 if (done) return true;
                 const sub = document.querySelector('[data-testid="Legacy models-submenu"]'); // 原生子菜单触发项
                 if (!sub) return false; // 等待主菜单挂载
-                sub.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
-                sub.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
-                sub.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
-                sub.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
-                sub.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+                sub.dispatchEvent(new MouseEvent('pointerdown', {bubbles: true}));
+                sub.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                sub.dispatchEvent(new MouseEvent('pointerup', {bubbles: true}));
+                sub.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                sub.dispatchEvent(new MouseEvent('click', {bubbles: true}));
                 done = true;
                 return true;
             };
@@ -287,13 +317,13 @@
         const tryClick = () => {
             const target = pickTarget();
             if (target) {
-                target.scrollIntoView({block:'nearest'});
-                target.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));
-                target.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
-                target.dispatchEvent(new MouseEvent('pointerup',{bubbles:true}));
-                target.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
-                target.dispatchEvent(new MouseEvent('click',{bubbles:true}));
-                setTimeout(updateMiniModelText,160);
+                target.scrollIntoView({block: 'nearest'});
+                target.dispatchEvent(new MouseEvent('pointerdown', {bubbles: true}));
+                target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                target.dispatchEvent(new MouseEvent('pointerup', {bubbles: true}));
+                target.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                target.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                setTimeout(updateMiniModelText, 160);
                 return;
             }
             if (tried++ < 60) requestAnimationFrame(tryClick);
@@ -301,7 +331,10 @@
 
         let subTries = 0;
         const ensureAndClick = () => {
-            if (pickTarget()) { requestAnimationFrame(tryClick); return; }
+            if (pickTarget()) {
+                requestAnimationFrame(tryClick);
+                return;
+            }
             const legacyBtn = document.querySelector('[data-testid="Legacy models-submenu"]');
             if (legacyBtn) openLegacySubmenuOnce();
             if (subTries++ < 15) requestAnimationFrame(ensureAndClick);
@@ -312,7 +345,7 @@
     }
 
 // 计算弹层位置：自动上/下翻转
-    function placeMenu(menuEl, anchorRect){
+    function placeMenu(menuEl, anchorRect) {
         // 先临时显示以获得尺寸
         menuEl.style.visibility = 'hidden';
         document.body.appendChild(menuEl);
@@ -323,16 +356,16 @@
         const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
 
         const left = Math.min(Math.max(8, anchorRect.left), window.innerWidth - mw - 8);
-        const top  = openUp ? (anchorRect.top - mh - 8) : (anchorRect.bottom + 6);
+        const top = openUp ? (anchorRect.top - mh - 8) : (anchorRect.bottom + 6);
 
         menuEl.style.left = `${left}px`;
-        menuEl.style.top  = `${top}px`;
+        menuEl.style.top = `${top}px`;
         menuEl.style.visibility = '';
         return openUp ? 'top' : 'bottom';
     }
 
 // 构建迷你按钮
-    function buildMiniModelSwitcher(){
+    function buildMiniModelSwitcher() {
         const wrap = document.createElement('span');
         wrap.className = MINI_MODEL_CLASS;
 
@@ -345,7 +378,10 @@
         let openedMenu = null;
 
         const openMenu = async () => {
-            if (openedMenu) { closeMenu(); return; }
+            if (openedMenu) {
+                closeMenu();
+                return;
+            }
             const m = document.createElement('div');
             m.className = `${MINI_MODEL_CLASS}-menu`;
             const render = () => {
@@ -355,7 +391,9 @@
                     row.className = `${MINI_MODEL_CLASS}-item`;
                     row.textContent = opt.label;
                     row.addEventListener('click', (e) => {
-                        e.stopPropagation(); closeMenu(); clickNativeModel(opt.label);
+                        e.stopPropagation();
+                        closeMenu();
+                        clickNativeModel(opt.label);
                     });
                     m.appendChild(row);
                 });
@@ -380,7 +418,10 @@
 
             setTimeout(() => {
                 const closer = (ev) => {
-                    if (!m.contains(ev.target)) { closeMenu(); document.removeEventListener('click', closer, true); }
+                    if (!m.contains(ev.target)) {
+                        closeMenu();
+                        document.removeEventListener('click', closer, true);
+                    }
                 };
                 document.addEventListener('click', closer, true);
             }, 0);
@@ -388,16 +429,25 @@
 
 
         const closeMenu = () => {
-            if (openedMenu) { try { openedMenu.remove(); } catch{} openedMenu = null; }
+            if (openedMenu) {
+                try {
+                    openedMenu.remove();
+                } catch {
+                }
+                openedMenu = null;
+            }
         };
 
-        btn.addEventListener('click', (e) => { e.stopPropagation(); openMenu(); });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openMenu();
+        });
 
         return wrap;
     }
 
 // 确保迷你切换器已插入；并尽量紧跟在胶囊或“+”按钮之后
-    function ensureMiniModelSwitcher(host, plusBtn, pillEl){
+    function ensureMiniModelSwitcher(host, plusBtn, pillEl) {
         let mini = host.querySelector('.' + MINI_MODEL_CLASS);
         if (!mini) {
             mini = buildMiniModelSwitcher();
@@ -414,7 +464,7 @@
     }
 
 // 更新按钮文案（当前模型）
-    function updateMiniModelText(mini){
+    function updateMiniModelText(mini) {
         const root = mini || document.querySelector('.' + MINI_MODEL_CLASS);
         if (!root) return;
         const btn = root.querySelector('button');
@@ -422,35 +472,38 @@
         btn.textContent = readCurrentModelText();
     }
 
-    function ensureHeaderModelObserved(){
+    function ensureHeaderModelObserved() {
         const btn = findHeaderModelButton();
         if (!btn || btn.__cgptMiniModelObserved) return;
         const mo = new MutationObserver(() => updateMiniModelText());
-        mo.observe(btn, { attributes:true, childList:true, subtree:true });
+        mo.observe(btn, {attributes: true, childList: true, subtree: true});
         btn.__cgptMiniModelObserved = true;
     }
+
     ensureHeaderModelObserved();
 
 // 当页面 DOM 变化时，若按钮被替换则重新绑定
-    (function observeHeaderButtonMount(){
+    (function observeHeaderButtonMount() {
         const rebinder = new MutationObserver(() => ensureHeaderModelObserved());
-        rebinder.observe(document.body, { childList:true, subtree:true });
-        window.addEventListener('popstate', ensureHeaderModelObserved, { passive:true });
+        rebinder.observe(document.body, {childList: true, subtree: true});
+        window.addEventListener('popstate', ensureHeaderModelObserved, {passive: true});
     })();
 
     // NEW: 监听“Show additional models”开关，切换时刷新 MODEL_MAP
-    (function observeAdditionalModelsSwitch(){
+    (function observeAdditionalModelsSwitch() {
         if (window.__cgptObsAdditionalModelsInstalled) return;
         window.__cgptObsAdditionalModelsInstalled = true;
 
-        function hook(btn){
+        function hook(btn) {
             if (!btn || btn.__cgptHooked) return;
             btn.__cgptHooked = true;
 
             let scheduled = false;
             let initialized = false;     // ← 新增：用于屏蔽初始化阶段的属性抖动
             // 等下一轮事件循环后再认为“已初始化”
-            setTimeout(() => { initialized = true; }, 0);
+            setTimeout(() => {
+                initialized = true;
+            }, 0);
 
             // 改为轻量刷新模型映射，而不是整页刷新
             const scheduleRefreshModels = () => {
@@ -473,7 +526,7 @@
                 if (muts.some(m => m.attributeName === 'aria-checked')) {
                     scheduleRefreshModels();
                 }
-            }).observe(btn, { attributes:true, attributeFilter:['aria-checked'] });
+            }).observe(btn, {attributes: true, attributeFilter: ['aria-checked']});
         }
 
         const scan = () => {
@@ -481,9 +534,8 @@
             if (sw) hook(sw);
         };
         scan();
-        new MutationObserver(scan).observe(document.body, { childList:true, subtree:true });
+        new MutationObserver(scan).observe(document.body, {childList: true, subtree: true});
     })();
-
 
 
     // 【修改版】在插入胶囊后，顺带插入迷你“模型切换器”
@@ -508,7 +560,8 @@
                     }
                     pill.style.color = 'inherit';
                 }
-            } catch {}
+            } catch {
+            }
         };
 
         plusButtons.forEach(btn => {
@@ -516,7 +569,11 @@
             if (!host) return;
             const existed = host.querySelector('.' + PILL_CLASS);
 
-            if (!shouldShow) { if (existed) existed.remove(); ensureMiniModelSwitcher(host, btn); return; }
+            if (!shouldShow) {
+                if (existed) existed.remove();
+                ensureMiniModelSwitcher(host, btn);
+                return;
+            }
 
             if (existed) {
                 const current = existed.getAttribute('data-label') || '';
@@ -602,12 +659,16 @@
                 pop.style.cssText = 'position:fixed;z-index:2147483647;min-width:160px;background:#2b2b2b;color:#e7d8c5;border-radius:8px;padding:6px 0;box-shadow:0 4px 10px rgba(0,0,0,2)';
                 const rect = mi.getBoundingClientRect();
                 pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 180)) + 'px';
-                pop.style.top  = (rect.bottom + 6) + 'px';
+                pop.style.top = (rect.bottom + 6) + 'px';
 
-                const storedPrompt = (() => { try {
-                    const raw = sessionStorage.getItem('cgptSessionPrompt');
-                    return raw ? JSON.parse(raw) : null;
-                } catch { return null; } })();
+                const storedPrompt = (() => {
+                    try {
+                        const raw = sessionStorage.getItem('cgptSessionPrompt');
+                        return raw ? JSON.parse(raw) : null;
+                    } catch {
+                        return null;
+                    }
+                })();
                 const currentLabel = (storedPrompt && typeof storedPrompt.label === 'string')
                     ? String(storedPrompt.label).trim() : null;
 
@@ -634,24 +695,29 @@
                                     sessionStorage.removeItem('cgptPromptStyleSwitchPending');
                                     sessionStorage.removeItem('cgptPromptStyleCrossToken');  // ← 清理周期 token
                                     sessionStorage.removeItem('cgptCrossLastPath');          // ← 清理上次路径
-                                } catch {}
+                                } catch {
+                                }
                                 toast('Start Prompt：off');
                             } else {
                                 // 切换到不同样式：本会话一次性 + 跨会话“按切换动作”触发
-                                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({ label: o.label, text: o.text }));
+                                sessionStorage.setItem('cgptSessionPrompt', JSON.stringify({
+                                    label: o.label,
+                                    text: o.text
+                                }));
                                 try {
                                     sessionStorage.setItem('cgptPromptStyleSwitchPending', '1');                 // 本会话首次插入
                                     const token = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
                                     sessionStorage.setItem('cgptPromptStyleCrossToken', token);                  // ← 周期 token
                                     sessionStorage.setItem('cgptCrossLastPath', location.pathname || '');        // ← 记住当前路径
-                                } catch {}
+                                } catch {
+                                }
                                 toast('Start Prompt：' + (chosen || 'Unnamed'));
                             }
-                        } catch {}
+                        } catch {
+                        }
                         pop.remove();
                         updatePromptPill();
                     });
-
 
 
                     pop.appendChild(row);
@@ -667,14 +733,17 @@
                 try {
                     const on = sessionStorage.getItem('cgptBeginnerMode') !== '0';
                     bmMark.style.opacity = on ? '1' : '0';
-                } catch { bmMark.style.opacity = '1'; }
+                } catch {
+                    bmMark.style.opacity = '1';
+                }
                 bmRow.append(bmText, bmMark);
                 bmRow.addEventListener('click', (e) => {
                     e.stopPropagation();
                     try {
                         const cur = sessionStorage.getItem('cgptBeginnerMode') !== '0';
                         sessionStorage.setItem('cgptBeginnerMode', cur ? '0' : '1');
-                    } catch {}
+                    } catch {
+                    }
                     // 即时更新胶囊外观
                     updatePromptPill();
                     pop.remove();
@@ -683,7 +752,12 @@
 
                 document.body.appendChild(pop);
                 setTimeout(() => {
-                    const close = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', close, true); } };
+                    const close = (e) => {
+                        if (!pop.contains(e.target)) {
+                            pop.remove();
+                            document.removeEventListener('click', close, true);
+                        }
+                    };
                     document.addEventListener('click', close, true);
                 }, 0);
             });
@@ -720,20 +794,25 @@
     });
 
     const __start = () => {
-        mo.observe(document.body, { childList:true, subtree:true });
+        mo.observe(document.body, {childList: true, subtree: true});
         requestAnimationFrame(updatePromptPill);
     };
     if (document.readyState === 'complete') {
-        (window.requestIdleCallback || (cb=>setTimeout(cb,120)))(__start);
+        (window.requestIdleCallback || (cb => setTimeout(cb, 120)))(__start);
     } else {
         window.addEventListener('load', () => (
-            window.requestIdleCallback || (cb=>setTimeout(cb,120))
-        )(__start), { once:true, passive:true });
+            window.requestIdleCallback || (cb => setTimeout(cb, 120))
+        )(__start), {once: true, passive: true});
     }
 
     window.addEventListener('storage', (e) => {
         if (e.key === 'cgptSessionPrompt') updatePromptPill();
-    }, { passive: true });
+    }, {passive: true});
 
-    window.addEventListener('pagehide', () => { try { mo.disconnect(); } catch {} }, { passive: true });
+    window.addEventListener('pagehide', () => {
+        try {
+            mo.disconnect();
+        } catch {
+        }
+    }, {passive: true});
 })();
