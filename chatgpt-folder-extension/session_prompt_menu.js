@@ -86,9 +86,34 @@
         const apply = async () => {
             if (!MODEL_MAP.length) { try { await __cgptReloadModelMap(); } catch {} }
             clickNativeModel(label);
+
+            /* NEW: 首页自动切换模型后，恢复主输入框焦点 */
+            const tryFocus = () => {
+                const form = document.querySelector('form[data-type="unified-composer"]');
+                if (!form) return false;
+                const ed = form.querySelector('#prompt-textarea, .ProseMirror, [contenteditable="true"]');
+                if (ed && typeof ed.focus === 'function') {
+                    ed.focus();
+                    try {
+                        // 若是 textarea，光标置于末尾，体验更自然
+                        if (ed.tagName === 'TEXTAREA') {
+                            const v = ed.value || '';
+                            ed.setSelectionRange(v.length, v.length);
+                        }
+                    } catch {}
+                    return true;
+                }
+                return false;
+            };
+            // 菜单关闭/DOM 稳定后再聚焦：最多轮询 ~30 帧（~0.5s）
+            let i = 0;
+            const spin = () => { if (tryFocus() || i++ > 30) return; requestAnimationFrame(spin); };
+            setTimeout(spin, 200);
+
             // NEW: 稍后释放锁，允许后续真正的返回首页(bfcache)再次生效
             setTimeout(() => { __cgptHomeModelApplyLock = false; }, 1000);
         };
+
         // 分阶段尝试，覆盖首屏/延迟挂载
         setTimeout(apply, 400);
     }
