@@ -4812,6 +4812,22 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                 const getEditor = () =>
                     qs('.ProseMirror') || qs('#prompt-textarea') || qs('[contenteditable="true"]');
 
+                // === NEW: 发送前保留空行（为空段落填充零宽空格） ===
+                function preserveBlankLinesInEditor(ed) {
+                    if (!ed || ed.tagName === 'TEXTAREA') return;       // textarea 不需要
+                    let changed = false;
+                    ed.querySelectorAll('p').forEach(p => {
+                        if (p.classList && p.classList.contains('placeholder')) return; // 跳过占位段
+                        const onlyBR = p.childNodes.length === 1 && p.firstChild && p.firstChild.nodeName === 'BR';
+                        const empty  = ((p.textContent || '').trim().length === 0);
+                        if (onlyBR || empty) {
+                            p.textContent = '\u200B';                   // 用零宽空格占位
+                            changed = true;
+                        }
+                    });
+                    if (changed) ed.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+
                 // 兼容新版界面多种发送按钮写法
                 const send = qs('#composer-submit-button,button[data-testid="send-button"],button[aria-label*="Send"]');
 
@@ -5266,7 +5282,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                 : (edNow.innerText || '').trim().length > 0)
                             : false;
 
-                        if (hasUserInput || hasAttachments()) appendSuffix();
+                        if (hasUserInput || hasAttachments()) {
+                            preserveBlankLinesInEditor(edNow);   // ★ 新增：发送前保留空行
+                            appendSuffix();
+                        }
                         bumpActiveChat();
                         scheduleHistoryRefresh();
                         ensureChatRegistered();
@@ -5298,7 +5317,10 @@ if (document.documentElement.hasAttribute(INSTALLED)) {
                                     : (edNow.innerText || '').trim().length > 0)
                                 : false;
 
-                            if (hasUserInput || hasAttachments()) appendSuffix();
+                            if (hasUserInput || hasAttachments()) {
+                                preserveBlankLinesInEditor(edNow);   // ★ 新增：发送前保留空行
+                                appendSuffix();
+                            }
                             bumpActiveChat();
                             ensurePromptToggle();
                             scheduleHistoryRefresh();
